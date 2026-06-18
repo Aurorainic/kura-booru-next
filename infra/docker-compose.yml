@@ -1,5 +1,5 @@
 # =============================================================================
-# Kura Booru V2 — Production Docker Compose
+# Kura Booru Next — Production Docker Compose
 # =============================================================================
 # Caddy runs on the HOST machine (not in this compose file) and reverse-proxies
 # into the Docker network using container names as hostnames.

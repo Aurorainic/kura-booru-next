@@ -1,5 +1,5 @@
 # =============================================================================
-# Kura Booru V2 — Caddy Reverse Proxy Configuration
+# Kura Booru Next — Caddy Reverse Proxy Configuration
 # =============================================================================
 # This file runs on the HOST machine (Caddy is NOT in docker-compose).
 #

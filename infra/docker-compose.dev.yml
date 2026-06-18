@@ -1,5 +1,5 @@
 # =============================================================================
-# Kura Booru V2 — Development Docker Compose Override
+# Kura Booru Next — Development Docker Compose Override
 # =============================================================================
 # Overlay on top of production docker-compose.yml for local development.
 #

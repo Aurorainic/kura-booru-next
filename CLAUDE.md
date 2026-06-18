@@ -1,4 +1,4 @@
-# Kura Booru V2 — Project Guide
+# Kura Booru Next — Project Guide
 
 ## Overview
 
@@ -37,7 +37,7 @@ Internet → Caddy (host) → Docker internal network
 ## Project Structure
 
 ```
-kura-booru-v2/
+kura-booru-next/
 ├── backend/          # FastAPI app
 │   ├── app/
 │   │   ├── main.py              # FastAPI app + lifespan + CORS

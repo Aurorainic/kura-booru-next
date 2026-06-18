@@ -1,4 +1,4 @@
-# Kura Booru V2 — 项目计划（修订版）
+# Kura Booru Next — 项目计划（修订版）
 
 ## Context
 
