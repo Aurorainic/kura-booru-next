@@ -1,0 +1,179 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import Pagination from "@/components/Pagination.tsx";
+import { fetchTags, getTagCategoryLabel, type TagCategory } from "@/lib/api";
+
+const page = Math.max(1, parseInt(Astro.url.searchParams.get("page") || "1"));
+const perPage = 100;
+const sort = Astro.url.searchParams.get("sort") || "count";
+const category = Astro.url.searchParams.get("category") || undefined;
+
+let data;
+try {
+  data = await fetchTags(category as TagCategory | undefined, sort, page, perPage);
+} catch {
+  data = { items: [], total: 0, page: 1, per_page: 100, total_pages: 0 };
+}
+
+const { items: tags, total, total_pages } = data;
+
+const categories = [
+  { value: "", label: "All" },
+  { value: "artist", label: "Artist" },
+  { value: "character", label: "Character" },
+  { value: "copyright", label: "Copyright" },
+  { value: "general", label: "General" },
+  { value: "meta", label: "Meta" },
+];
+
+const categoryColorMap: Record<string, string> = {
+  artist: "tag-artist",
+  character: "tag-character",
+  copyright: "tag-copyright",
+  general: "tag-general",
+  meta: "tag-meta",
+};
+
+function buildPageUrl(p: number, pp: number): string {
+  const params = new URLSearchParams();
+  if (p > 1) params.set("page", String(p));
+  if (sort !== "count") params.set("sort", sort);
+  if (category) params.set("category", category);
+  const qs = params.toString();
+  return qs ? `/tags?${qs}` : "/tags";
+}
+
+// Tag cloud: compute font sizes based on post_count
+const maxCount = tags.length > 0 ? Math.max(...tags.map((t: any) => t.post_count)) : 1;
+const minCount = tags.length > 0 ? Math.min(...tags.map((t: any) => t.post_count)) : 0;
+const countRange = maxCount - minCount || 1;
+---
+
+<BaseLayout title="Tags" description={`Browse ${total} tags by category`}>
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-[var(--text-primary)]">
+          <span class="gradient-text">Tags</span>
+        </h1>
+        <p class="text-sm text-[var(--text-muted)] mt-1">{total} tags total</p>
+      </div>
+
+      <!-- Sort toggle -->
+      <div class="flex items-center gap-2 text-sm">
+        <span class="text-[var(--text-muted)]">Sort:</span>
+        <a
+          href={`/tags?sort=count${category ? `&category=${category}` : ""}`}
+          class={`px-2 py-1 rounded transition-colors ${sort === "count" ? "gradient-bg text-[var(--color-dark-bg)] font-bold" : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]"}`}
+        >
+          Count
+        </a>
+        <a
+          href={`/tags?sort=name${category ? `&category=${category}` : ""}`}
+          class={`px-2 py-1 rounded transition-colors ${sort === "name" ? "gradient-bg text-[var(--color-dark-bg)] font-bold" : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]"}`}
+        >
+          Name
+        </a>
+      </div>
+    </div>
+
+    <!-- Category filter -->
+    <div class="flex items-center gap-2 mb-8 flex-wrap">
+      {categories.map((cat) => (
+        <a
+          href={`/tags?category=${cat.value}&sort=${sort}`}
+          class={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 ${
+            (category || "") === cat.value
+              ? "gradient-bg text-[var(--color-dark-bg)]"
+              : "text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[var(--color-cyan-accent-start)]"
+          }`}
+        >
+          {cat.label}
+        </a>
+      ))}
+    </div>
+
+    <!-- Tag cloud -->
+    {tags.length > 0 && (
+      <div class="card p-6 mb-8">
+        <h2 class="text-sm font-medium text-[var(--text-muted)] mb-4">Tag Cloud</h2>
+        <div class="flex flex-wrap gap-2.5 items-baseline">
+          {tags.slice(0, 80).map((tag: any) => {
+            const size = 0.75 + ((tag.post_count - minCount) / countRange) * 1.25;
+            return (
+              <a
+                href={`/tags/${encodeURIComponent(tag.name)}`}
+                class={`inline-block rounded-md px-1.5 py-0.5 transition-all duration-150 hover:scale-110 hover:shadow-sm ${categoryColorMap[tag.category] || "tag-general"}`}
+                style={`font-size: ${size}rem`}
+              >
+                {tag.name}
+                <span class="text-xs opacity-50 ml-0.5">({tag.post_count})</span>
+              </a>
+            );
+          })}
+        </div>
+      </div>
+    )}
+
+    <!-- Popular tags list -->
+    {tags.length > 0 && (
+      <div class="card overflow-hidden">
+        <div class="px-4 py-3 border-b border-[var(--border-color)]">
+          <h2 class="text-sm font-medium text-[var(--text-muted)]">
+            {sort === "count" ? "Popular Tags" : "All Tags"}
+          </h2>
+        </div>
+        <table class="w-full">
+          <thead>
+            <tr class="border-b border-[var(--border-color)]">
+              <th class="text-left px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Tag</th>
+              <th class="text-left px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Category</th>
+              <th class="text-right px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Posts</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tags.map((tag: any) => (
+              <tr class="border-b border-[var(--border-color)] hover:bg-[var(--bg-primary)] transition-colors">
+                <td class="px-4 py-2">
+                  <a
+                    href={`/tags/${encodeURIComponent(tag.name)}`}
+                    class="text-[var(--text-primary)] hover:text-[var(--color-cyan-accent-start)] transition-colors font-medium"
+                  >
+                    {tag.name}
+                  </a>
+                </td>
+                <td class="px-4 py-2">
+                  <span class={`text-xs px-2 py-0.5 rounded-md border ${categoryColorMap[tag.category] || "tag-general"}`}>
+                    {getTagCategoryLabel(tag.category as TagCategory)}
+                  </span>
+                </td>
+                <td class="px-4 py-2 text-right text-sm text-[var(--text-muted)]">
+                  {tag.post_count}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    {tags.length === 0 && (
+      <div class="flex flex-col items-center justify-center py-24 text-[var(--text-muted)]">
+        <p class="text-xl mb-2">No tags found</p>
+        <p class="text-sm">Tags will appear as you add illustrations</p>
+      </div>
+    )}
+
+    <!-- Pagination -->
+    {total_pages > 1 && (
+      <Pagination
+        client:visible
+        currentPage={page}
+        totalPages={total_pages}
+        perPage={perPage}
+        buildUrl={buildPageUrl}
+      />
+    )}
+  </div>
+</BaseLayout>

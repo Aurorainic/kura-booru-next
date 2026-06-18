@@ -1,0 +1,182 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import { fetchPost, getThumbUrl, getPreviewUrl, getOriginalUrl, formatFileSize, formatDate, getTagCategoryColor, getSourceSiteLabel, type Post, type Tag } from "@/lib/api";
+
+const { id } = Astro.params;
+
+let post: Post;
+try {
+  post = await fetchPost(id!);
+} catch {
+  return Astro.redirect("/404");
+}
+
+// Try to get adjacent posts from referrer or just show the post
+// Navigation links will use the browser back button as primary navigation
+---
+
+<BaseLayout title={post.title || `Post ${post.id.slice(0, 8)}`} description={post.description?.slice(0, 160) || `Illustration from ${getSourceSiteLabel(post.source_site)}`}>
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <!-- Back link -->
+    <a
+      href="/"
+      class="inline-flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--color-cyan-accent-start)] transition-colors mb-4"
+    >
+      ← Back to gallery
+    </a>
+
+    <div class="flex flex-col lg:flex-row gap-6">
+      <!-- Main image area -->
+      <div class="flex-1 min-w-0">
+        <div class="card overflow-hidden">
+          <!-- Progressive image loading container -->
+          <div class="relative bg-[var(--bg-primary)]">
+            <!-- Blur placeholder layer -->
+            <img
+              src={getThumbUrl(post)}
+              alt=""
+              class="img-blur-placeholder absolute inset-0 w-full h-full object-cover"
+              aria-hidden="true"
+              id="blur-placeholder"
+            />
+            <!-- Preview image (default visible) -->
+            <img
+              src={getPreviewUrl(post)}
+              alt={post.title || "Illustration"}
+              class="relative w-full h-auto cursor-zoom-in transition-opacity duration-300"
+              id="preview-image"
+              width={post.width}
+              height={post.height}
+              loading="eager"
+              style={`aspect-ratio: ${post.width} / ${post.height}`}
+              onclick="document.getElementById('full-image-modal').classList.remove('hidden')"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar -->
+      <aside class="w-full lg:w-80 flex-shrink-0">
+        <div class="card p-5 space-y-5">
+          <!-- Title -->
+          {post.title && (
+            <div>
+              <h1 class="text-lg font-bold text-[var(--text-primary)] leading-snug">
+                {post.title}
+              </h1>
+            </div>
+          )}
+
+          {/* Description */}
+          {post.description && (
+            <div>
+              <p class="text-sm text-[var(--text-muted)] line-clamp-4">
+                {post.description}
+              </p>
+            </div>
+          )}
+
+          {/* Metadata */}
+          <div class="space-y-3 text-sm">
+            <div class="flex items-center justify-between">
+              <span class="text-[var(--text-muted)]">Source</span>
+              <a
+                href={post.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="gradient-text font-medium hover:underline"
+              >
+                {getSourceSiteLabel(post.source_site)}
+              </a>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <span class="text-[var(--text-muted)]">Dimensions</span>
+              <span class="text-[var(--text-primary)]">{post.width} × {post.height}</span>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <span class="text-[var(--text-muted)]">File size</span>
+              <span class="text-[var(--text-primary)]">{formatFileSize(post.file_size)}</span>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <span class="text-[var(--text-muted)]">Type</span>
+              <span class="text-[var(--text-primary)]">{post.mime_type}</span>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <span class="text-[var(--text-muted)]">Added</span>
+              <span class="text-[var(--text-primary)]">{formatDate(post.created_at)}</span>
+            </div>
+          </div>
+
+          {/* Download link */}
+          <a
+            href={getOriginalUrl(post)}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="block w-full text-center py-2 px-4 rounded-lg gradient-bg text-[var(--color-dark-bg)] font-medium text-sm hover:opacity-90 transition-opacity"
+          >
+            View Original
+          </a>
+
+          {/* Tags */}
+          {post.tags && post.tags.length > 0 && (
+            <div>
+              <h2 class="text-sm font-medium text-[var(--text-muted)] mb-2">Tags</h2>
+              <div class="flex flex-wrap gap-1.5">
+                {post.tags.map((tag: Tag) => (
+                  <a
+                    href={`/tags/${encodeURIComponent(tag.name)}`}
+                    class={`text-xs px-2 py-0.5 rounded-md border border-[var(--border-color)] hover:border-[var(--color-cyan-accent-start)] transition-colors ${getTagCategoryColor(tag.category)}`}
+                  >
+                    {tag.name}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Full image modal -->
+  <div
+    id="full-image-modal"
+    class="hidden fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 cursor-zoom-out"
+    onclick="this.classList.add('hidden')"
+  >
+    <img
+      src={getOriginalUrl(post)}
+      alt={post.title || "Full illustration"}
+      class="max-w-full max-h-full object-contain"
+      onclick="event.stopPropagation()"
+    />
+    <button
+      class="absolute top-4 right-4 text-white text-2xl hover:text-[var(--color-cyan-accent-start)] transition-colors"
+      onclick="document.getElementById('full-image-modal').classList.add('hidden')"
+      aria-label="Close"
+    >
+      ✕
+    </button>
+  </div>
+
+  <script is:inline>
+    // Progressive image loading: hide blur placeholder when preview loads
+    const previewImg = document.getElementById('preview-image');
+    const blurPlaceholder = document.getElementById('blur-placeholder');
+    if (previewImg && blurPlaceholder) {
+      const hideBlur = () => {
+        blurPlaceholder.classList.add('loaded');
+        setTimeout(() => { blurPlaceholder.style.display = 'none'; }, 400);
+      };
+      if (previewImg.complete) {
+        hideBlur();
+      } else {
+        previewImg.addEventListener('load', hideBlur);
+      }
+    }
+  </script>
+</BaseLayout>

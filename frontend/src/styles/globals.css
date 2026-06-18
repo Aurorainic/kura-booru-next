@@ -1,0 +1,177 @@
+@import "tailwindcss";
+
+/* === Custom Theme Tokens === */
+@theme {
+  --color-cyan-accent-start: #7DD3C0;
+  --color-cyan-accent-mid: #A7F3D0;
+  --color-cyan-accent-end: #BAE6FD;
+  --color-dark-bg: #0F1117;
+  --color-light-bg: #FAFBFC;
+  --color-dark-surface: #1A1D2E;
+  --color-dark-border: #2A2D3E;
+  --color-light-surface: #FFFFFF;
+  --color-light-border: #E5E7EB;
+  --color-dark-text: #E2E8F0;
+  --color-light-text: #1F2937;
+  --color-dark-muted: #94A3B8;
+  --color-light-muted: #6B7280;
+}
+
+/* === CSS Custom Properties for Runtime Theme === */
+:root {
+  --bg-primary: var(--color-light-bg);
+  --bg-surface: var(--color-light-surface);
+  --border-color: var(--color-light-border);
+  --text-primary: var(--color-light-text);
+  --text-muted: var(--color-light-muted);
+  --accent-gradient: linear-gradient(135deg, var(--color-cyan-accent-start), var(--color-cyan-accent-mid), var(--color-cyan-accent-end));
+  --accent-color: var(--color-cyan-accent-start);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-card-hover: 0 10px 15px rgba(0, 0, 0, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.dark {
+  --bg-primary: var(--color-dark-bg);
+  --bg-surface: var(--color-dark-surface);
+  --border-color: var(--color-dark-border);
+  --text-primary: var(--color-dark-text);
+  --text-muted: var(--color-dark-muted);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-card-hover: 0 10px 15px rgba(0, 0, 0, 0.4), 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* === Base Styles === */
+html {
+  scroll-behavior: smooth;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+  min-height: 100vh;
+}
+
+/* === Accent Gradient Utility === */
+.gradient-text {
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-bg {
+  background: var(--accent-gradient);
+}
+
+.gradient-border {
+  border-image: var(--accent-gradient) 1;
+}
+
+/* === Card Styles === */
+.card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* === Scrollbar Styling === */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* === Focus Ring === */
+:focus-visible {
+  outline: 2px solid var(--color-cyan-accent-start);
+  outline-offset: 2px;
+}
+
+/* === Selection === */
+::selection {
+  background-color: var(--color-cyan-accent-start);
+  color: var(--color-dark-bg);
+}
+
+/* === Image Progressive Loading === */
+.img-blur-placeholder {
+  filter: blur(20px);
+  transform: scale(1.1);
+  transition: filter 0.4s ease, transform 0.4s ease;
+}
+
+.img-blur-placeholder.loaded {
+  filter: blur(0);
+  transform: scale(1);
+}
+
+/* === Tag Category Colors === */
+.tag-artist {
+  color: #FB923C;
+  background-color: rgba(251, 146, 60, 0.1);
+  border-color: rgba(251, 146, 60, 0.3);
+}
+
+.tag-character {
+  color: #F472B6;
+  background-color: rgba(244, 114, 182, 0.1);
+  border-color: rgba(244, 114, 182, 0.3);
+}
+
+.tag-copyright {
+  color: #A78BFA;
+  background-color: rgba(167, 139, 250, 0.1);
+  border-color: rgba(167, 139, 250, 0.3);
+}
+
+.tag-general {
+  color: #7DD3C0;
+  background-color: rgba(125, 211, 192, 0.1);
+  border-color: rgba(125, 211, 192, 0.3);
+}
+
+.tag-meta {
+  color: #94A3B8;
+  background-color: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+/* === Responsive Typography === */
+@media (max-width: 640px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+@media (min-width: 1025px) {
+  html {
+    font-size: 16px;
+  }
+}

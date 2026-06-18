@@ -1,0 +1,42 @@
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.config import settings
+from app.database import create_tables
+from app.services.gallery_dl import setup_gallery_dl_config
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await create_tables()
+    setup_gallery_dl_config()
+    yield
+    # Shutdown — nothing to clean up currently
+
+
+app = FastAPI(
+    title="Kura Booru API",
+    version="2.0.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.APP_URL] if settings.APP_URL else ["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
+
+from app.api import api_router
+
+app.include_router(api_router)

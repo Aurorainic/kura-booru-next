@@ -1,0 +1,95 @@
+# =============================================================================
+# Kura Booru V2 — Development Docker Compose Override
+# =============================================================================
+# Overlay on top of production docker-compose.yml for local development.
+#
+# Usage:
+#   docker compose \
+#     -f infra/docker-compose.yml \
+#     -f infra/docker-compose.dev.yml \
+#     up
+#
+# What this does:
+#   - Mounts source directories for hot-reload (backend, bot, frontend)
+#   - Overrides container commands to use dev/watch modes
+#   - Exposes service ports to localhost (already in base compose)
+#   - Uses dev-target Dockerfiles where applicable
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Backend — Hot-reload with uvicorn --reload
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      target: dev        # Expects a multi-stage Dockerfile with a "dev" stage
+    volumes:
+      - ../backend/app:/app/app:ro
+      - ../backend/alembic:/app/alembic:ro
+      - ../backend/alembic.ini:/app/alembic.ini:ro
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --reload-dir /app/app
+    environment:
+      - LOG_LEVEL=debug
+      - ENV=development
+
+  # ---------------------------------------------------------------------------
+  # Bot — Hot-reload with aiogram dev server
+  # ---------------------------------------------------------------------------
+  bot:
+    build:
+      context: ../bot
+      dockerfile: Dockerfile
+      target: dev
+    volumes:
+      - ../bot/app:/app/app:ro
+    command: python -m app.main
+    environment:
+      - LOG_LEVEL=debug
+      - ENV=development
+
+  # ---------------------------------------------------------------------------
+  # Frontend — Astro dev server with HMR
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      target: dev
+    volumes:
+      - ../frontend/src:/app/src:ro
+      - ../frontend/public:/app/public:ro
+      - ../frontend/astro.config.mjs:/app/astro.config.mjs:ro
+      - ../frontend/tailwind.config.mjs:/app/tailwind.config.mjs:ro
+    command: npm run dev -- --host 0.0.0.0
+    environment:
+      - ENV=development
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — Expose port + persistent dev data
+  # ---------------------------------------------------------------------------
+  postgres:
+    environment:
+      POSTGRES_USER: kura
+      POSTGRES_PASSWORD: kura_password
+      POSTGRES_DB: kurabooru
+
+  # ---------------------------------------------------------------------------
+  # Redis — No persistence needed in dev (appendonly is lighter)
+  # ---------------------------------------------------------------------------
+  redis:
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+
+  # ---------------------------------------------------------------------------
+  # MinIO — Dev defaults (minioadmin/minioadmin)
+  # ---------------------------------------------------------------------------
+  minio:
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin

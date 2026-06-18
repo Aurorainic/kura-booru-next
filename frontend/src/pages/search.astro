@@ -1,0 +1,113 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import SearchBar from "@/components/SearchBar.tsx";
+import Pagination from "@/components/Pagination.tsx";
+import PhotoAlbumClient from "@/components/PhotoAlbum.tsx";
+import { fetchSearch } from "@/lib/api";
+
+const query = Astro.url.searchParams.get("q") || "";
+const page = Math.max(1, parseInt(Astro.url.searchParams.get("page") || "1"));
+const perPage = Math.min(100, Math.max(1, parseInt(Astro.url.searchParams.get("per_page") || "40")));
+
+let posts: any[] = [];
+let total = 0;
+let total_pages = 0;
+
+if (query) {
+  try {
+    const data = await fetchSearch(query, page, perPage);
+    posts = data.items;
+    total = data.total;
+    total_pages = data.total_pages;
+  } catch {
+    // Keep empty results
+  }
+}
+
+function buildPageUrl(p: number, pp: number): string {
+  const params = new URLSearchParams();
+  params.set("q", query);
+  if (p > 1) params.set("page", String(p));
+  if (pp !== 40) params.set("per_page", String(pp));
+  return `/search?${params.toString()}`;
+}
+---
+
+<BaseLayout title={query ? `Search: ${query}` : "Search"} description={query ? `Search results for "${query}"` : "Search illustrations by tags"}>
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <!-- Search header -->
+    <div class="mb-8">
+      <h1 class="text-2xl font-bold text-[var(--text-primary)] mb-6">
+        <span class="gradient-text">Search</span>
+      </h1>
+      <SearchBar
+        client:load
+        initialQuery={query}
+        onSearch={(q: string) => {
+          window.location.href = `/search?q=${encodeURIComponent(q)}`;
+        }}
+      />
+    </div>
+
+    <!-- Empty state: no query -->
+    {!query && (
+      <div class="flex flex-col items-center justify-center py-24 text-[var(--text-muted)]">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+        </svg>
+        <p class="text-xl mb-2">Search by tags</p>
+        <p class="text-sm">Use <kbd class="px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--text-primary)] font-mono text-xs">+</kbd> to combine tags, <kbd class="px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--text-primary)] font-mono text-xs">-</kbd> to exclude. Example: landscape + sunset - night</p>
+      </div>
+    )}
+
+    {/* Results summary */}
+    {query && (
+      <div class="mb-4">
+        <p class="text-sm text-[var(--text-muted)]">
+          {total > 0 ? (
+            <>
+              Found <span class="gradient-text font-medium">{total}</span> result{total !== 1 ? "s" : ""} for "<span class="font-medium text-[var(--text-primary)]">{query}</span>"
+            </>
+          ) : (
+            <>
+              No results found for "<span class="font-medium text-[var(--text-primary)]">{query}</span>"
+            </>
+          )}
+        </p>
+      </div>
+    )}
+
+    {/* No results state */}
+    {query && posts.length === 0 && (
+      <div class="flex flex-col items-center justify-center py-20 text-[var(--text-muted)]">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+        </svg>
+        <p class="text-xl mb-2">No results found</p>
+        <p class="text-sm mb-4">Try different tags or fewer filters</p>
+        <a
+          href="/search"
+          class="px-4 py-2 rounded-lg gradient-bg text-[var(--color-dark-bg)] font-medium text-sm hover:opacity-90 transition-opacity"
+        >
+          Clear search
+        </a>
+      </div>
+    )}
+
+    <!-- Results masonry grid -->
+    {posts.length > 0 && (
+      <PhotoAlbumClient client:visible posts={posts} />
+    )}
+
+    <!-- Pagination -->
+    {total_pages > 1 && (
+      <Pagination
+        client:visible
+        currentPage={page}
+        totalPages={total_pages}
+        perPage={perPage}
+        buildUrl={buildPageUrl}
+      />
+    )}
+  </div>
+</BaseLayout>

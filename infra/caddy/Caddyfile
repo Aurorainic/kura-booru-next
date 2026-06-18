@@ -1,0 +1,114 @@
+# =============================================================================
+# Kura Booru V2 — Caddy Reverse Proxy Configuration
+# =============================================================================
+# This file runs on the HOST machine (Caddy is NOT in docker-compose).
+#
+# Setup:
+#   1. Replace "kura.example.com" with your real domain.
+#   2. Install Caddy with the Souin cache plugin:
+#      https://github.com/darkweak/souin#caddy-integration
+#   3. Copy this Caddyfile to /etc/caddy/Caddyfile on the host.
+#   4. `systemctl reload caddy`
+#
+# S3 image serving — works with any S3-compatible storage:
+#   Set {$S3_PROXY_UPSTREAM} to your S3 endpoint:
+#     - Cloudflare R2: https://<account-id>.r2.cloudflarestorage.com
+#     - MinIO (local):  http://localhost:9000
+#     - AWS S3:         https://s3.<region>.amazonaws.com
+#   The URL pattern is always /i/<bucket>/<key>.
+#   handle_path strips /i before forwarding, so S3 receives /<bucket>/<key>.
+# =============================================================================
+
+# Global options
+{
+	# Souin cache plugin configuration
+	order souin_cache before encode
+
+	# Email for automatic HTTPS (Let's Encrypt / ZeroSSL)
+	# admin off  # Uncomment to disable admin API in production
+}
+
+# =============================================================================
+# Main site — HTTPS with automatic certificate provisioning
+# =============================================================================
+kura.example.com {
+
+	# ------------------------------------------------------------------
+	# API routes — NO CACHE, proxy directly to FastAPI backend
+	# ------------------------------------------------------------------
+	handle /api/* {
+		reverse_proxy localhost:8000
+	}
+
+	# ------------------------------------------------------------------
+	# Telegram Bot webhook — NO CACHE, single endpoint
+	# ------------------------------------------------------------------
+	handle /bot/webhook {
+		reverse_proxy localhost:8080
+	}
+
+	# ------------------------------------------------------------------
+	# S3 image serving — zero backend overhead, any S3-compatible storage
+	#
+	# URL pattern: /i/<bucket>/<key>
+	#   e.g. /i/kura-booru/originals/pixiv/12345.png
+	#
+	# handle_path strips the /i prefix, then Caddy proxies the remaining
+	# path (/<bucket>/<key>) to the S3 endpoint.
+	#
+	# Configure {$S3_PROXY_UPSTREAM} in your Caddy environment:
+	#   - R2:       https://<account-id>.r2.cloudflarestorage.com
+	#   - MinIO:    http://localhost:9000
+	#   - AWS S3:   https://s3.<region>.amazonaws.com
+	# ------------------------------------------------------------------
+	handle_path /i/* {
+		reverse_proxy {$S3_PROXY_UPSTREAM:http://localhost:9000}
+		# Browser cache for images — 7 days (content is immutable)
+		header Cache-Control "public, max-age=604800, immutable"
+	}
+
+	# ------------------------------------------------------------------
+	# Frontend SSR — cached by Souin with 5-min TTL
+	# This is the DEFAULT route and must be last.
+	# ------------------------------------------------------------------
+	handle {
+		souin_cache {
+			# Cache all SSR pages for 5 minutes
+			ttl 300s
+			# Serve stale content for up to 10 minutes while revalidating
+			stale 600s
+			# Only cache GET requests
+			allowed_http_verbs GET
+			# Don't cache if these headers are present (auth, etc.)
+			key {
+				# Disable hostname in cache key so www/non-www share cache
+				disable_host
+			}
+		}
+		reverse_proxy localhost:4321
+	}
+
+	# ------------------------------------------------------------------
+	# Security headers (applied to all responses)
+	# ------------------------------------------------------------------
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# ------------------------------------------------------------------
+	# Logging
+	# ------------------------------------------------------------------
+	log {
+		output stdout
+		format console
+	}
+}
+
+# =============================================================================
+# Optional: HTTP→HTTPS redirect (Caddy handles this automatically)
+# =============================================================================
+# http://kura.example.com {
+#     redir https://kura.example.com{uri} permanent
+# }

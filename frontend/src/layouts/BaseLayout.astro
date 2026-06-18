@@ -1,0 +1,89 @@
+---
+import ThemeToggle from "@/components/ThemeToggle.tsx";
+import "../styles/globals.css";
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const { title = "Kura Booru", description = "Personal anime illustration collection" } = Astro.props;
+const fullTitle = title === "Kura Booru" ? title : `${title} — Kura Booru`;
+---
+
+<!doctype html>
+<html lang="ja" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#7DD3C0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{fullTitle}</title>
+
+    <!-- Inline script for theme detection (prevents flash) -->
+    <script is:inline>
+      (function() {
+        const stored = localStorage.getItem('kura-theme-preference');
+        let resolved;
+        if (stored === 'light' || stored === 'dark') {
+          resolved = stored;
+        } else {
+          resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.classList.remove('light', 'dark');
+        document.documentElement.classList.add(resolved);
+      })();
+    </script>
+  </head>
+  <body class="min-h-screen flex flex-col">
+    <!-- Navigation -->
+    <nav class="sticky top-0 z-40 border-b border-[var(--border-color)] bg-[var(--bg-surface)]/80 backdrop-blur-md">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-14">
+          <!-- Logo -->
+          <a href="/" class="flex items-center gap-2 group">
+            <span class="gradient-text text-xl font-bold tracking-tight">Kura</span>
+            <span class="text-[var(--text-muted)] text-xl font-light">Booru</span>
+          </a>
+
+          <!-- Nav links -->
+          <div class="flex items-center gap-2">
+            <a
+              href="/search"
+              class="px-3 py-1.5 rounded-lg text-sm font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)] transition-colors duration-150"
+            >
+              Search
+            </a>
+            <a
+              href="/tags"
+              class="px-3 py-1.5 rounded-lg text-sm font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)] transition-colors duration-150"
+            >
+              Tags
+            </a>
+            <div class="w-px h-5 bg-[var(--border-color)]" />
+            <ThemeToggle client:load />
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main content -->
+    <main class="flex-1">
+      <slot />
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-[var(--border-color)] py-6 mt-12">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between text-sm text-[var(--text-muted)]">
+          <span>
+            <span class="gradient-text font-medium">Kura Booru</span>
+            <span class="ml-2">v2</span>
+          </span>
+          <span>Personal illustration collection</span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
