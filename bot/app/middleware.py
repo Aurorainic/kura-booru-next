@@ -17,8 +17,11 @@ class AuthMiddleware(BaseMiddleware):
         user_id: int | None = None
 
         if isinstance(event, Message):
-            # Prefer from_user.id (the sender), fallback to chat.id (channel/group)
-            if event.from_user:
+            # For forwarded channel posts in a private chat, from_user is the
+            # channel (negative ID). The forwarding admin is event.chat.id.
+            if event.chat and event.chat.type == "private":
+                user_id = event.chat.id
+            elif event.from_user:
                 user_id = event.from_user.id
             elif event.chat:
                 user_id = event.chat.id

@@ -29,6 +29,7 @@ services:
       - ../.env
     volumes:
       - ../backend/app:/app/app:ro
+      - ../backend/scripts:/app/scripts:ro
       - ../backend/alembic:/app/alembic:ro
       - ../backend/alembic.ini:/app/alembic.ini:ro
     command: >

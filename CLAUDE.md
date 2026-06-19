@@ -230,14 +230,17 @@ All Dockerfiles have 3 stages: `dev` (hot-reload), `builder`, and production run
 
 ## Current Status
 
-**v0.1.1 Released.** Core features complete (bot → worker → S3 → frontend). Production deployment lessons captured. All P0/P1/P2/P3 audit items resolved.
+**v0.1.2 Released.** Core features complete + tag categorization + HTML description rendering + bot forwarded message support.
 
-### What's Done (v0.1.0 → v0.1.1)
+### What's Done (v0.1.0 → v0.1.1 → v0.1.2)
 - Full processing pipeline: Telegram bot → backend API → ARQ worker → gallery-dl → S3 storage
 - Frontend: Astro SSR with Tailwind v4, masonry grid, tag system, search, pagination
 - Bot: URL auto-detection, /save, /info, /search commands
 - Infrastructure: Docker Compose, Caddy reverse proxy, MinIO/R2 S3
 - Production build: version-tagged Docker images, China mirror support, footer version display
+- **Tag categorization**: Tags from Pixiv/Danbooru properly categorized (artist/character/copyright/general/meta) based on source metadata
+- **HTML description rendering**: Pixiv artwork descriptions with HTML links render correctly (sanitized with bleach)
+- **Bot forwarded message support**: Correctly processes forwarded channel messages with multiple URLs
 
 ### Known Limitations (Phase 4)
 - Tag `post_count` auto-sync (currently needs manual SQL)

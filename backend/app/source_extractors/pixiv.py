@@ -72,6 +72,7 @@ class PixivExtractor(BaseExtractor):
                 title=result.get("title"),
                 description=result.get("description"),
                 tags=result.get("tags", []),
+                tag_categories=result.get("tag_categories", {}),
                 image_urls=result.get("image_urls", []),
                 image_bytes=result.get("image_bytes"),
             )

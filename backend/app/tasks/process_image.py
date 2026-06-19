@@ -130,6 +130,7 @@ async def process_image(ctx: dict[str, Any], source_url: str, source_site: str |
                 title = metadata.title
                 description = metadata.description
                 tag_names = metadata.tags
+                tag_categories = metadata.tag_categories
                 # Use extracted image URLs if available, otherwise use source URL
                 image_urls = metadata.image_urls if metadata.image_urls else [source_url]
             except Exception as exc:
@@ -137,6 +138,7 @@ async def process_image(ctx: dict[str, Any], source_url: str, source_site: str |
                 title = None
                 description = None
                 tag_names = []
+                tag_categories = {}
                 image_urls = [source_url]
 
             # Step 3: Run image processing pipeline
@@ -159,6 +161,7 @@ async def process_image(ctx: dict[str, Any], source_url: str, source_site: str |
                         title=title,
                         description=description,
                         tag_names=tag_names,
+                        tag_categories=tag_categories,
                         image_bytes=img_bytes,
                     )
                     break  # Success — stop trying URLs
@@ -212,7 +215,7 @@ async def process_image(ctx: dict[str, Any], source_url: str, source_site: str |
             db.add(post)
 
             # Step 5: Create/update Tags and associate with Post
-            tags = await _ensure_tags(db, result.tag_names)
+            tags = await _ensure_tags(db, result.tag_names, result.tag_categories)
             for tag in tags:
                 post_tag = PostTag(post_id=post.id, tag_id=tag.id)
                 db.add(post_tag)
@@ -238,15 +241,18 @@ async def process_image(ctx: dict[str, Any], source_url: str, source_site: str |
             }
 
 
-async def _ensure_tags(db: AsyncSession, tag_names: list[str]) -> list[Tag]:
+async def _ensure_tags(
+    db: AsyncSession, tag_names: list[str], tag_categories: dict[str, str]
+) -> list[Tag]:
     """Ensure tags exist in the database, creating them if needed.
 
-    Also resolves tag aliases — if a tag name is an alias, returns
-    the canonical tag instead.
+    Also resolves tag aliases and assigns categories from source metadata.
 
     Args:
         db: Async database session.
         tag_names: List of tag name strings to ensure exist.
+        tag_categories: Dict mapping tag name → source category name
+            (e.g. {"artist_name": "artist", "character_name": "character"}).
 
     Returns:
         List of Tag model instances.
@@ -257,6 +263,10 @@ async def _ensure_tags(db: AsyncSession, tag_names: list[str]) -> list[Tag]:
         name = name.strip().lower()
         if not name:
             continue
+
+        # Resolve source category to our TagCategory
+        source_cat = tag_categories.get(name, "")
+        category = _resolve_tag_category(source_cat)
 
         # Check if this name is an alias for another tag
         alias_stmt = select(TagAlias).where(TagAlias.alias_name == name)
@@ -278,10 +288,13 @@ async def _ensure_tags(db: AsyncSession, tag_names: list[str]) -> list[Tag]:
         tag = tag_result.scalar_one_or_none()
 
         if tag is None:
-            tag = Tag(name=name, category=TagCategory.general, post_count=0)
+            tag = Tag(name=name, category=category, post_count=0)
             db.add(tag)
             # Flush to get the ID
             await db.flush()
+        elif tag.category == TagCategory.general and category != TagCategory.general:
+            # Upgrade existing 'general' tag to more specific category
+            tag.category = category
 
         tags.append(tag)
 
@@ -290,3 +303,50 @@ async def _ensure_tags(db: AsyncSession, tag_names: list[str]) -> list[Tag]:
         tag.post_count += 1
 
     return tags
+
+
+# ── Category mapping from gallery-dl / source names to our TagCategory ─────
+
+# gallery-dl uses category names like "artist", "character", "copyright",
+# "general", "meta" in its tag dict. We map these to our TagCategory enum.
+# Some sources use different names (e.g. Pixiv uses Japanese or different keys),
+# so we handle common variations.
+
+_CATEGORY_MAP: dict[str, TagCategory] = {
+    # Direct matches
+    "artist": TagCategory.artist,
+    "character": TagCategory.character,
+    "copyright": TagCategory.copyright,
+    "general": TagCategory.general,
+    "meta": TagCategory.meta,
+    # Pixiv variations (gallery-dl Pixiv extractor may use these)
+    "creator": TagCategory.artist,
+    "author": TagCategory.artist,
+    "user": TagCategory.artist,
+    "人物": TagCategory.character,
+    "キャラクター": TagCategory.character,
+    "作品": TagCategory.copyright,
+    "コピーライト": TagCategory.copyright,
+    # Danbooru / Gelbooru variations
+    " Artists": TagCategory.artist,
+    "Characters": TagCategory.character,
+    "Copyrights": TagCategory.copyright,
+    "General": TagCategory.general,
+    "Meta": TagCategory.meta,
+    # Twitter/X variations
+    "hashtag": TagCategory.general,
+    "mention": TagCategory.general,
+}
+
+
+def _resolve_tag_category(source_category: str) -> TagCategory:
+    """Map a source category name to our TagCategory enum.
+
+    Args:
+        source_category: Category name from source metadata.
+
+    Returns:
+        TagCategory enum value, defaults to general if unknown.
+    """
+    source_lower = source_category.strip().lower()
+    return _CATEGORY_MAP.get(source_lower, TagCategory.general)

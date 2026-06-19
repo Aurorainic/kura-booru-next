@@ -5,6 +5,7 @@ import logging
 import re
 
 from aiogram import Router, F
+from aiogram.filters import and_f as AND_F
 from aiogram.types import Message
 
 from app.config import settings
@@ -17,6 +18,9 @@ router = Router()
 
 # URL detection pattern — matches http(s) URLs in message text
 URL_PATTERN = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
+
+# Limit URLs processed per message to avoid abuse
+URL_MESSAGE_LIMIT = 10
 
 # Source site detection patterns mapped to (site_name, id_capture_group)
 SOURCE_PATTERNS: list[tuple[re.Pattern, str]] = [
@@ -208,18 +212,133 @@ async def process_url(message: Message, url: str) -> None:
     )
 
 
+async def _process_urls_sequential(
+    message: Message, urls: list[str], source_labels: list[str]
+) -> None:
+    """Process multiple URLs one by one with status updates."""
+    status_msg = await message.reply(
+        f"🔗 找到 {len(urls)} 个链接，逐个处理中...\n"
+        + "\n".join(f"  {i+1}. {label}" for i, label in enumerate(source_labels))
+    )
+
+    succeeded = 0
+    failed = 0
+    for url, label in zip(urls, source_labels):
+        processing_msg = await message.reply(f"⏳ 正在处理: {label}")
+
+        source_info = identify_source(url)
+        if source_info is None:
+            await processing_msg.edit_text(f"⚠️ 跳过（无法识别）: {label}")
+            failed += 1
+            continue
+
+        source_site, source_id = source_info
+        result = await create_process_task(
+            source_url=url, source_site=source_site, source_id=source_id,
+        )
+        if result is None:
+            await processing_msg.edit_text(f"❌ 队列失败: {label}")
+            failed += 1
+            continue
+
+        task_id = result.get("task_id", "unknown")
+        await processing_msg.edit_text(
+            f"📥 已入队: {label}\nTask: `{task_id}`",
+            parse_mode="Markdown",
+        )
+
+        asyncio.create_task(
+            _poll_and_notify(message, processing_msg, task_id, source_site, source_id)
+        )
+        succeeded += 1
+
+    await status_msg.edit_text(
+        f"✅ 处理完毕 / Done: 成功 {succeeded}, 失败 {failed}, 共 {len(urls)}"
+    )
+
+
+# ── Plain text filter (matches direct text messages + forwarded text-only) ──
+# F.text catches: (1) regular text messages, (2) forwarded/channel messages with
+# no photo (forward_origin type "channel" with text has .text set, not .caption).
+# Messages with photos (even forwarded) go to handle_photo_url → caption.
+
 @router.message(F.text, ~F.text.startswith("/"), ~F.text.startswith("!"))
 async def handle_url_message(message: Message) -> None:
-    """Handle messages that contain URLs (not commands).
+    """Handle plain text messages that contain URLs (not commands).
 
-    Detects URLs in the message text, identifies the source, and dispatches
-    a processing task to the backend.
+    Works for direct messages, forwarded channel posts, and forwarded user
+    messages — as long as the content is text-only (no photo attached).
+
+    Behavior:
+    - 0 recognized URLs → ignore silently
+    - 1 recognized URL → process directly
+    - 2+ recognized URLs → batch process all with progress updates
     """
-    text = message.text or ""
-    url_match = URL_PATTERN.search(text)
+    text = message.text
+    if not text:
+        return
 
-    if not url_match:
-        return  # No URL found, ignore
+    await _handle_urls_from_text(message, text)
 
-    url = url_match.group(0)
-    await process_url(message, url)
+
+@router.message(F.photo)
+async def handle_photo_url(message: Message) -> None:
+    """Handle messages with photos that contain a caption URL.
+
+    Telegram delivers forwarded channel posts with a photo as:
+    - message.photo is non-empty
+    - message.text is None
+    - message.caption contains the channel post text (with URLs)
+
+    This also handles direct messages that include both a photo and a caption URL.
+    """
+    caption = message.caption
+    if not caption:
+        return
+
+    await _handle_urls_from_text(message, caption)
+
+
+async def _handle_urls_from_text(message: Message, text: str) -> None:
+    """Extract URLs from text, filter to image sources, and process."""
+    all_urls = URL_PATTERN.findall(text)
+
+    if not all_urls:
+        return
+
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    unique_urls: list[str] = []
+    for u in all_urls:
+        if u not in seen:
+            seen.add(u)
+            unique_urls.append(u)
+
+    # Cap at limit
+    if len(unique_urls) > URL_MESSAGE_LIMIT:
+        unique_urls = unique_urls[:URL_MESSAGE_LIMIT]
+
+    # Filter to recognized image sources only (skip non-image links)
+    recognized: list[tuple[str, str, str]] = []  # (url, site, id)
+    for url in unique_urls:
+        info = identify_source(url)
+        if info and info[0] != "other":
+            recognized.append((url, info[0], info[1]))
+
+    if not recognized:
+        # No recognized image source URLs — ignore silently
+        return
+
+    if len(recognized) == 1:
+        url, site, sid = recognized[0]
+        logger.info("URL message: single URL → %s/%s from %s", site, sid, url)
+        await process_url(message, url)
+    else:
+        urls = [r[0] for r in recognized]
+        labels = [f"{r[1]}/{r[2]}" for r in recognized]
+        logger.info(
+            "URL message: %d URLs found → %s",
+            len(urls),
+            ", ".join(labels),
+        )
+        await _process_urls_sequential(message, urls, labels)

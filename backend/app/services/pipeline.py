@@ -54,6 +54,7 @@ class ProcessedResult:
     title: Optional[str] = None
     description: Optional[str] = None
     tag_names: list[str] = field(default_factory=list)
+    tag_categories: dict[str, str] = field(default_factory=dict)
 
 
 class ImageTooLargeError(Exception):
@@ -150,6 +151,7 @@ async def download_and_process(
     title: Optional[str] = None,
     description: Optional[str] = None,
     tag_names: Optional[list[str]] = None,
+    tag_categories: Optional[dict[str, str]] = None,
     image_bytes: Optional[bytes] = None,
 ) -> ProcessedResult:
     """Full image processing pipeline.
@@ -162,6 +164,7 @@ async def download_and_process(
     6. Return ProcessedResult
     """
     tag_names = tag_names or []
+    tag_categories = tag_categories or {}
 
     if image_bytes is None:
         # No pre-downloaded bytes — use aiohttp to fetch
@@ -257,4 +260,5 @@ async def download_and_process(
         title=title,
         description=description,
         tag_names=tag_names,
+        tag_categories=tag_categories,
     )

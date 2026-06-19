@@ -23,6 +23,7 @@ class ExtractorResult:
     title: Optional[str] = None
     description: Optional[str] = None
     tags: list[str] = field(default_factory=list)
+    tag_categories: dict[str, str] = field(default_factory=dict)
     image_urls: list[str] = field(default_factory=list)
     image_bytes: Optional[bytes] = None
 

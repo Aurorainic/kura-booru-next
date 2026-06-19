@@ -12,6 +12,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+## [0.1.2] - 2026-06-19
+
+### Added
+- **Tag categorization system** — Tags from Pixiv/Danbooru sources are now properly categorized into artist/character/copyright/general/meta instead of all being "general".
+  - `tag_categories` field flows from gallery-dl metadata → Pydantic schema → database storage
+  - Danbooru `tag_string_*` fields mapped to our `TagCategory` enum
+  - Pixiv `user.name` extracted as artist tag automatically
+  - Category upgrade logic: existing "general" tags upgraded when source provides better category
+  - Migration script for existing tags: `backend/scripts/recategorize_tags.py`
+
+- **Bot forwarded message support** — Bot now correctly processes forwarded Telegram channel messages containing image URLs.
+  - Fixed `AuthMiddleware` to use `chat.id` (forwarding user) instead of `from_user.id` (channel ID) for private chat auth
+  - Added `handle_photo_url` handler for forwarded messages with photo + caption URLs
+  - Batch processing: multiple recognized URLs processed sequentially with progress updates
+
+- **HTML description rendering** — Pixiv artwork descriptions with HTML (hyperlinks, formatting) now render correctly in the frontend.
+  - Backend: `bleach` library sanitizes HTML descriptions (allows safe tags: `<a>`, `<br>`, `<p>`, etc.)
+  - Backend: External links automatically get `target="_blank"` + `rel="noopener noreferrer"`
+  - Frontend: `set:html` directive renders sanitized HTML instead of escaped text
+  - Meta description tags use plain text (HTML stripped)
+
+### Changed
+- **Backend requirements**: Added `bleach` for HTML sanitization
+- **Bot handler architecture**: `url_handler.py` split into `handle_url_message` (text), `handle_photo_url` (photo+caption), and shared `_handle_urls_from_text()` helper
+- **docker-compose.yml**: All services updated to v0.1.2 images
+
+### Fixed
+- **AuthMiddleware forwarding bug**: `from_user.id` was channel ID (negative) for forwarded messages, causing auth rejection. Now uses `chat.id` for private chats.
+- **Tag categories empty**: All tags were hardcoded as `general`. Now properly categorized from source metadata.
+- **HTML description escaped**: Raw HTML rendered as literal text (`<a href="...">`). Now sanitized and rendered as clickable links.
+
+### Security
+- HTML descriptions sanitized server-side with `bleach` to prevent XSS
+- External links marked with `rel="noopener noreferrer"`
+
 ## [0.1.1] - 2025-06-19
 
 ### Added

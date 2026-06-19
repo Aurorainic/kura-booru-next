@@ -2,6 +2,11 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import { fetchPost, getThumbUrl, getPreviewUrl, getOriginalUrl, formatFileSize, formatDate, getTagCategoryColor, getSourceSiteLabel, type Post, type Tag } from "@/lib/api";
 
+function stripHtml(html: string | null | undefined): string {
+  if (!html) return "";
+  return html.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+}
+
 const { id } = Astro.params;
 
 let post: Post;
@@ -15,7 +20,7 @@ try {
 // Navigation links will use the browser back button as primary navigation
 ---
 
-<BaseLayout title={post.title || `作品 ${post.id.slice(0, 8)}`} description={post.description?.slice(0, 160) || `来自 ${getSourceSiteLabel(post.source_site)} 的插画`}>
+<BaseLayout title={post.title || `作品 ${post.id.slice(0, 8)}`} description={stripHtml(post.description).slice(0, 160) || `来自 ${getSourceSiteLabel(post.source_site)} 的插画`}>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <!-- Back link -->
     <a
@@ -67,12 +72,10 @@ try {
             </div>
           )}
 
-          {/* Description */}
+          {/* Description — rendered as safe HTML (links open in new tab) */}
           {post.description && (
             <div>
-              <p class="text-sm text-[var(--text-muted)] line-clamp-4">
-                {post.description}
-              </p>
+              <div class="text-sm text-[var(--text-muted)] line-clamp-4 [&_a]:text-[var(--color-cyan-accent-start)] [&_a]:underline [&_a]:hover:opacity-80 [&_a]:transition-opacity" set:html={post.description} />
             </div>
           )}
 

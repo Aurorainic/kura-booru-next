@@ -95,6 +95,7 @@ def _download_sync(url: str) -> dict[str, Any]:
         "title": None,
         "description": None,
         "tags": [],
+        "tag_categories": {},
         "image_urls": [],
         "metadata": {},
     }
@@ -125,18 +126,48 @@ def _download_sync(url: str) -> dict[str, Any]:
                         result["description"] = (
                             metadata.get("description") or metadata.get("caption")
                         )
-                        # Tags
+                        # Tags with categories
                         tags = metadata.get("tags", [])
                         if isinstance(tags, dict):
                             tag_list = []
-                            for cat_tags in tags.values():
+                            tag_categories = {}
+                            for cat_name, cat_tags in tags.items():
                                 if isinstance(cat_tags, list):
                                     tag_list.extend(cat_tags)
+                                    for t in cat_tags:
+                                        tag_categories[str(t)] = cat_name
                                 else:
                                     tag_list.append(str(cat_tags))
+                                    tag_categories[str(cat_tags)] = cat_name
                             result["tags"] = tag_list
+                            result["tag_categories"] = tag_categories
                         elif isinstance(tags, list):
                             result["tags"] = [str(t) for t in tags]
+                            # Danbooru provides tag_string_* fields for categories
+                            tag_categories = {}
+                            danbooru_cat_map = {
+                                "tag_string_artist": "artist",
+                                "tag_string_character": "character",
+                                "tag_string_copyright": "copyright",
+                                "tag_string_general": "general",
+                                "tag_string_meta": "meta",
+                            }
+                            for field_name, cat_name in danbooru_cat_map.items():
+                                val = metadata.get(field_name)
+                                if isinstance(val, str):
+                                    for t in val.split():
+                                        tag_categories[t] = cat_name
+                            if tag_categories:
+                                result["tag_categories"] = tag_categories
+
+                        # Extract artist from Pixiv user metadata
+                        user = metadata.get("user")
+                        if isinstance(user, dict):
+                            artist_name = user.get("name")
+                            if artist_name and artist_name not in result.get("tags", []):
+                                result.setdefault("tags", []).insert(0, artist_name)
+                                result.setdefault("tag_categories", {})[artist_name] = "artist"
+
                         # Image URL(s)
                         if "url" in metadata:
                             result["image_urls"].append(metadata["url"])
@@ -198,12 +229,17 @@ def _download_sync(url: str) -> dict[str, Any]:
                                 tags = info.get("tags", [])
                                 if isinstance(tags, dict):
                                     tag_list = []
-                                    for cat_tags in tags.values():
+                                    tag_categories = {}
+                                    for cat_name, cat_tags in tags.items():
                                         if isinstance(cat_tags, list):
                                             tag_list.extend(cat_tags)
+                                            for t in cat_tags:
+                                                tag_categories[str(t)] = cat_name
                                         else:
                                             tag_list.append(str(cat_tags))
+                                            tag_categories[str(cat_tags)] = cat_name
                                     result["tags"] = tag_list
+                                    result["tag_categories"] = tag_categories
                                 elif isinstance(tags, list):
                                     result["tags"] = [str(t) for t in tags]
                                 if "url" in info:

@@ -258,15 +258,17 @@ ARQ Worker (process_image):
 - [x] 详情页
 - [x] 搜索功能 + 标签自动补全
 - [x] Caddy 缓存 purge 对接
+- [x] HTML 描述渲染（bleach 清洗 + set:html 渲染）
+
+### ✅ Phase 3.5：v0.1.2 功能增强（完成）
+- [x] 标签分类系统 — Pixiv/Danbooru 来源标签自动分类（画师/角色/版权/通用/元信息）
+- [x] Bot 转发消息支持 — 正确处理 TG 频道转发的包含图片链接的消息
+- [x] HTML 描述渲染 — Pixiv 插画简介中的超链接正确显示
 
 ### 🔲 Phase 4：完善（待做）
 - [ ] 更多 extractor（Twitter 完整支持、Danbooru 元数据）
 - [ ] 去重机制完善（phash 前缀桶数据库索引优化）
 - [ ] 性能优化（Redis 缓存热门查询）
-- [ ] `npm install` + 前端构建验证
-- [ ] 数据库迁移测试（alembic upgrade head）
-- [ ] Caddy 宿主机部署 + TLS 证书
-- [ ] Pixiv 认证填入 .env
 - [ ] 端到端测试
 - [ ] 部署文档
 
@@ -281,6 +283,9 @@ ARQ Worker (process_image):
 5. **6MB 限制**：超大图被拒绝，Bot 回复具体原因
 6. **去重**：相同图片重复发送时 Bot 提示已存在
 7. **明暗主题**：三态切换正常，系统偏好自动匹配
+8. **标签分类**：Pixiv 插画的 artist/character/copyright 标签正确分类
+9. **HTML 描述**：Pixiv 插画简介中的超链接可点击，新窗口打开
+10. **转发消息**：从 TG 频道转发包含链接的消息，Bot 正确解析并处理
 
 ---
 
