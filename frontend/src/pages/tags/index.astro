@@ -1,7 +1,7 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import Pagination from "@/components/Pagination.tsx";
-import { fetchTags, getTagCategoryLabel, type TagCategory } from "@/lib/api";
+import { fetchTags, getTagCategoryColor, getTagCategoryLabel, type TagCategory } from "@/lib/api";
 
 const page = Math.max(1, parseInt(Astro.url.searchParams.get("page") || "1"));
 const perPage = 100;
@@ -18,21 +18,13 @@ try {
 const { items: tags, total, total_pages } = data;
 
 const categories = [
-  { value: "", label: "All" },
-  { value: "artist", label: "Artist" },
-  { value: "character", label: "Character" },
-  { value: "copyright", label: "Copyright" },
-  { value: "general", label: "General" },
-  { value: "meta", label: "Meta" },
+  { value: "", label: "全部" },
+  { value: "artist", label: "画师" },
+  { value: "character", label: "角色" },
+  { value: "copyright", label: "作品" },
+  { value: "general", label: "通用" },
+  { value: "meta", label: "元信息" },
 ];
-
-const categoryColorMap: Record<string, string> = {
-  artist: "tag-artist",
-  character: "tag-character",
-  copyright: "tag-copyright",
-  general: "tag-general",
-  meta: "tag-meta",
-};
 
 function buildPageUrl(p: number, pp: number): string {
   const params = new URLSearchParams();
@@ -49,31 +41,31 @@ const minCount = tags.length > 0 ? Math.min(...tags.map((t: any) => t.post_count
 const countRange = maxCount - minCount || 1;
 ---
 
-<BaseLayout title="Tags" description={`Browse ${total} tags by category`}>
+<BaseLayout title="标签" description={`浏览 ${total} 个标签，按分类查看`}>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
       <div>
         <h1 class="text-2xl font-bold text-[var(--text-primary)]">
-          <span class="gradient-text">Tags</span>
+          <span class="gradient-text">标签</span>
         </h1>
-        <p class="text-sm text-[var(--text-muted)] mt-1">{total} tags total</p>
+        <p class="text-sm text-[var(--text-muted)] mt-1">{total} 个标签</p>
       </div>
 
       <!-- Sort toggle -->
       <div class="flex items-center gap-2 text-sm">
-        <span class="text-[var(--text-muted)]">Sort:</span>
+        <span class="text-[var(--text-muted)]">排序：</span>
         <a
           href={`/tags?sort=count${category ? `&category=${category}` : ""}`}
           class={`px-2 py-1 rounded transition-colors ${sort === "count" ? "gradient-bg text-[var(--color-dark-bg)] font-bold" : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]"}`}
         >
-          Count
+          数量
         </a>
         <a
           href={`/tags?sort=name${category ? `&category=${category}` : ""}`}
           class={`px-2 py-1 rounded transition-colors ${sort === "name" ? "gradient-bg text-[var(--color-dark-bg)] font-bold" : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]"}`}
         >
-          Name
+          名称
         </a>
       </div>
     </div>
@@ -97,14 +89,14 @@ const countRange = maxCount - minCount || 1;
     <!-- Tag cloud -->
     {tags.length > 0 && (
       <div class="card p-6 mb-8">
-        <h2 class="text-sm font-medium text-[var(--text-muted)] mb-4">Tag Cloud</h2>
+        <h2 class="text-sm font-medium text-[var(--text-muted)] mb-4">标签云</h2>
         <div class="flex flex-wrap gap-2.5 items-baseline">
           {tags.slice(0, 80).map((tag: any) => {
             const size = 0.75 + ((tag.post_count - minCount) / countRange) * 1.25;
             return (
               <a
                 href={`/tags/${encodeURIComponent(tag.name)}`}
-                class={`inline-block rounded-md px-1.5 py-0.5 transition-all duration-150 hover:scale-110 hover:shadow-sm ${categoryColorMap[tag.category] || "tag-general"}`}
+                class={`inline-block rounded-md px-1.5 py-0.5 transition-all duration-150 hover:scale-110 hover:shadow-sm ${getTagCategoryColor(tag.category as TagCategory)}`}
                 style={`font-size: ${size}rem`}
               >
                 {tag.name}
@@ -121,15 +113,15 @@ const countRange = maxCount - minCount || 1;
       <div class="card overflow-hidden">
         <div class="px-4 py-3 border-b border-[var(--border-color)]">
           <h2 class="text-sm font-medium text-[var(--text-muted)]">
-            {sort === "count" ? "Popular Tags" : "All Tags"}
+            {sort === "count" ? "热门标签" : "全部标签"}
           </h2>
         </div>
         <table class="w-full">
           <thead>
             <tr class="border-b border-[var(--border-color)]">
-              <th class="text-left px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Tag</th>
-              <th class="text-left px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Category</th>
-              <th class="text-right px-4 py-3 text-sm font-medium text-[var(--text-muted)]">Posts</th>
+              <th class="text-left px-4 py-3 text-sm font-medium text-[var(--text-muted)]">标签</th>
+              <th class="text-left px-4 py-3 text-sm font-medium text-[var(--text-muted)]">分类</th>
+              <th class="text-right px-4 py-3 text-sm font-medium text-[var(--text-muted)]">数量</th>
             </tr>
           </thead>
           <tbody>
@@ -144,7 +136,7 @@ const countRange = maxCount - minCount || 1;
                   </a>
                 </td>
                 <td class="px-4 py-2">
-                  <span class={`text-xs px-2 py-0.5 rounded-md border ${categoryColorMap[tag.category] || "tag-general"}`}>
+                  <span class={`text-xs px-2 py-0.5 rounded-md border ${getTagCategoryColor(tag.category as TagCategory)}`}>
                     {getTagCategoryLabel(tag.category as TagCategory)}
                   </span>
                 </td>
@@ -160,8 +152,8 @@ const countRange = maxCount - minCount || 1;
 
     {tags.length === 0 && (
       <div class="flex flex-col items-center justify-center py-24 text-[var(--text-muted)]">
-        <p class="text-xl mb-2">No tags found</p>
-        <p class="text-sm">Tags will appear as you add illustrations</p>
+        <p class="text-xl mb-2">暂无标签</p>
+        <p class="text-sm">添加插画后标签会自动出现</p>
       </div>
     )}
 

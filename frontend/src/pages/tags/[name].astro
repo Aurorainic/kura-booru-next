@@ -1,20 +1,20 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import Pagination from "@/components/Pagination.tsx";
-import PhotoAlbumClient from "@/components/PhotoAlbum.tsx";
-import { fetchSearch, fetchTags, getTagCategoryColor, getTagCategoryLabel, type TagCategory, type Tag } from "@/lib/api";
+import PhotoAlbumGrid from "@/components/PhotoAlbum.astro";
+import { fetchSearch, fetchTags, getTagCategoryColor, getTagCategoryLabel, clampPerPage, emptyPostsResponse, type TagCategory, type Tag } from "@/lib/api";
 
 const tagName = decodeURIComponent(Astro.params.name!);
 
 const page = Math.max(1, parseInt(Astro.url.searchParams.get("page") || "1"));
-const perPage = Math.min(100, Math.max(1, parseInt(Astro.url.searchParams.get("per_page") || "40")));
+const perPage = clampPerPage(parseInt(Astro.url.searchParams.get("per_page") || "40"));
 
 // Search for posts with this tag
 let data;
 try {
   data = await fetchSearch(tagName, page, perPage);
 } catch {
-  data = { items: [], total: 0, page: 1, per_page: 40, total_pages: 0 };
+  data = emptyPostsResponse();
 }
 
 const { items: posts, total, total_pages } = data;
@@ -40,14 +40,14 @@ function buildPageUrl(p: number, pp: number): string {
 }
 ---
 
-<BaseLayout title={`Tag: ${tagName}`} description={`${total} illustrations tagged with "${tagName}"`}>
+<BaseLayout title={`标签：${tagName}`} description={`共有 ${total} 张插画使用了标签 "${tagName}"`}>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <!-- Back link -->
     <a
       href="/tags"
       class="inline-flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--color-cyan-accent-start)] transition-colors mb-4"
     >
-      ← All tags
+      ← 全部标签
     </a>
 
     <!-- Tag header with category badge -->
@@ -63,17 +63,17 @@ function buildPageUrl(p: number, pp: number): string {
     </div>
     <p class="text-sm text-[var(--text-muted)] mb-6">
       {total > 0
-        ? `${total} illustration${total !== 1 ? "s" : ""} tagged with "${tagName}"`
-        : `No illustrations tagged with "${tagName}"`}
+        ? `${total} 张插画使用了标签 "${tagName}"`
+        : `暂无使用标签 "${tagName}" 的插画`}
     </p>
 
     <!-- Masonry grid -->
     {posts.length > 0 ? (
-      <PhotoAlbumClient client:visible posts={posts} />
+      <PhotoAlbumGrid posts={posts} />
     ) : (
       <div class="flex flex-col items-center justify-center py-24 text-[var(--text-muted)]">
-        <p class="text-xl mb-2">No illustrations found</p>
-        <p class="text-sm">No posts are tagged with "{tagName}"</p>
+        <p class="text-xl mb-2">未找到相关插画</p>
+        <p class="text-sm">暂无使用标签 "{tagName}" 的作品</p>
       </div>
     )}
 

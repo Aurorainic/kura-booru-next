@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import text
 
 from app.config import get_settings
 
@@ -49,4 +50,6 @@ async def create_tables() -> None:
     In production, use Alembic migrations instead.
     """
     async with engine.begin() as conn:
+        # Enable uuid-ossp extension for uuid_generate_v4()
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\""))
         await conn.run_sync(Base.metadata.create_all)

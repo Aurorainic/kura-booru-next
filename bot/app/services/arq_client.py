@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
 from arq import create_pool
 from arq.connections import RedisSettings, ArqRedis
+from arq.jobs import Job
 
 from app.config import settings
 
@@ -44,24 +46,28 @@ async def close_arq_pool() -> None:
         logger.info("ARQ pool closed")
 
 
-async def enqueue_process_image(
-    source_url: str,
-    source_site: str | None = None,
-    source_id: str | None = None,
-) -> str:
-    """Enqueue an image processing task via ARQ.
+async def poll_job_result(
+    task_id: str,
+    *,
+    timeout: int = 300,
+    poll_delay: float = 3.0,
+) -> dict[str, Any] | None:
+    """Poll an ARQ job until it completes or times out.
 
-    Matches the backend's process_image task signature which accepts
-    source_url, source_site, and source_id.
+    Args:
+        task_id: The ARQ job ID.
+        timeout: Maximum seconds to wait for completion.
+        poll_delay: Seconds between status checks.
 
-    Returns the job ID.
+    Returns:
+        The job result dict, or None on timeout/failure.
     """
     pool = await get_arq_pool()
-    job = await pool.enqueue_job(
-        "process_image",
-        source_url=source_url,
-        source_site=source_site,
-        source_id=source_id,
-    )
-    logger.info("Enqueued process_image job %s for %s", job, source_url)
-    return job.job_id
+    job = Job(task_id, redis=pool)
+    try:
+        result = await job.result(timeout=timeout, poll_delay=poll_delay)
+        logger.info("Job %s completed with result: %s", task_id, result)
+        return result
+    except Exception as exc:
+        logger.warning("Job %s polling failed: %s", task_id, exc)
+        return None

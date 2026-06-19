@@ -14,7 +14,9 @@ Handles:
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
+from urllib.parse import urlparse
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,10 +31,67 @@ from app.services.pipeline import (
     ImageTooLargeError,
     download_and_process,
 )
-from app.services.source_resolver import resolve_source_or_other
 from app.source_extractors import get_extractor
 
 logger = logging.getLogger(__name__)
+
+# ── URL pattern matchers (inlined from deleted source_resolver.py) ─────────
+
+_PIXIV_PATTERNS = [
+    re.compile(
+        r"(?:https?://)?(?:www\.)?pixiv\.net/(?:artworks|illust)/(\d+)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:https?://)?(?:www\.)?pixiv\.net/member_illust\.php\?.*illust_id=(\d+)",
+        re.IGNORECASE,
+    ),
+]
+
+_TWITTER_PATTERNS = [
+    re.compile(
+        r"(?:https?://)?(?:www\.)?(?:twitter\.com|x\.com)/(\w+)/status/(\d+)",
+        re.IGNORECASE,
+    ),
+]
+
+_DANBOORU_PATTERNS = [
+    re.compile(
+        r"(?:https?://)?(?:danbooru\.donmai\.us|safebooru\.donmai\.us)/posts/(\d+)",
+        re.IGNORECASE,
+    ),
+]
+
+
+def _resolve_source_or_other(url: str) -> tuple[SourceSite, str]:
+    """Resolve a URL to its source site and ID, falling back to 'other'."""
+    parsed = urlparse(url)
+    hostname = parsed.hostname or ""
+
+    # Pixiv
+    if "pixiv" in hostname:
+        for pattern in _PIXIV_PATTERNS:
+            match = pattern.search(url)
+            if match:
+                return SourceSite.pixiv, match.group(1)
+
+    # Twitter / X
+    if "twitter" in hostname or "x.com" in hostname:
+        for pattern in _TWITTER_PATTERNS:
+            match = pattern.search(url)
+            if match:
+                return SourceSite.twitter, match.group(2)
+
+    # Danbooru / Safebooru
+    if "donmai.us" in hostname:
+        for pattern in _DANBOORU_PATTERNS:
+            match = pattern.search(url)
+            if match:
+                return SourceSite.danbooru, match.group(1)
+
+    # Fallback: use hostname + path as composite ID
+    path_id = parsed.path.strip("/").replace("/", "_") or "unknown"
+    return SourceSite.other, f"{hostname}_{path_id}"
 
 
 async def process_image(ctx: dict[str, Any], source_url: str, source_site: str | None = None, source_id: str | None = None) -> dict[str, Any]:
@@ -60,9 +119,9 @@ async def process_image(ctx: dict[str, Any], source_url: str, source_site: str |
         try:
             # Step 1: Resolve source info if not provided
             if not source_site or not source_id:
-                source_info = resolve_source_or_other(source_url)
-                source_site = source_info.site.value
-                source_id = source_info.id
+                resolved_site, resolved_id = _resolve_source_or_other(source_url)
+                source_site = resolved_site.value
+                source_id = resolved_id
 
             # Step 2: Extract metadata via site-specific extractor
             extractor = get_extractor(source_url)
@@ -88,6 +147,10 @@ async def process_image(ctx: dict[str, Any], source_url: str, source_site: str |
 
             for img_url in image_urls:
                 try:
+                    # First URL: if extractor provided pre-downloaded bytes, pass them
+                    img_bytes = metadata.image_bytes if (
+                        img_url == image_urls[0] and metadata.image_bytes is not None
+                    ) else None
                     result = await download_and_process(
                         url=img_url,
                         source_site=source_site_enum,
@@ -96,6 +159,7 @@ async def process_image(ctx: dict[str, Any], source_url: str, source_site: str |
                         title=title,
                         description=description,
                         tag_names=tag_names,
+                        image_bytes=img_bytes,
                     )
                     break  # Success — stop trying URLs
                 except ImageTooLargeError as exc:

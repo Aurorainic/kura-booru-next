@@ -15,14 +15,14 @@ try {
 // Navigation links will use the browser back button as primary navigation
 ---
 
-<BaseLayout title={post.title || `Post ${post.id.slice(0, 8)}`} description={post.description?.slice(0, 160) || `Illustration from ${getSourceSiteLabel(post.source_site)}`}>
+<BaseLayout title={post.title || `作品 ${post.id.slice(0, 8)}`} description={post.description?.slice(0, 160) || `来自 ${getSourceSiteLabel(post.source_site)} 的插画`}>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <!-- Back link -->
     <a
       href="/"
       class="inline-flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--color-cyan-accent-start)] transition-colors mb-4"
     >
-      ← Back to gallery
+      ← 返回画廊
     </a>
 
     <div class="flex flex-col lg:flex-row gap-6">
@@ -41,8 +41,8 @@ try {
             />
             <!-- Preview image (default visible) -->
             <img
-              src={getPreviewUrl(post)}
-              alt={post.title || "Illustration"}
+              src={getOriginalUrl(post)}
+              alt={post.title || "插画"}
               class="relative w-full h-auto cursor-zoom-in transition-opacity duration-300"
               id="preview-image"
               width={post.width}
@@ -79,7 +79,7 @@ try {
           {/* Metadata */}
           <div class="space-y-3 text-sm">
             <div class="flex items-center justify-between">
-              <span class="text-[var(--text-muted)]">Source</span>
+              <span class="text-[var(--text-muted)]">来源</span>
               <a
                 href={post.source_url}
                 target="_blank"
@@ -91,22 +91,22 @@ try {
             </div>
 
             <div class="flex items-center justify-between">
-              <span class="text-[var(--text-muted)]">Dimensions</span>
+              <span class="text-[var(--text-muted)]">尺寸</span>
               <span class="text-[var(--text-primary)]">{post.width} × {post.height}</span>
             </div>
 
             <div class="flex items-center justify-between">
-              <span class="text-[var(--text-muted)]">File size</span>
+              <span class="text-[var(--text-muted)]">文件大小</span>
               <span class="text-[var(--text-primary)]">{formatFileSize(post.file_size)}</span>
             </div>
 
             <div class="flex items-center justify-between">
-              <span class="text-[var(--text-muted)]">Type</span>
+              <span class="text-[var(--text-muted)]">格式</span>
               <span class="text-[var(--text-primary)]">{post.mime_type}</span>
             </div>
 
             <div class="flex items-center justify-between">
-              <span class="text-[var(--text-muted)]">Added</span>
+              <span class="text-[var(--text-muted)]">添加时间</span>
               <span class="text-[var(--text-primary)]">{formatDate(post.created_at)}</span>
             </div>
           </div>
@@ -118,13 +118,13 @@ try {
             rel="noopener noreferrer"
             class="block w-full text-center py-2 px-4 rounded-lg gradient-bg text-[var(--color-dark-bg)] font-medium text-sm hover:opacity-90 transition-opacity"
           >
-            View Original
+            查看原图
           </a>
 
           {/* Tags */}
           {post.tags && post.tags.length > 0 && (
             <div>
-              <h2 class="text-sm font-medium text-[var(--text-muted)] mb-2">Tags</h2>
+              <h2 class="text-sm font-medium text-[var(--text-muted)] mb-2">标签</h2>
               <div class="flex flex-wrap gap-1.5">
                 {post.tags.map((tag: Tag) => (
                   <a
@@ -150,14 +150,14 @@ try {
   >
     <img
       src={getOriginalUrl(post)}
-      alt={post.title || "Full illustration"}
+      alt={post.title || "原图"}
       class="max-w-full max-h-full object-contain"
       onclick="event.stopPropagation()"
     />
     <button
       class="absolute top-4 right-4 text-white text-2xl hover:text-[var(--color-cyan-accent-start)] transition-colors"
       onclick="document.getElementById('full-image-modal').classList.add('hidden')"
-      aria-label="Close"
+      aria-label="关闭"
     >
       ✕
     </button>

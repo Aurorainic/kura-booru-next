@@ -281,3 +281,71 @@ ARQ Worker (process_image):
 5. **6MB 限制**：超大图被拒绝，Bot 回复具体原因
 6. **去重**：相同图片重复发送时 Bot 提示已存在
 7. **明暗主题**：三态切换正常，系统偏好自动匹配
+
+---
+
+## v0.1.0 代码审计与清理（已完成）
+
+**审计日期**：2026-06-19  
+**状态**：✅ 所有 P0/P1/P2/P3 项已完成
+
+### P0 — 必须修复（影响功能或架构）✅
+
+| # | 问题 | 修复 | 状态 |
+|---|---|---|---|
+| 1 | `PhotoAlbum.tsx` 死代码 | 已删除（被 `PhotoAlbum.astro` 替代） | ✅ |
+| 2 | `tailwind.config.mjs/` 空目录 | 已删除 | ✅ |
+| 3 | `save.py` ≈ `url_handler.py` 逻辑重复 | 提取 `process_url()` 共享函数，`save.py` 简化为命令解析 | ✅ |
+| 4 | `source_resolver.py` 死代码 | 已删除（各 extractor 自行解析 URL） | ✅ |
+
+### P1 — 强烈建议（提高可维护性）✅
+
+| # | 问题 | 修复 | 状态 |
+|---|---|---|---|
+| 5 | 未使用 npm 依赖 | 移除 `react-photo-album`, `@tanstack/react-query`, `class-variance-authority` | ✅ |
+| 6 | `ALLOWED_PER_PAGE` 三处重复 | 新建 `backend/app/api/constants.py`，统一导出 | ✅ |
+| 7 | `PostCreate`/`TagCreate` 未使用 schemas | 已删除 | ✅ |
+| 8 | `enqueue_process_image()` 死代码 | 从 `arq_client.py` 删除（Bot 通过 HTTP API 调用） | ✅ |
+| 9 | `api.ts` 死导出 | 删除 `fetchRandomPost`, `TagsResponse` | ✅ |
+
+### P2 — 推荐（代码整洁）✅
+
+| # | 问题 | 修复 | 状态 |
+|---|---|---|---|
+| 10 | `main.py` config 导入不一致 | 保持现状（`settings` 单例足够） | ✅ |
+| 11 | `pipeline.py` 重复导入 | 删除内部 `from PIL import ImageOps`，保留顶部 | ✅ |
+| 12 | `info.py` 未使用导入 | 删除 `get_post` import | ✅ |
+| 13 | 分页默认值重复 | 添加 `clampPerPage()`, `emptyPostsResponse()` 到 `api.ts` | ✅ |
+| 14 | `tags/index.astro` 重复颜色映射 | 改用 `getTagCategoryColor()` 替代 inline `categoryColorMap` | ✅ |
+
+### P3 — 优化（提升体验）✅
+
+| # | 问题 | 修复 | 状态 |
+|---|---|---|---|
+| 15 | Bot 硬编码 URL | 新增 `FRONTEND_URL` env var 到 `bot/app/config.py` | ✅ |
+| 16 | `BaseLayout.astro` 硬编码 gitTag | 改用 `import.meta.env.PUBLIC_GIT_TAG` | ✅ |
+| 17 | `BaseLayout.astro` 硬编码 Gitea 链接 | 改用 `import.meta.env.PUBLIC_REPO_URL` | ✅ |
+
+### 文档更新 ✅
+
+| # | 更新内容 | 状态 |
+|---|---|---|
+| 18 | `CLAUDE.md` — 更新项目结构、状态、技术栈 | ✅ |
+| 19 | `PLAN.md` — 标记 Phase 1-3 完成、添加审计章节 | ✅ |
+
+---
+
+## 下次 Session 待办（v0.1.0 发布后）
+
+### 短期改进
+- [ ] Twitter extractor 完善（完整元数据提取）
+- [ ] Danbooru extractor 完善
+- [ ] Tag `post_count` 自动同步（触发器或定时任务）
+- [ ] phash dedup 性能优化
+
+### 长期 Roadmap
+- [ ] Admin UI（管理后台）
+- [ ] 批量导入工具
+- [ ] 更多 S3 存储提供商测试
+- [ ] 监控与告警（Prometheus + Grafana）
+- [ ] 自动化部署（CI/CD）

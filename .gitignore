@@ -7,6 +7,9 @@
 .env.local
 .env.*.local
 
+# Database dumps
+infra/dumps/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -17,6 +20,9 @@ build/
 *.egg
 .venv/
 venv/
+
+# gallery-dl (auto-generated, not source code)
+backend/gallery-dl/
 
 # Node / Frontend
 node_modules/
@@ -39,9 +45,6 @@ Thumbs.db
 postgres_data/
 redis_data/
 minio_data/
-
-# Alembic
-*.pyc
 
 # Logs
 *.log

@@ -9,7 +9,7 @@ interface SearchBarProps {
   placeholder?: string;
 }
 
-export default function SearchBar({ initialQuery = "", onSearch, placeholder = "Search tags... (use + for AND, - for exclusion)" }: SearchBarProps) {
+export default function SearchBar({ initialQuery = "", onSearch, placeholder = "搜索标签...（用 + 组合，用 - 排除）" }: SearchBarProps) {
   const [query, setQuery] = useState(initialQuery);
   const [suggestions, setSuggestions] = useState<Tag[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -135,7 +135,7 @@ export default function SearchBar({ initialQuery = "", onSearch, placeholder = "
             "focus:outline-none focus:border-[var(--color-cyan-accent-start)] focus:ring-1 focus:ring-[var(--color-cyan-accent-start)]",
             "transition-all duration-200"
           )}
-          aria-label="Search by tags"
+          aria-label="搜索标签"
           aria-expanded={showSuggestions}
           aria-haspopup="listbox"
           role="combobox"
@@ -144,7 +144,7 @@ export default function SearchBar({ initialQuery = "", onSearch, placeholder = "
           <button
             onClick={handleClear}
             className="absolute right-3 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-            aria-label="Clear search"
+            aria-label="清除搜索"
           >
             <X className="w-5 h-5" />
           </button>

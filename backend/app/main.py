@@ -11,6 +11,9 @@ from app.services.gallery_dl import setup_gallery_dl_config
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    if not settings.SECRET_KEY:
+        import logging
+        logging.warning("SECRET_KEY is not set — using insecure default")
     await create_tables()
     setup_gallery_dl_config()
     yield

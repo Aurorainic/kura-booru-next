@@ -1,17 +1,17 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import Pagination from "@/components/Pagination.tsx";
-import PhotoAlbumClient from "@/components/PhotoAlbum.tsx";
-import { fetchPosts } from "@/lib/api";
+import PhotoAlbumGrid from "@/components/PhotoAlbum.astro";
+import { fetchPosts, clampPerPage, emptyPostsResponse } from "@/lib/api";
 
 const page = Math.max(1, parseInt(Astro.url.searchParams.get("page") || "1"));
-const perPage = Math.min(100, Math.max(1, parseInt(Astro.url.searchParams.get("per_page") || "40")));
+const perPage = clampPerPage(parseInt(Astro.url.searchParams.get("per_page") || "40"));
 
 let data;
 try {
   data = await fetchPosts(page, perPage);
 } catch {
-  data = { items: [], total: 0, page: 1, per_page: 40, total_pages: 0 };
+  data = emptyPostsResponse();
 }
 
 const { items: posts, total, total_pages } = data;
@@ -25,25 +25,25 @@ function buildPageUrl(p: number, pp: number): string {
 }
 ---
 
-<BaseLayout title={page > 1 ? `Page ${page}` : undefined} description={`Browse anime illustrations — ${total} posts`}>
+<BaseLayout title={page > 1 ? `第 ${page} 页` : undefined} description={`浏览动漫插画 — 共 ${total} 张`}>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
       <div>
         <h1 class="text-2xl font-bold text-[var(--text-primary)]">
-          <span class="gradient-text">Gallery</span>
+          <span class="gradient-text">画廊</span>
         </h1>
-        <p class="text-sm text-[var(--text-muted)] mt-1">{total} illustrations</p>
+        <p class="text-sm text-[var(--text-muted)] mt-1">{total} 张插画</p>
       </div>
     </div>
 
     <!-- Masonry grid -->
     {posts.length > 0 ? (
-      <PhotoAlbumClient client:visible posts={posts} />
+      <PhotoAlbumGrid posts={posts} />
     ) : (
       <div class="flex flex-col items-center justify-center py-24 text-[var(--text-muted)]">
-        <p class="text-xl mb-2">No illustrations yet</p>
-        <p class="text-sm">Send images via the Telegram bot to get started</p>
+        <p class="text-xl mb-2">暂无插画</p>
+        <p class="text-sm">通过 Telegram 机器人发送图片来开始</p>
       </div>
     )}
 

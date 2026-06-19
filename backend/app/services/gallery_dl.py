@@ -1,18 +1,20 @@
 """gallery-dl integration service.
 
-Uses gallery-dl as a Python library (not subprocess) via DownloadJob API.
+Uses gallery-dl as a Python library (not subprocess).
 Runs synchronous gallery-dl calls in ThreadPoolExecutor to avoid blocking
 the async event loop.
 
 Key design decisions:
 - gallery-dl config is a global singleton set once at startup — never modify concurrently
-- Use DownloadJob API for programmatic access
+- DownloadJob downloads files, DataJob collects metadata (we use both)
 - Extract infojson metadata for tags, title, description
 """
 
 from __future__ import annotations
 
 import asyncio
+import io
+import json
 import logging
 import os
 import tempfile
@@ -37,7 +39,7 @@ def setup_gallery_dl_config() -> None:
     """Configure gallery-dl as a global singleton from environment variables.
 
     This must be called once at startup — never modify concurrently.
-    Called from main.py lifespan handler.
+    Called from main.py lifespan handler and worker on_startup.
     """
     # Pixiv authentication
     if settings.PIXIV_REFRESH_TOKEN:
@@ -62,7 +64,6 @@ def setup_gallery_dl_config() -> None:
 async def download_from_url(url: str) -> dict[str, Any]:
     """Download image and extract metadata from a URL using gallery-dl.
 
-    Uses gallery_dl.job.DownloadJob as Python API (not subprocess).
     Runs in ThreadPoolExecutor since gallery-dl is synchronous.
 
     Args:
@@ -84,8 +85,10 @@ async def download_from_url(url: str) -> dict[str, Any]:
 def _download_sync(url: str) -> dict[str, Any]:
     """Synchronous gallery-dl download — runs in ThreadPoolExecutor.
 
-    Uses DownloadJob API to download files and extract metadata.
-    Returns structured result dict.
+    Strategy:
+    1. Use DataJob (with StringIO) to collect metadata without downloading.
+    2. Use DownloadJob to actually download the file.
+    3. Fall back to reading infojson if available.
     """
     result: dict[str, Any] = {
         "file_path": None,
@@ -96,63 +99,122 @@ def _download_sync(url: str) -> dict[str, Any]:
         "metadata": {},
     }
 
-    # Create a temp directory for downloads
+    # First, use DataJob to get metadata
+    try:
+        buf = io.StringIO()
+        data_job = gallery_dl.job.DataJob(url, file=buf, resolve=True)
+        data_job.run()
+        buf.seek(0)
+        raw_json = buf.read()
+        if raw_json:
+            items = json.loads(raw_json)
+            # DataJob returns a list of tuples:
+            #   [MessageType, url_or_directory, metadata]
+            # MessageType values: Directory=2, Url=3, Queue=6
+            # We want items where the first element is 3 (Url)
+            for item in items:
+                if len(item) >= 3 and item[0] == gallery_dl.job.Message.Url:
+                    metadata = item[2]
+                    if isinstance(metadata, dict):
+                        result["metadata"] = metadata
+                        result["title"] = (
+                            metadata.get("title")
+                            or metadata.get("caption")
+                            or metadata.get("description")
+                        )
+                        result["description"] = (
+                            metadata.get("description") or metadata.get("caption")
+                        )
+                        # Tags
+                        tags = metadata.get("tags", [])
+                        if isinstance(tags, dict):
+                            tag_list = []
+                            for cat_tags in tags.values():
+                                if isinstance(cat_tags, list):
+                                    tag_list.extend(cat_tags)
+                                else:
+                                    tag_list.append(str(cat_tags))
+                            result["tags"] = tag_list
+                        elif isinstance(tags, list):
+                            result["tags"] = [str(t) for t in tags]
+                        # Image URL(s)
+                        if "url" in metadata:
+                            result["image_urls"].append(metadata["url"])
+                        break  # Use first Url entry
+    except Exception as exc:
+        logger.warning("gallery-dl DataJob failed for %s: %s", url, exc)
+
+    # Second, download the actual file
     with tempfile.TemporaryDirectory(prefix="kura_gallerydl_") as tmpdir:
         try:
-            # Set download destination to temp directory
-            gallery_dl.config.set(("extractor",), "directory", tmpdir)
+            # Set download destination (base-directory controls root path)
+            gallery_dl.config.set(("extractor",), "base-directory", tmpdir)
 
-            # Create a DownloadJob for the URL
-            job = gallery_dl.job.DownloadJob(url)
+            dl_job = gallery_dl.job.DownloadJob(url)
+            dl_job.run()
 
-            # Run the download
-            job.run()
-
-            # Extract metadata from the job's extracted items
-            if job.data:
-                # gallery-dl stores extracted data in various places
-                # depending on the extractor
-                metadata = job.data
-                result["metadata"] = metadata
-
-                # Extract common fields
-                result["title"] = metadata.get("title") or metadata.get("caption") or metadata.get("description")
-                result["description"] = metadata.get("description") or metadata.get("caption")
-
-                # Extract tags — gallery-dl stores them in "tags" field
-                tags = metadata.get("tags", [])
-                if isinstance(tags, dict):
-                    # Some sites return tags as {category: [tags]}
-                    tag_list = []
-                    for category_tags in tags.values():
-                        if isinstance(category_tags, list):
-                            tag_list.extend(category_tags)
-                        else:
-                            tag_list.append(str(category_tags))
-                    result["tags"] = tag_list
-                elif isinstance(tags, list):
-                    result["tags"] = [str(t) for t in tags]
-
-                # Extract image URLs
-                image_urls = []
-                # gallery-dl may provide image URLs in different fields
-                if "image_urls" in metadata:
-                    image_urls = metadata["image_urls"]
-                elif "url" in metadata:
-                    image_urls = [metadata["url"]]
-                result["image_urls"] = image_urls
-
-            # Find downloaded files in the temp directory
+            # Find downloaded files (skip .json metadata files)
+            downloaded_path = None
             for root, dirs, files in os.walk(tmpdir):
                 for fname in files:
-                    fpath = os.path.join(root, fname)
-                    if not fname.endswith(".json"):
-                        result["file_path"] = fpath
+                    if fname.endswith(".json"):
+                        continue
+                    downloaded_path = os.path.join(root, fname)
+                    break
+                if downloaded_path:
+                    break
+
+            # Read file bytes while temp dir still exists
+            if downloaded_path:
+                try:
+                    with open(downloaded_path, "rb") as f:
+                        result["image_bytes"] = f.read()
+                    logger.info(
+                        "Read %d bytes from gallery-dl downloaded file: %s",
+                        len(result["image_bytes"]),
+                        downloaded_path,
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to read downloaded file %s: %s", downloaded_path, exc)
+
+            # If DataJob didn't get metadata, try reading infojson
+            if not result["metadata"]:
+                for root, dirs, files in os.walk(tmpdir):
+                    for fname in files:
+                        if fname.endswith(".json"):
+                            json_path = os.path.join(root, fname)
+                            try:
+                                with open(json_path, "r", encoding="utf-8") as f:
+                                    info = json.load(f)
+                                result["metadata"] = info
+                                result["title"] = (
+                                    info.get("title")
+                                    or info.get("caption")
+                                    or info.get("description")
+                                )
+                                result["description"] = (
+                                    info.get("description") or info.get("caption")
+                                )
+                                tags = info.get("tags", [])
+                                if isinstance(tags, dict):
+                                    tag_list = []
+                                    for cat_tags in tags.values():
+                                        if isinstance(cat_tags, list):
+                                            tag_list.extend(cat_tags)
+                                        else:
+                                            tag_list.append(str(cat_tags))
+                                    result["tags"] = tag_list
+                                elif isinstance(tags, list):
+                                    result["tags"] = [str(t) for t in tags]
+                                if "url" in info:
+                                    result["image_urls"].append(info["url"])
+                                break
+                            except Exception:
+                                pass
+                    if result["metadata"]:
                         break
 
         except Exception as exc:
-            logger.error("gallery-dl download failed for %s: %s", url, exc)
-            # Don't re-raise — return partial result with empty fields
-            # The pipeline will handle missing data gracefully
+            logger.error("gallery-dl DownloadJob failed for %s: %s", url, exc)
 
     return result

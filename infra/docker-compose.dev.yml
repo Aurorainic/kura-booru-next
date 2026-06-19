@@ -1,95 +1,222 @@
 # =============================================================================
-# Kura Booru Next — Development Docker Compose Override
+# Kura Booru Next — Development Docker Compose
 # =============================================================================
-# Overlay on top of production docker-compose.yml for local development.
+# Independent development environment with MinIO, hot-reload, and exposed ports.
+# This file is NOT an overlay — it's a complete, standalone compose configuration.
 #
 # Usage:
-#   docker compose \
-#     -f infra/docker-compose.yml \
-#     -f infra/docker-compose.dev.yml \
-#     up
+#   docker compose -f infra/docker-compose.dev.yml up
+#   docker compose -f infra/docker-compose.dev.yml up --build  (rebuild images)
 #
-# What this does:
-#   - Mounts source directories for hot-reload (backend, bot, frontend)
-#   - Overrides container commands to use dev/watch modes
-#   - Exposes service ports to localhost (already in base compose)
-#   - Uses dev-target Dockerfiles where applicable
+# All ports are bound to 127.0.0.1 (localhost only) for security.
+# Sensitive values have dev-weak defaults — never use these in production.
 # =============================================================================
 
 services:
   # ---------------------------------------------------------------------------
-  # Backend — Hot-reload with uvicorn --reload
+  # Backend — FastAPI REST API (hot-reload mode)
   # ---------------------------------------------------------------------------
   backend:
     build:
       context: ../backend
       dockerfile: Dockerfile
-      target: dev        # Expects a multi-stage Dockerfile with a "dev" stage
+      target: dev
+    container_name: kura-backend-dev
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - ../.env
     volumes:
       - ../backend/app:/app/app:ro
       - ../backend/alembic:/app/alembic:ro
       - ../backend/alembic.ini:/app/alembic.ini:ro
     command: >
       uvicorn app.main:app
-      --host 0.0.0.0
-      --port 8000
-      --reload
-      --reload-dir /app/app
+      --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app
     environment:
       - LOG_LEVEL=debug
       - ENV=development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    networks:
+      - kura-internal
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # ---------------------------------------------------------------------------
-  # Bot — Hot-reload with aiogram dev server
+  # Worker — ARQ background task processor (hot-reload mode)
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      target: dev
+    container_name: kura-worker-dev
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    volumes:
+      - ../backend/app:/app/app:ro
+    command: ["arq", "app.tasks.worker.WorkerSettings"]
+    environment:
+      - LOG_LEVEL=debug
+      - ENV=development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    networks:
+      - kura-internal
+
+  # ---------------------------------------------------------------------------
+  # Bot — aiogram 3.x Telegram Bot (hot-reload mode)
   # ---------------------------------------------------------------------------
   bot:
     build:
       context: ../bot
       dockerfile: Dockerfile
       target: dev
+    container_name: kura-bot-dev
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    env_file:
+      - ../.env
     volumes:
       - ../bot/app:/app/app:ro
     command: python -m app.main
     environment:
       - LOG_LEVEL=debug
       - ENV=development
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - kura-internal
 
   # ---------------------------------------------------------------------------
-  # Frontend — Astro dev server with HMR
+  # Frontend — Astro SSR (HMR dev server)
   # ---------------------------------------------------------------------------
   frontend:
     build:
       context: ../frontend
       dockerfile: Dockerfile
       target: dev
+    container_name: kura-frontend-dev
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4321:4321"
+    env_file:
+      - ../.env
     volumes:
       - ../frontend/src:/app/src:ro
       - ../frontend/public:/app/public:ro
       - ../frontend/astro.config.mjs:/app/astro.config.mjs:ro
-      - ../frontend/tailwind.config.mjs:/app/tailwind.config.mjs:ro
     command: npm run dev -- --host 0.0.0.0
     environment:
       - ENV=development
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - kura-internal
 
   # ---------------------------------------------------------------------------
-  # PostgreSQL — Expose port + persistent dev data
+  # PostgreSQL 16 — Development database
   # ---------------------------------------------------------------------------
   postgres:
+    image: postgres:16-alpine
+    container_name: kura-postgres-dev
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5432:5432"
     environment:
-      POSTGRES_USER: kura
-      POSTGRES_PASSWORD: kura_password
-      POSTGRES_DB: kurabooru
+      POSTGRES_DB: ${POSTGRES_DB:-kurabooru}
+      POSTGRES_USER: ${POSTGRES_USER:-kura}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kura_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - kura-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kura} -d ${POSTGRES_DB:-kurabooru}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # ---------------------------------------------------------------------------
-  # Redis — No persistence needed in dev (appendonly is lighter)
+  # Redis 7 — Development queue/cache
   # ---------------------------------------------------------------------------
   redis:
-    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    image: redis:7-alpine
+    container_name: kura-redis-dev
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - kura-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ---------------------------------------------------------------------------
-  # MinIO — Dev defaults (minioadmin/minioadmin)
+  # MinIO — Local S3-compatible storage for development
   # ---------------------------------------------------------------------------
   minio:
+    image: minio/minio:latest
+    container_name: kura-minio-dev
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - kura-internal
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# =============================================================================
+# Volumes — Persistent data
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+
+# =============================================================================
+# Network — Internal communication
+# =============================================================================
+networks:
+  kura-internal:
+    driver: bridge

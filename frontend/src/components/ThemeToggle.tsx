@@ -18,9 +18,9 @@ function applyTheme(theme: ThemePreference): void {
 }
 
 const themeConfig: Record<ThemePreference, { icon: typeof Sun; label: string }> = {
-  auto: { icon: Monitor, label: "Auto" },
-  light: { icon: Sun, label: "Light" },
-  dark: { icon: Moon, label: "Dark" },
+  auto: { icon: Monitor, label: "自动" },
+  light: { icon: Sun, label: "浅色" },
+  dark: { icon: Moon, label: "深色" },
 };
 
 export default function ThemeToggle() {
@@ -63,8 +63,8 @@ export default function ThemeToggle() {
         "focus-visible:ring-2 focus-visible:ring-[var(--color-cyan-accent-start)] focus-visible:ring-offset-2",
         "group"
       )}
-      aria-label={`Switch theme (current: ${label})`}
-      title={`Theme: ${label}`}
+      aria-label={`切换主题（当前：${label}）`}
+      title={`主题：${label}`}
     >
       <Icon className="w-5 h-5 transition-transform duration-200 group-hover:scale-110" />
       <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">

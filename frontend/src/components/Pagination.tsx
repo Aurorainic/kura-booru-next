@@ -65,7 +65,7 @@ export default function Pagination({ currentPage, totalPages, perPage, buildUrl 
               "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
               "hover:bg-[var(--border-color)] transition-colors duration-150"
             )}
-            aria-label="Previous page"
+            aria-label="上一页"
           >
             <ChevronLeft className="w-5 h-5" />
           </a>
@@ -95,7 +95,7 @@ export default function Pagination({ currentPage, totalPages, perPage, buildUrl 
                   ? "gradient-bg text-[var(--color-dark-bg)] font-bold"
                   : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]"
               )}
-              aria-label={`Page ${page}`}
+              aria-label={`第 ${page} 页`}
               aria-current={page === currentPage ? "page" : undefined}
             >
               {page}
@@ -112,7 +112,7 @@ export default function Pagination({ currentPage, totalPages, perPage, buildUrl 
               "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
               "hover:bg-[var(--border-color)] transition-colors duration-150"
             )}
-            aria-label="Next page"
+            aria-label="下一页"
           >
             <ChevronRight className="w-5 h-5" />
           </a>
@@ -138,7 +138,7 @@ function PerPageSelector({
 }) {
   return (
     <div className="flex items-center gap-1 text-sm">
-      <span className="text-[var(--text-muted)] mr-1">Per page:</span>
+      <span className="text-[var(--text-muted)] mr-1">每页：</span>
       {PER_PAGE_OPTIONS.map((option) => (
         <a
           key={option}

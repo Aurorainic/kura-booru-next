@@ -18,7 +18,7 @@ from io import BytesIO
 from typing import Optional
 
 import aiohttp
-from PIL import Image
+from PIL import Image, ImageOps
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -111,8 +111,6 @@ def _generate_thumbnail(
     img = Image.open(BytesIO(image_bytes))
 
     # Preserve EXIF orientation
-    from PIL import ImageOps
-
     img = ImageOps.exif_transpose(img)
 
     # Convert RGBA/P modes to RGB for JPEG output
@@ -152,11 +150,12 @@ async def download_and_process(
     title: Optional[str] = None,
     description: Optional[str] = None,
     tag_names: Optional[list[str]] = None,
+    image_bytes: Optional[bytes] = None,
 ) -> ProcessedResult:
     """Full image processing pipeline.
 
     1. HEAD check Content-Length (reject > MAX_IMAGE_SIZE)
-    2. Download image bytes
+    2. Download image bytes (or use pre-downloaded bytes)
     3. Compute phash and check duplicates
     4. Generate thumbnails (thumb 150×150, preview 850×850)
     5. Upload originals + thumbnails to S3
@@ -164,14 +163,21 @@ async def download_and_process(
     """
     tag_names = tag_names or []
 
-    async with aiohttp.ClientSession() as session:
-        # Step 1: HEAD check
-        content_length, content_type = await _head_check(url, session)
+    if image_bytes is None:
+        # No pre-downloaded bytes — use aiohttp to fetch
+        async with aiohttp.ClientSession() as session:
+            # Step 1: HEAD check
+            content_length, content_type = await _head_check(url, session)
 
-        # Step 2: Download
-        async with session.get(url, allow_redirects=True) as resp:
-            resp.raise_for_status()
-            image_bytes = await resp.read()
+            # Step 2: Download
+            async with session.get(url, allow_redirects=True) as resp:
+                resp.raise_for_status()
+                image_bytes = await resp.read()
+    else:
+        # Pre-downloaded bytes available — skip HTTP download
+        content_length = len(image_bytes)
+        content_type = "application/octet-stream"
+        logger.info("Using pre-downloaded image bytes (%d bytes), skipping HTTP download", content_length)
 
         file_size = len(image_bytes)
         if file_size > settings.MAX_IMAGE_SIZE:
@@ -197,8 +203,6 @@ async def download_and_process(
 
     # Get original image dimensions
     img = Image.open(BytesIO(image_bytes))
-    from PIL import ImageOps
-
     img = ImageOps.exif_transpose(img)
     width, height = img.size
 

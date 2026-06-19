@@ -10,25 +10,6 @@ from app.models.post import SourceSite
 from app.schemas.tag import TagRead
 
 
-class PostCreate(BaseModel):
-    """Schema for creating a new post (typically from the pipeline)."""
-
-    s3_key: str
-    thumb_key: str
-    preview_key: str
-    source_url: str
-    source_site: SourceSite
-    source_id: str
-    width: int
-    height: int
-    file_size: int
-    mime_type: str
-    phash: str
-    title: Optional[str] = None
-    description: Optional[str] = None
-    tag_names: list[str] = Field(default_factory=list)
-
-
 class PostRead(BaseModel):
     """Schema for reading a single post with its tags."""
 

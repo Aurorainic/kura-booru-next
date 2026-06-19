@@ -8,7 +8,6 @@ from aiogram.types import Message
 from aiogram.filters import Command
 
 from app.handlers.url_handler import URL_PATTERN, identify_source
-from app.services.backend_api import get_post
 
 logger = logging.getLogger(__name__)
 

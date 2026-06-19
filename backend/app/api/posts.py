@@ -12,14 +12,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.constants import ALLOWED_PER_PAGE
 from app.database import get_db
 from app.models.post import Post, SourceSite
 from app.schemas.post import PostListRead, PostRead
 
 router = APIRouter()
-
-# Allowed per_page values (like safebooru)
-ALLOWED_PER_PAGE = {20, 40, 100}
 
 
 @router.get("/", response_model=PostListRead)

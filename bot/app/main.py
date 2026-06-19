@@ -1,3 +1,8 @@
+"""Bot entry point and aiohttp webhook server.
+
+Sets up aiogram 3.x with aiohttp for webhook-based Telegram bot operation.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -6,7 +11,7 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
-from aiogram.webhook.aiohttp_server import SimpleRequestProcessor, TokenBasedRequest, setup_application
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 from app.config import settings
 from app.middleware import AuthMiddleware
@@ -16,16 +21,12 @@ from app.services.arq_client import close_arq_pool
 
 logger = logging.getLogger(__name__)
 
-# Global request processor — must be a single instance shared across requests
-REQUEST_PROCESSOR = SimpleRequestProcessor()
-
 
 async def on_startup(bot: Bot) -> None:
     """Set webhook URL on startup."""
     logger.info("Setting webhook: %s", settings.BOT_WEBHOOK_URL)
     await bot.set_webhook(
         url=settings.BOT_WEBHOOK_URL,
-        secret=settings.BOT_WEBHOOK_SECRET,
         drop_pending_updates=True,
     )
 
@@ -86,24 +87,24 @@ def create_app() -> web.Application:
     # Health check endpoint (GET /)
     app.router.add_get("/", health_check)
 
-    # Set up webhook handler with secret token verification
-    webhook_handler = TokenBasedRequest(
-        processor=REQUEST_PROCESSOR,
-        token=settings.BOT_TOKEN,
+    # Set up webhook handler with aiogram SimpleRequestHandler
+    handler = SimpleRequestHandler(
+        dispatcher=dp,
+        bot=bot,
+        secret=settings.BOT_WEBHOOK_SECRET,
     )
-    # Register the webhook path at /bot/webhook (matching Caddy config)
-    app.router.add_route("POST", "/bot/webhook", webhook_handler)
+    handler.register(app, path="/bot/webhook")
 
-    # Setup aiogram integration
+    # Setup aiogram integration (startup / shutdown lifecycle)
     setup_application(app, dp, bot=bot)
 
     return app
 
 
 def main() -> None:
-    """Entry point — start the aiohttp web server on port 8080."""
+    """Entry point — start the aiohttp web server."""
     app = create_app()
-    web.run_app(app, host="0.0.0.0", port=8080)
+    web.run_app(app, host="0.0.0.0", port=settings.BOT_PORT)
 
 
 if __name__ == "__main__":

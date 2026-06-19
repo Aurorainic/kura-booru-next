@@ -27,6 +27,11 @@ PIXIV_URL_PATTERNS = [
         r"(?:https?://)?(?:www\.)?pixiv\.net/member_illust\.php\?.*illust_id=(\d+)",
         re.IGNORECASE,
     ),
+    # https://www.phixiv.net/artworks/12345678 (Pixiv proxy)
+    re.compile(
+        r"(?:https?://)?(?:www\.)?phixiv\.net/(?:artworks|illust)/(\d+)",
+        re.IGNORECASE,
+    ),
 ]
 
 
@@ -68,6 +73,7 @@ class PixivExtractor(BaseExtractor):
                 description=result.get("description"),
                 tags=result.get("tags", []),
                 image_urls=result.get("image_urls", []),
+                image_bytes=result.get("image_bytes"),
             )
         except Exception:
             logger.exception("gallery-dl extraction failed for Pixiv URL: %s", url)

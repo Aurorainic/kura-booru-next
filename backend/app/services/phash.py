@@ -30,38 +30,38 @@ PREFIX_LENGTH = PREFIX_BITS // 4  # 4 hex characters
 def compute_phash(image_bytes: bytes, hash_size: int = 16) -> str:
     """Compute a perceptual hash from raw image bytes.
 
-    Returns a 64-character binary string representing the hash.
-    Using hash_size=16 gives a 16×16 = 256-bit hash → 64 hex chars.
+    Returns a 64-character hex string for hash_size=16 (256 bits).
     """
     img = Image.open(BytesIO(image_bytes))
     phash = imagehash.phash(img, hash_size=hash_size)
-    # Convert to 64-char binary string for prefix-bucket matching
-    return _phash_to_binary_str(phash)
+    # Store as hex string — 256 bits = 64 hex chars, fits VARCHAR(64)
+    return str(phash)
 
 
 def _phash_to_binary_str(phash: imagehash.ImageHash) -> str:
-    """Convert an imagehash object to a 64-char binary string."""
-    # phash.hash is a numpy bool array of shape (hash_size, hash_size)
+    """Convert an imagehash object to a binary string (for internal use)."""
     flat = phash.hash.flatten()
     return "".join("1" if bit else "0" for bit in flat)
 
 
 def get_phash_prefix(phash_str: str) -> str:
-    """Extract the prefix bucket from a phash binary string.
+    """Extract the prefix bucket from a phash hex string.
 
-    The first PREFIX_BITS bits serve as a bucket key for fast lookups.
-    We return the first 4 hex chars (16 bits).
+    The first 4 hex chars represent 16 bits — used for fast prefix lookup.
     """
-    prefix_bits = phash_str[:PREFIX_BITS]
-    # Convert 16 binary digits to 4 hex digits
-    return format(int(prefix_bits, 2), "04x")
+    return phash_str[:PREFIX_LENGTH]
 
 
 def hamming_distance(hash1: str, hash2: str) -> int:
-    """Compute the Hamming distance between two binary phash strings."""
+    """Compute the Hamming distance between two hex phash strings."""
     if len(hash1) != len(hash2):
         raise ValueError("Hash strings must be the same length")
-    return sum(c1 != c2 for c1, c2 in zip(hash1, hash2))
+    dist = 0
+    for c1, c2 in zip(hash1, hash2):
+        b1 = int(c1, 16)
+        b2 = int(c2, 16)
+        dist += (b1 ^ b2).bit_count()
+    return dist
 
 
 async def find_duplicate(

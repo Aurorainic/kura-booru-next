@@ -24,6 +24,7 @@ class ExtractorResult:
     description: Optional[str] = None
     tags: list[str] = field(default_factory=list)
     image_urls: list[str] = field(default_factory=list)
+    image_bytes: Optional[bytes] = None
 
 
 class BaseExtractor(ABC):

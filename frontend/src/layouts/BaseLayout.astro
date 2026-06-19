@@ -2,17 +2,20 @@
 import ThemeToggle from "@/components/ThemeToggle.tsx";
 import "../styles/globals.css";
 
+const gitTag = import.meta.env.PUBLIC_GIT_TAG || "dev";
+const repoUrl = import.meta.env.PUBLIC_REPO_URL || "https://gitea.lainns.xyz/lainsaka/kura-booru-next";
+
 interface Props {
   title?: string;
   description?: string;
 }
 
-const { title = "Kura Booru", description = "Personal anime illustration collection" } = Astro.props;
+const { title = "Kura Booru", description = "个人动漫插画收藏与展示平台" } = Astro.props;
 const fullTitle = title === "Kura Booru" ? title : `${title} — Kura Booru`;
 ---
 
 <!doctype html>
-<html lang="ja" class="dark">
+<html lang="zh-CN" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -51,15 +54,21 @@ const fullTitle = title === "Kura Booru" ? title : `${title} — Kura Booru`;
           <div class="flex items-center gap-2">
             <a
               href="/search"
-              class="px-3 py-1.5 rounded-lg text-sm font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)] transition-colors duration-150"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)] transition-colors duration-150"
             >
-              Search
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+              </svg>
+              搜索
             </a>
             <a
               href="/tags"
-              class="px-3 py-1.5 rounded-lg text-sm font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)] transition-colors duration-150"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)] transition-colors duration-150"
             >
-              Tags
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 8.25h13.5M5.25 8.25V18a2.25 2.25 0 0 0 2.25 2.25h10.5A2.25 2.25 0 0 0 20.25 18V8.25m-15 0V6a2.25 2.25 0 0 1 2.25-2.25h10.5A2.25 2.25 0 0 1 20.25 6v2.25m-15 0h13.5" />
+              </svg>
+              标签
             </a>
             <div class="w-px h-5 bg-[var(--border-color)]" />
             <ThemeToggle client:load />
@@ -78,10 +87,10 @@ const fullTitle = title === "Kura Booru" ? title : `${title} — Kura Booru`;
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between text-sm text-[var(--text-muted)]">
           <span>
-            <span class="gradient-text font-medium">Kura Booru</span>
-            <span class="ml-2">v2</span>
+            <a href={repoUrl} target="_blank" rel="noopener noreferrer" class="gradient-text font-medium hover:opacity-80 transition-opacity">Kura Booru (Next)</a>
+            <span class="ml-2">Version {gitTag}</span>
           </span>
-          <span>Personal illustration collection</span>
+          <span>个人动漫插画收藏</span>
         </div>
       </div>
     </footer>

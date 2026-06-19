@@ -12,6 +12,7 @@ from arq import create_pool
 from arq.connections import RedisSettings
 
 from app.config import get_settings
+from app.services.gallery_dl import setup_gallery_dl_config
 from app.tasks.process_image import process_image
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,11 @@ class WorkerSettings:
 
     # Register all task functions here
     functions = [process_image]
+
+    # Worker startup hook
+    @staticmethod
+    async def on_startup(ctx):
+        setup_gallery_dl_config()
 
     # Worker timeouts
     job_timeout = 300  # 5 minutes per job

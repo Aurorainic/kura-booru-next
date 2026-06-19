@@ -1,16 +1,20 @@
 # =============================================================================
 # Kura Booru Next — Production Docker Compose
 # =============================================================================
-# Caddy runs on the HOST machine (not in this compose file) and reverse-proxies
-# into the Docker network using container names as hostnames.
+# Minimal production configuration — no MinIO, no exposed ports.
+# Caddy runs on the HOST machine and reverse-proxies into this Docker network.
 #
 # Usage:
 #   docker compose -f infra/docker-compose.yml up -d
+#
+# Required environment variables (must be set in ../.env):
+#   POSTGRES_PASSWORD — no default, will fail if not set
+#   All other vars should be configured in .env (see .env.example)
 # =============================================================================
 
 services:
   # ---------------------------------------------------------------------------
-  # Backend — FastAPI REST API + ARQ worker
+  # Backend — FastAPI REST API
   # ---------------------------------------------------------------------------
   backend:
     build:
@@ -18,8 +22,6 @@ services:
       dockerfile: Dockerfile
     container_name: kura-backend
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:8000:8000"
     env_file:
       - ../.env
     depends_on:
@@ -27,12 +29,36 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_started
     networks:
       - kura-internal
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Worker — ARQ background task processor
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: kura-worker
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - kura-internal
+    command: ["arq", "app.tasks.worker.WorkerSettings"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://backend:8000/health')\" || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -47,8 +73,6 @@ services:
       dockerfile: Dockerfile
     container_name: kura-bot
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:8080:8080"
     env_file:
       - ../.env
     depends_on:
@@ -68,8 +92,6 @@ services:
       dockerfile: Dockerfile
     container_name: kura-frontend
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:4321:4321"
     env_file:
       - ../.env
     depends_on:
@@ -91,32 +113,32 @@ services:
     image: postgres:16-alpine
     container_name: kura-postgres
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:5432:5432"
     environment:
-      POSTGRES_DB: kurabooru
+      POSTGRES_DB: ${POSTGRES_DB:-kurabooru}
       POSTGRES_USER: ${POSTGRES_USER:-kura}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kura_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - kura-internal
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kura} -d kurabooru"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kura} -d ${POSTGRES_DB:-kurabooru}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
 
   # ---------------------------------------------------------------------------
-  # Redis 7 — Task queue (ARQ) + Cache backend for Caddy Souin
+  # Redis 7 — Task queue (ARQ) + Cache
   # ---------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
     container_name: kura-redis
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:6379:6379"
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-}
+      --appendonly yes
     volumes:
       - redis_data:/data
     networks:
@@ -128,31 +150,6 @@ services:
       retries: 5
       start_period: 5s
 
-  # ---------------------------------------------------------------------------
-  # MinIO — S3-compatible object storage
-  # ---------------------------------------------------------------------------
-  minio:
-    image: minio/minio:latest
-    container_name: kura-minio
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:9000:9000"
-      - "127.0.0.1:9001:9001"
-    environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-    networks:
-      - kura-internal
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
 # =============================================================================
 # Volumes — Persistent data
 # =============================================================================
@@ -160,8 +157,6 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
-    driver: local
-  minio_data:
     driver: local
 
 # =============================================================================

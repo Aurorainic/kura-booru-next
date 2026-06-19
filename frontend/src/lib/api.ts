@@ -38,11 +38,33 @@ export interface PaginatedResponse<T> {
 }
 
 export type PostsResponse = PaginatedResponse<Post>;
-export type TagsResponse = PaginatedResponse<Tag>;
+
+// === Pagination Helpers ===
+
+export const ALLOWED_PER_PAGE = new Set([20, 40, 100]);
+export const DEFAULT_PER_PAGE = 40;
+export const MAX_PER_PAGE = 100;
+
+export function clampPerPage(value: number): number {
+  if (ALLOWED_PER_PAGE.has(value)) return value;
+  if (value < 20) return 20;
+  if (value > 100) return 100;
+  // Find nearest allowed value
+  return [...ALLOWED_PER_PAGE].reduce((prev, curr) =>
+    Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev
+  );
+}
+
+export function emptyPostsResponse(): PostsResponse {
+  return { items: [], total: 0, page: 1, per_page: DEFAULT_PER_PAGE, total_pages: 0 };
+}
 
 // === API Client ===
 
-const BASE_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:8000/api";
+const BASE_URL =
+  typeof import.meta.env.SSR !== "undefined" && import.meta.env.SSR
+    ? (import.meta.env.INTERNAL_API_URL || "http://backend:8000/api")
+    : (import.meta.env.PUBLIC_API_URL || "http://localhost:8000/api");
 
 class ApiError extends Error {
   constructor(
@@ -88,10 +110,6 @@ export async function fetchPost(id: string): Promise<Post> {
   return fetchApi<Post>(`/posts/${id}`);
 }
 
-export async function fetchRandomPost(): Promise<Post> {
-  return fetchApi<Post>("/posts/random");
-}
-
 // === Tag APIs ===
 
 export async function fetchTags(
@@ -99,8 +117,8 @@ export async function fetchTags(
   sort: string = "count",
   page: number = 1,
   perPage: number = 100,
-): Promise<TagsResponse> {
-  return fetchApi<TagsResponse>("/tags", {
+): Promise<PaginatedResponse<Tag>> {
+  return fetchApi<PaginatedResponse<Tag>>("/tags", {
     category,
     sort,
     page,
@@ -176,11 +194,11 @@ export function getTagCategoryColor(category: TagCategory): string {
 
 export function getTagCategoryLabel(category: TagCategory): string {
   const labels: Record<TagCategory, string> = {
-    artist: "Artist",
-    character: "Character",
-    copyright: "Copyright",
-    general: "General",
-    meta: "Meta",
+    artist: "画师",
+    character: "角色",
+    copyright: "作品",
+    general: "通用",
+    meta: "元信息",
   };
   return labels[category] || category;
 }
@@ -190,7 +208,7 @@ export function getSourceSiteLabel(site: SourceSite): string {
     pixiv: "Pixiv",
     twitter: "Twitter/X",
     danbooru: "Danbooru",
-    other: "Other",
+    other: "其他",
   };
   return labels[site] || site;
 }

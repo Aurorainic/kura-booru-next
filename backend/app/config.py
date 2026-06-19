@@ -11,12 +11,12 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # ── Application ──────────────────────────────────────────────────
-    APP_URL: str = "http://localhost:4321"
-    SECRET_KEY: str = "change-me-in-production"
+    APP_URL: str = ""
+    SECRET_KEY: str = ""
 
     # ── S3 Storage ───────────────────────────────────────────────────
     S3_ENDPOINT: str = "http://localhost:9000"
-    S3_EXTERNAL_URL: str = "http://localhost/i/kura-booru"
+    S3_EXTERNAL_URL: str = "http://localhost:9000/kura-booru"
     S3_ACCESS_KEY: str = "minioadmin"
     S3_SECRET_KEY: str = "minioadmin"
     S3_BUCKET_NAME: str = "kura-booru"
@@ -36,7 +36,9 @@ class Settings(BaseSettings):
 
     @field_validator("BOT_ADMIN_IDS", mode="before")
     @classmethod
-    def parse_admin_ids(cls, v: str | list[int]) -> list[int]:
+    def parse_admin_ids(cls, v: str | int | list[int]) -> list[int]:
+        if isinstance(v, int):
+            return [v]
         if isinstance(v, str):
             if not v.strip():
                 return []
@@ -45,8 +47,8 @@ class Settings(BaseSettings):
 
     # ── Image Processing ─────────────────────────────────────────────
     MAX_IMAGE_SIZE: int = 6291456  # 6 MB
-    THUMB_SIZE: str = "150x150"
-    PREVIEW_SIZE: str = "850x850"
+    THUMB_SIZE: str = "400x400"
+    PREVIEW_SIZE: str = "1200x1200"
 
     @field_validator("THUMB_SIZE", mode="before")
     @classmethod
@@ -86,3 +88,7 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Cached settings instance — call once, reuse everywhere."""
     return Settings()
+
+
+# Module-level singleton for convenient import
+settings = get_settings()

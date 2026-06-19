@@ -9,13 +9,6 @@ from pydantic import BaseModel
 from app.models.tag import TagCategory
 
 
-class TagCreate(BaseModel):
-    """Schema for creating a new tag."""
-
-    name: str
-    category: TagCategory = TagCategory.general
-
-
 class TagRead(BaseModel):
     """Schema for reading a single tag."""
 
