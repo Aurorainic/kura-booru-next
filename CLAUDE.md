@@ -192,7 +192,10 @@ docker compose -f infra/docker-compose.dev.yml up
 docker compose -f infra/docker-compose.dev.yml up --build
 
 # Start production environment (requires external S3 like R2/AWS S3)
-docker compose -f infra/docker-compose.yml up -d
+cd infra && docker compose up -d
+
+# Build production images with version tag
+./infra/scripts/build.sh v0.1.1
 
 # Validate environment variables
 ./infra/scripts/validate-env.sh dev   # Check for development
@@ -227,13 +230,14 @@ All Dockerfiles have 3 stages: `dev` (hot-reload), `builder`, and production run
 
 ## Current Status
 
-**v0.1.0 Released.** Core features complete (bot → worker → S3 → frontend). All P0/P1/P2/P3 audit items resolved.
+**v0.1.1 Released.** Core features complete (bot → worker → S3 → frontend). Production deployment lessons captured. All P0/P1/P2/P3 audit items resolved.
 
-### What's Done
+### What's Done (v0.1.0 → v0.1.1)
 - Full processing pipeline: Telegram bot → backend API → ARQ worker → gallery-dl → S3 storage
 - Frontend: Astro SSR with Tailwind v4, masonry grid, tag system, search, pagination
 - Bot: URL auto-detection, /save, /info, /search commands
 - Infrastructure: Docker Compose, Caddy reverse proxy, MinIO/R2 S3
+- Production build: version-tagged Docker images, China mirror support, footer version display
 
 ### Known Limitations (Phase 4)
 - Tag `post_count` auto-sync (currently needs manual SQL)

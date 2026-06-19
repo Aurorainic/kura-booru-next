@@ -32,6 +32,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+ARG PUBLIC_GIT_TAG=dev
+ENV PUBLIC_GIT_TAG=${PUBLIC_GIT_TAG}
 ENV NODE_ENV=production
 RUN npm run build
 
