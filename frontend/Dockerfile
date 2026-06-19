@@ -5,6 +5,9 @@ WORKDIR /app
 
 COPY package.json package-lock.json* ./
 
+# Use npmmirror for faster npm install in China
+RUN npm config set registry https://registry.npmmirror.com
+
 RUN npm ci
 
 # ── Stage 2: Dev image (Astro dev server with HMR) ─────────────────────
