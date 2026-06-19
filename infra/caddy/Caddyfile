@@ -1,40 +1,67 @@
-{$APP_DOMAIN:kura-booru.lainns.xyz} {
-    encode zstd gzip
+# Caddyfile for Kura Booru Next — placed on HOST machine at /etc/caddy/Caddyfile
+#
+# IMPORTANT: This file is a TEMPLATE. You MUST edit the values below:
+#   1. Replace all lainns.xyz domains with YOUR domain
+#   2. Replace the S3 image proxy upstream (handle /i/*) with your S3/CDN domain
+#   3. Remove unrelated blocks (gitea, astrbot, etc.) — they are just examples
+#
+# The /i/* block proxies image requests to your S3-compatible storage (R2/MinIO/AWS S3).
+# - Cloudflare R2:  use your public CDN domain (e.g., https://images.your-domain.com)
+# - MinIO:          use http://localhost:9000/<bucket>
+# - AWS S3:         use https://<bucket>.s3.<region>.amazonaws.com
+#
+# See infra/.env.example for the full list of environment variables.
+# ──────────────────────────────────────────────────────────────────────
 
-    header {
-        X-Content-Type-Options "nosniff"
-        X-Frame-Options "DENY"
-        Referrer-Policy "strict-origin-when-cross-origin"
-    }
+kura-booru.lainns.xyz {
+	encode zstd gzip
 
-    # API routes — NO CACHE, proxy to FastAPI backend
-    handle /api/* {
-        reverse_proxy {$BACKEND_HOST:127.0.0.1}:{$BACKEND_PORT:8000} {
-            fail_duration 30s
-            max_fails 3
-        }
-        request_body {
-            max_size 50MB
-        }
-    }
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
 
-    # Telegram Bot webhook — NO CACHE, proxy to bot container
-    handle /bot/webhook {
-        reverse_proxy {$BOT_HOST:127.0.0.1}:{$BOT_PORT:8080}
-    }
+	# API routes — NO CACHE, proxy to FastAPI backend
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8000 {
+			fail_duration 30s
+			max_fails 3
+		}
+		request_body {
+			max_size 50MB
+		}
+	}
 
-    # Frontend SSR (Astro) — default route
-    handle {
-        reverse_proxy {$FRONTEND_HOST:127.0.0.1}:{$FRONTEND_PORT:4321}
-    }
+	# Telegram Bot webhook — NO CACHE, proxy to bot container
+	handle /bot/webhook {
+		reverse_proxy 127.0.0.1:8080
+	}
 
-    # Cache-Control: immutable for hashed assets
-    @hashedAssets {
-        path *.js *.css *.woff2 *.woff *.png *.jpg *.svg *.ico *.webp *.avif
-    }
-    header @hashedAssets Cache-Control "public, max-age=31536000, immutable"
+	# S3 image proxy — /i/* serves images from S3/CDN
+	# IMPORTANT: Replace the upstream URL below with YOUR S3/CDN public URL
+	# - R2:      https://images.your-domain.com
+	# - MinIO:   http://localhost:9000/your-bucket
+	# - AWS S3:  https://your-bucket.s3.region.amazonaws.com
+	handle /i/* {
+		uri strip_prefix /i
+		reverse_proxy https://images.kura-booru.lainns.xyz {
+			header_up Host images.kura-booru.lainns.xyz
+		}
+	}
 
-    log {
-        output file /var/log/caddy/kura-booru-access.log
-    }
+	# Frontend SSR (Astro) — default route
+	handle {
+		reverse_proxy 127.0.0.1:4321
+	}
+
+	# Cache-Control: immutable for hashed assets
+	@hashedAssets {
+		path *.js *.css *.woff2 *.woff *.png *.jpg *.svg *.ico *.webp *.avif
+	}
+	header @hashedAssets Cache-Control "public, max-age=31536000, immutable"
+
+	log {
+		output file /var/log/caddy/kura-booru-access.log
+	}
 }

@@ -252,3 +252,23 @@ All Dockerfiles have 3 stages: `dev` (hot-reload), `builder`, and production run
 - TanStack Query configured correctly from day one
 - Caddy Souin cache layer (v1 had SSR but no caching)
 - phash NOT exposed in API responses (security)
+
+## v0.1.1 Lessons (from production deployment)
+
+### Docker Build in China
+- Python base images use `deb.debian.org`, not host's apt source. Add Aliyun mirror replacement in every Dockerfile stage that runs `apt-get`.
+- `sed` must handle both `/etc/apt/sources.list` AND `/etc/apt/sources.list.d/debian.sources` (new Debian format).
+- `pip install` needs `-i https://mirrors.aliyun.com/pypi/simple/` for PyPI in China.
+- `npm ci` needs `npm config set registry https://registry.npmmirror.com` for npmmirror.
+- Huawei SWR does NOT support Docker BuildKit attestation manifests. Use `--provenance=false --sbom=false` or `DOCKER_BUILDKIT=0`.
+
+### docker-compose.yml
+- Production compose needs `ports: 127.0.0.1:PORT:PORT` bindings — Caddy runs on the HOST, not in Docker, so containers must expose ports to localhost.
+- Redis command with empty `${REDIS_PASSWORD:-}` breaks parsing. Remove `--requirepass` line entirely when password is empty.
+- `schemas/__init__.py` must only import classes that actually exist — stale `PostCreate`/`TagCreate` imports crash uvicorn at startup.
+
+### Caddy /i/* Image Proxy
+- Frontend renders `/i/originals/...`, `/i/thumbs/...`, `/i/previews/...` paths.
+- Caddy MUST have a `handle /i/*` block with `uri strip_prefix /i` + `reverse_proxy` to S3/CDN.
+- R2 API endpoint (`*.r2.cloudflarestorage.com`) requires S3 auth headers — use the public CDN domain (e.g., `images.your-domain.com`) as upstream instead.
+- The template `infra/caddy/Caddyfile` must be copied to `/etc/caddy/Caddyfile` on the host and customized.
