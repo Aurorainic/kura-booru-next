@@ -3,6 +3,9 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /build
 
+# Use Aliyun Debian mirror for faster downloads in China
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources
+
 # Install system dependencies needed for Pillow and imagehash
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -20,6 +23,9 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # ── Stage 2: Dev image (hot-reload, debug tools) ──────────────────────
 FROM python:3.12-slim AS dev
+
+# Use Aliyun Debian mirror
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources
 
 # Install runtime system libraries + dev tools
 RUN apt-get update && \
@@ -46,6 +52,9 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload
 
 # ── Stage 3: Production image ─────────────────────────────────────────
 FROM python:3.12-slim
+
+# Use Aliyun Debian mirror
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources
 
 # Install runtime system libraries for Pillow
 RUN apt-get update && \

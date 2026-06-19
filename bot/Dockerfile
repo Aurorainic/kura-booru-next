@@ -10,6 +10,9 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 # ── Stage 2: Dev image ────────────────────────────────────────────────
 FROM python:3.12-slim AS dev
 
+# Use Aliyun Debian mirror
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources
+
 # Install curl for health check + dev convenience
 RUN apt-get update && apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
@@ -28,6 +31,9 @@ CMD ["python", "-m", "app.main"]
 
 # ── Stage 3: Production image ─────────────────────────────────────────
 FROM python:3.12-slim
+
+# Use Aliyun Debian mirror
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources
 
 # Install curl for health check
 RUN apt-get update && apt-get install -y --no-install-recommends curl && \
