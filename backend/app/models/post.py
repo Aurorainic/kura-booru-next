@@ -16,6 +16,21 @@ class SourceSite(str, enum.Enum):
     other = "other"
 
 
+class Rating(str, enum.Enum):
+    """Post content rating, aligned with Danbooru's system.
+
+    Visibility rules:
+      - safe           → always visible (public)
+      - questionable   → hidden from anonymous visitors
+      - explicit       → hidden from anonymous visitors
+    gallery-dl metadata (Pixiv x_restrict, Danbooru rating) auto-populates this.
+    """
+
+    safe = "safe"
+    questionable = "questionable"
+    explicit = "explicit"
+
+
 class Post(Base):
     __tablename__ = "posts"
 
@@ -40,6 +55,12 @@ class Post(Base):
     phash: Mapped[str] = mapped_column(String(64), nullable=False)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rating: Mapped[Rating] = mapped_column(
+        Enum(Rating, name="rating_enum"),
+        nullable=False,
+        server_default=Rating.safe.value,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

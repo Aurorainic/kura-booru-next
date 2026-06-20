@@ -16,6 +16,11 @@ async def lifespan(app: FastAPI):
         logging.warning("SECRET_KEY is not set — using insecure default")
     await create_tables()
     setup_gallery_dl_config()
+    # Ensure a default admin exists on first startup
+    from app.auth import ensure_default_admin
+    from app.database import async_session_factory
+    async with async_session_factory() as db:
+        await ensure_default_admin(db)
     yield
     # Shutdown — nothing to clean up currently
 

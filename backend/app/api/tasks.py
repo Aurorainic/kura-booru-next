@@ -1,13 +1,16 @@
 """Task creation endpoint.
 
 Provides an API to enqueue image processing tasks to the ARQ worker.
+Gated behind the shared BACKEND_API_KEY (X-Api-Key header) — trusted internal
+callers only (the Telegram bot, future web ingestion).
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.auth import require_api_key
 from app.tasks.worker import enqueue_process_image
 
 router = APIRouter()
@@ -28,7 +31,7 @@ class ProcessImageResponse(BaseModel):
     status: str = Field(default="queued", description="Task status")
 
 
-@router.post("/", response_model=ProcessImageResponse)
+@router.post("/", response_model=ProcessImageResponse, dependencies=[Depends(require_api_key)])
 async def create_process_task(request: ProcessImageRequest):
     """Create a new image processing task.
 

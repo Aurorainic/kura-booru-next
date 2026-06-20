@@ -272,6 +272,55 @@ ARQ Worker (process_image):
 - [ ] 端到端测试
 - [ ] 部署文档
 
+### 🔲 Phase 6：待做（v0.1.3+ 后续）
+
+#### 后端
+- [ ] Twitter extractor 完善（完整元数据提取）
+- [ ] Danbooru extractor 完善（rating 字段已对接，元数据还需细化）
+- [ ] Tag `post_count` 自动同步（目前需手动 SQL）
+- [ ] phash 去重性能优化（前缀桶索引）
+- [ ] Admin 密码修改后旧 session 失效机制（当前 session cookie 仍用旧密码验证直到过期）
+- [ ] SSE/WebSocket 任务状态推送（Bot 端实时查看 /save 进度）
+- [ ] 网页 URL 录入工作流（管理员在后台贴 URL → 调 POST /api/tasks/ → 显示处理状态）
+- [ ] 批量录入支持（Bot 转发多条链接时按顺序处理并显示进度）
+
+#### 前端
+- [ ] 搜索栏 `rating:` 语法高亮提示（admin 模式下显示可用语法提示）
+- [ ] 管理页批量评级修改（多选 + 批量设为 safe/q/e）
+- [ ] 详情页来源链接改为 Danbooru 风格站点标识（Pixiv → 小图标 + 链接）
+- [ ] 图片渐进加载优化（blur placeholder → thumb → preview → original 四级加载）
+- [ ] 标签页 `post_count` 实时准确性（目前 tag.post_count 需手动 SQL 同步）
+- [ ] 404/错误页面美化（当前 404 页面功能但视觉简单）
+
+#### 基础设施
+- [ ] SSR 缓存启用（需先解决 `Vary: Cookie` + 缓存 key 问题，否则 admin 页面会泄漏给匿名访客）
+- [ ] 监控与告警（Prometheus + Grafana）
+- [ ] 自动化 CI/CD（GitHub Actions / Gitea Actions）
+- [ ] HTTPS 证书自动续期（Caddy 已内置）
+- [ ] 数据库定期备份 cron
+- [ ] 生产环境 Caddy Souin 缓存配置（需 Vary: Cookie）
+
+### ✅ Phase 5：Danbooru 化 + 管理后台 & NSFW 可见性（完成）
+- [x] 评级系统 — Post 新增 `rating` 字段（safe/questionable/explicit，对齐 Danbooru）
+- [x] 可见性规则 — 访客只看 safe，非 safe 图 404（隐藏存在性）；admin 登录解锁全部
+- [x] Admin 认证 — 管理员凭证存 DB（`admins` 表），首次启动自动创建+随机密码输出到日志
+- [x] Auth API — POST /api/auth/login|logout|change-password, GET /api/auth/status
+- [x] API 密钥 — POST /api/tasks/ 和 /api/rebuild/ 需要 X-Api-Key（Bot 共享密钥）
+- [x] 评级编辑 — PATCH /api/posts/{id}（admin-only）+ 前端内联下拉
+- [x] 源数据自动赋值 — Pixiv x_restrict + Danbooru rating 自动映射
+- [x] Danbooru 标签侧栏 — 详情页按 分类+计数 分组，移动端扁平展示
+- [x] 评级徽章 — 卡片角标（Q/E），详情页评级标签（S/Q/E 三色）
+- [x] 评级筛选 — 首页 S/Q/E chip（admin），搜索 `rating:` 语法（admin）
+- [x] 管理页 — /admin/posts 全图列表 + 评级筛选 + 内联改评级
+- [x] 登录页 — /login 用户名+密码
+- [x] 导航 — 登录/退出/管理链接 + 管理模式横幅
+- [x] 404 页 — 修复详情页重定向到不存在的 /404
+- [x] SSR cookie 转发 — Astro middleware + api.ts ssrCookie 参数
+- [x] Alembic 迁移 002 — rating_enum + posts.rating 列
+- [x] Alembic 迁移 003 — admins 表（username + password_hash）
+- [x] 改密码页面 — /admin/password 当前密码+新密码表单
+- [x] 删除 ADMIN_PASSWORD_HASH env var — 改为 DB 存储方式
+
 ---
 
 ## 验证方式
@@ -286,6 +335,14 @@ ARQ Worker (process_image):
 8. **标签分类**：Pixiv 插画的 artist/character/copyright 标签正确分类
 9. **HTML 描述**：Pixiv 插画简介中的超链接可点击，新窗口打开
 10. **转发消息**：从 TG 频道转发包含链接的消息，Bot 正确解析并处理
+11. **评级可见性**：匿名访客只能看到 safe 图；非 safe 图返回 404；admin 登录后可见全部
+12. **管理员登录**：`/login` 页面登录 → 首页显示"管理模式"横幅 → 导航栏显示管理/退出
+13. **评级编辑**：详情页 admin 可切换公开/私用 → PATCH 请求成功 → 刷新后评级更新
+14. **评级筛选**：首页 S/Q/E chip 仅 admin 可见，点击后过滤对应评级；搜索支持 `rating:safe`
+15. **API 密钥**：不带 `X-Api-Key` 的 POST /api/tasks/ 返回 401；Bot 发送密钥后正常调用
+16. **Danbooru 标签侧栏**：详情页桌面端左侧标签按分类分组+计数；移动端标签在图下方
+17. **管理页**：`/admin/posts` 列出所有图（含 q/e），评级筛选正常，内联改评级即时生效
+18. **SSR 缓存约束**：确认 Caddyfile 无 SSR HTML 缓存块（或已加 Vary: Cookie）
 
 ---
 

@@ -1,0 +1,194 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import {
+  fetchPosts, clampPerPage, emptyPostsResponse,
+  getRatingColorClass, getRatingLabel, getSourceSiteLabel,
+  formatFileSize, formatDate,
+  type Rating,
+} from "@/lib/api";
+
+// Admin-only page: redirect non-admins to login
+const isAdmin = Astro.locals.isAdmin ?? false;
+const ssrCookie = Astro.locals.ssrCookie;
+
+if (!isAdmin) {
+  return Astro.redirect("/login");
+}
+
+const page = Math.max(1, parseInt(Astro.url.searchParams.get("page") || "1"));
+const perPage = 40;
+const ratingFilter = (Astro.url.searchParams.get("rating") || "") as Rating | "";
+
+let data;
+try {
+  data = await fetchPosts(page, perPage, ratingFilter || undefined, ssrCookie);
+} catch {
+  data = emptyPostsResponse();
+}
+
+const { items: posts, total, total_pages } = data;
+
+function buildPageUrl(p: number, r: string): string {
+  const params = new URLSearchParams();
+  if (p > 1) params.set("page", String(p));
+  if (r) params.set("rating", r);
+  const qs = params.toString();
+  return qs ? `/admin/posts?${qs}` : "/admin/posts";
+}
+
+const ratingOptions: { value: string; label: string }[] = [
+  { value: "", label: "全部" },
+  { value: "safe", label: "Safe (公开)" },
+  { value: "questionable", label: "Questionable (私用)" },
+  { value: "explicit", label: "Explicit (私用)" },
+];
+---
+
+<BaseLayout title="图片管理">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-[var(--text-primary)]">
+          <span class="gradient-text">图片管理</span>
+        </h1>
+        <p class="text-sm text-[var(--text-muted)] mt-1">{total} 张插画（含所有评级）</p>
+      </div>
+
+      <!-- Rating filter -->
+      <div class="flex items-center gap-2 text-sm">
+        <span class="text-[var(--text-muted)]">评级:</span>
+        {ratingOptions.map(opt => (
+          <a
+            href={buildPageUrl(1, opt.value)}
+            class={`px-2 py-0.5 rounded ${ratingFilter === opt.value ? "gradient-bg text-white" : "text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] border border-[var(--border-color)]"}`}
+          >
+            {opt.label}
+          </a>
+        ))}
+      </div>
+    </div>
+
+    <!-- Posts table -->
+    {posts.length > 0 ? (
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-[var(--border-color)] text-left text-[var(--text-muted)]">
+              <th class="py-3 px-2 w-16">预览</th>
+              <th class="py-3 px-2">标题 / ID</th>
+              <th class="py-3 px-2">来源</th>
+              <th class="py-3 px-2">评级</th>
+              <th class="py-3 px-2">大小</th>
+              <th class="py-3 px-2">时间</th>
+              <th class="py-3 px-2">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {posts.map((post) => (
+              <tr class="border-b border-[var(--border-color)] hover:bg-[var(--bg-surface)] transition-colors">
+                <td class="py-2 px-2">
+                  <a href={`/posts/${post.id}`}>
+                    <img
+                      src={post.thumb_key ? `/i/${post.thumb_key}` : "/placeholder.svg"}
+                      alt=""
+                      class="w-12 h-12 object-cover rounded"
+                      loading="lazy"
+                    />
+                  </a>
+                </td>
+                <td class="py-2 px-2">
+                  <a href={`/posts/${post.id}`} class="text-[var(--text-primary)] hover:text-[var(--color-cyan-accent-start)] font-medium">
+                    {post.title || post.id.slice(0, 8)}
+                  </a>
+                </td>
+                <td class="py-2 px-2 text-[var(--text-muted)]">
+                  {getSourceSiteLabel(post.source_site)}
+                </td>
+                <td class="py-2 px-2">
+                  <span class={`px-2 py-0.5 text-xs font-bold rounded border ${getRatingColorClass(post.rating)}`}>
+                    {getRatingLabel(post.rating)}
+                  </span>
+                </td>
+                <td class="py-2 px-2 text-[var(--text-muted)]">
+                  {formatFileSize(post.file_size)}
+                </td>
+                <td class="py-2 px-2 text-[var(--text-muted)]">
+                  {formatDate(post.created_at)}
+                </td>
+                <td class="py-2 px-2">
+                  <select
+                    class="rating-admin-select text-xs px-1.5 py-0.5 rounded border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]"
+                    data-post-id={post.id}
+                    data-current-rating={post.rating}
+                  >
+                    <option value="safe" selected={post.rating === "safe"}>公开 Safe</option>
+                    <option value="questionable" selected={post.rating === "questionable"}>私用 Q</option>
+                    <option value="explicit" selected={post.rating === "explicit"}>私用 E</option>
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <div class="flex flex-col items-center justify-center py-24 text-[var(--text-muted)]">
+        <p class="text-xl mb-2">无符合条件的插画</p>
+      </div>
+    )}
+
+    <!-- Pagination (simple) -->
+    {total_pages > 1 && (
+      <div class="flex items-center justify-center gap-4 mt-8">
+        {page > 1 && (
+          <a
+            href={buildPageUrl(page - 1, ratingFilter)}
+            class="px-4 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] text-sm text-[var(--text-primary)] hover:border-[var(--color-cyan-accent-start)] transition-colors"
+          >
+            ← 上一页
+          </a>
+        )}
+        <span class="text-sm text-[var(--text-muted)]">
+          第 {page} / {total_pages} 页
+        </span>
+        {page < total_pages && (
+          <a
+            href={buildPageUrl(page + 1, ratingFilter)}
+            class="px-4 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] text-sm text-[var(--text-primary)] hover:border-[var(--color-cyan-accent-start)] transition-colors"
+          >
+            下一页 →
+          </a>
+        )}
+      </div>
+    )}
+  </div>
+</BaseLayout>
+
+<script is:inline>
+  // Inline rating change handler
+  document.querySelectorAll('.rating-admin-select').forEach((sel) => {
+    sel.addEventListener('change', async (e) => {
+      const select = e.target as HTMLSelectElement;
+      const postId = select.dataset.postId;
+      const newRating = select.value;
+      try {
+        const resp = await fetch(`/api/posts/${postId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rating: newRating }),
+        });
+        if (!resp.ok) {
+          // Revert on failure
+          select.value = select.dataset.currentRating || 'safe';
+          alert('评级更新失败');
+        } else {
+          select.dataset.currentRating = newRating;
+        }
+      } catch {
+        select.value = select.dataset.currentRating || 'safe';
+        alert('网络错误');
+      }
+    });
+  });
+</script>

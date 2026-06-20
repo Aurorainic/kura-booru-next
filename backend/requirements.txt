@@ -13,3 +13,5 @@ gallery-dl
 aiohttp
 python-multipart
 bleach
+bcrypt
+itsdangerous

@@ -1,6 +1,7 @@
 """API router aggregation.
 
 Includes all sub-routers with their URL prefixes:
+- /api/auth    → admin login/logout/status (NSFW visibility unlock)
 - /api/posts   → post listing, detail, random
 - /api/tags    → tag listing, detail
 - /api/search  → tag-based search
@@ -10,6 +11,7 @@ Includes all sub-routers with their URL prefixes:
 
 from fastapi import APIRouter
 
+from app.api.auth import router as auth_router
 from app.api.posts import router as posts_router
 from app.api.search import router as search_router
 from app.api.tags import router as tags_router
@@ -18,6 +20,7 @@ from app.api.webhook import router as webhook_router
 
 api_router = APIRouter()
 
+api_router.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 api_router.include_router(posts_router, prefix="/api/posts", tags=["posts"])
 api_router.include_router(tags_router, prefix="/api/tags", tags=["tags"])
 api_router.include_router(search_router, prefix="/api/search", tags=["search"])

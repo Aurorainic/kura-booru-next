@@ -3,6 +3,7 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 import Pagination from "@/components/Pagination.tsx";
 import { fetchTags, getTagCategoryColor, getTagCategoryLabel, type TagCategory } from "@/lib/api";
 
+const ssrCookie = Astro.locals.ssrCookie;
 const page = Math.max(1, parseInt(Astro.url.searchParams.get("page") || "1"));
 const perPage = 100;
 const sort = Astro.url.searchParams.get("sort") || "count";
@@ -10,7 +11,7 @@ const category = Astro.url.searchParams.get("category") || undefined;
 
 let data;
 try {
-  data = await fetchTags(category as TagCategory | undefined, sort, page, perPage);
+  data = await fetchTags(category as TagCategory | undefined, sort, page, perPage, ssrCookie);
 } catch {
   data = { items: [], total: 0, page: 1, per_page: 100, total_pages: 0 };
 }

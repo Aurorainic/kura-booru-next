@@ -14,6 +14,18 @@ class Settings(BaseSettings):
     APP_URL: str = ""
     SECRET_KEY: str = ""
 
+    # ── Admin Auth ───────────────────────────────────────────────────
+    # Admin credentials are stored in the `admins` DB table.
+    # On first startup, a default admin is auto-created with a random
+    # password that is printed to the logs. After login, the admin can
+    # change their password from the web UI (/admin/password).
+    ADMIN_USERNAME: str = "admin"  # Used only for the auto-created default admin
+    ADMIN_SESSION_MAX_AGE: int = 60 * 60 * 24 * 7  # 7 days
+    # Shared secret for trusted internal callers (the bot, future web ingestion).
+    # When non-empty, POST /api/tasks/ and POST /api/rebuild/ require
+    # the header X-Api-Key to match this value.
+    BACKEND_API_KEY: str = ""
+
     # ── S3 Storage ───────────────────────────────────────────────────
     S3_ENDPOINT: str = "http://localhost:9000"
     S3_EXTERNAL_URL: str = "http://localhost:9000/kura-booru"

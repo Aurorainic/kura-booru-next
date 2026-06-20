@@ -26,6 +26,7 @@ import gallery_dl.config
 import gallery_dl.job
 
 from app.config import get_settings
+from app.models.post import Rating
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,14 @@ settings = get_settings()
 
 # ThreadPoolExecutor for running synchronous gallery-dl calls
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="gallery_dl")
+
+# Mapping from source-specific rating fields to our Rating enum.
+_PIXIV_RESTRICT_MAP = {0: Rating.safe, 1: Rating.questionable, 2: Rating.explicit}
+_DANBOORU_RATING_MAP = {
+    "s": Rating.safe, "safe": Rating.safe,
+    "q": Rating.questionable, "questionable": Rating.questionable,
+    "e": Rating.explicit, "explicit": Rating.explicit,
+}
 
 
 def setup_gallery_dl_config() -> None:
@@ -97,6 +106,7 @@ def _download_sync(url: str) -> dict[str, Any]:
         "tags": [],
         "tag_categories": {},
         "image_urls": [],
+        "rating": Rating.safe,
         "metadata": {},
     }
 
@@ -167,6 +177,20 @@ def _download_sync(url: str) -> dict[str, Any]:
                             if artist_name and artist_name not in result.get("tags", []):
                                 result.setdefault("tags", []).insert(0, artist_name)
                                 result.setdefault("tag_categories", {})[artist_name] = "artist"
+
+                        # Extract rating from source metadata
+                        # Pixiv: x_restrict field (0=safe, 1=q, 2=e)
+                        x_restrict = metadata.get("x_restrict")
+                        if isinstance(x_restrict, int):
+                            result["rating"] = _PIXIV_RESTRICT_MAP.get(
+                                x_restrict, Rating.safe
+                            )
+                        # Danbooru: rating field ("s"/"q"/"e" or full names)
+                        source_rating = metadata.get("rating")
+                        if isinstance(source_rating, str):
+                            result["rating"] = _DANBOORU_RATING_MAP.get(
+                                source_rating.lower(), Rating.safe
+                            )
 
                         # Image URL(s)
                         if "url" in metadata:

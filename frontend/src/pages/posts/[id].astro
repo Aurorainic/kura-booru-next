@@ -1,6 +1,14 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import { fetchPost, getThumbUrl, getPreviewUrl, getOriginalUrl, formatFileSize, formatDate, getTagCategoryColor, getSourceSiteLabel, type Post, type Tag } from "@/lib/api";
+import {
+  fetchPost, getThumbUrl, getPreviewUrl, getOriginalUrl,
+  formatFileSize, formatDate, getTagCategoryColor, getTagCategoryLabel,
+  getRatingColorClass, getRatingLabel, getSourceSiteLabel,
+  type Post, type Tag, type TagCategory, type Rating,
+} from "@/lib/api";
+
+const isAdmin = Astro.locals.isAdmin ?? false;
+const ssrCookie = Astro.locals.ssrCookie;
 
 function stripHtml(html: string | null | undefined): string {
   if (!html) return "";
@@ -11,13 +19,18 @@ const { id } = Astro.params;
 
 let post: Post;
 try {
-  post = await fetchPost(id!);
+  post = await fetchPost(id!, ssrCookie);
 } catch {
   return Astro.redirect("/404");
 }
 
-// Try to get adjacent posts from referrer or just show the post
-// Navigation links will use the browser back button as primary navigation
+// Group tags by category in Danbooru order: copyright → character → artist → general → meta
+const TAG_CATEGORY_ORDER: TagCategory[] = ["copyright", "character", "artist", "general", "meta"];
+const groupedTags: Record<string, Tag[]> = {};
+for (const cat of TAG_CATEGORY_ORDER) {
+  const tagsInCat = (post.tags || []).filter(t => t.category === cat);
+  if (tagsInCat.length > 0) groupedTags[cat] = tagsInCat;
+}
 ---
 
 <BaseLayout title={post.title || `作品 ${post.id.slice(0, 8)}`} description={stripHtml(post.description).slice(0, 160) || `来自 ${getSourceSiteLabel(post.source_site)} 的插画`}>
@@ -31,7 +44,34 @@ try {
     </a>
 
     <div class="flex flex-col lg:flex-row gap-6">
-      <!-- Main image area -->
+      <!-- Left: Tag sidebar (Danbooru-style, desktop only) -->
+      {Object.keys(groupedTags).length > 0 && (
+        <aside class="hidden lg:block w-56 flex-shrink-0">
+          <div class="card p-4 space-y-4 text-sm sticky top-20">
+            <h2 class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">标签</h2>
+            {TAG_CATEGORY_ORDER.map((cat) => groupedTags[cat] && (
+              <div>
+                <h3 class="text-xs font-semibold mb-1.5 {getTagCategoryColor(cat)}">{getTagCategoryLabel(cat)} ({groupedTags[cat].length})</h3>
+                <ul class="space-y-0.5">
+                  {groupedTags[cat].map((tag: Tag) => (
+                    <li>
+                      <a
+                        href={`/tags/${encodeURIComponent(tag.name)}`}
+                        class="text-[var(--text-primary)] hover:text-[var(--color-cyan-accent-start)] transition-colors"
+                      >
+                        {tag.name}
+                      </a>
+                      {tag.post_count > 0 && <span class="text-[var(--text-muted)] text-xs ml-1">{tag.post_count}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </aside>
+      )}
+
+      <!-- Center: Main image -->
       <div class="flex-1 min-w-0">
         <div class="card overflow-hidden">
           <!-- Progressive image loading container -->
@@ -58,12 +98,33 @@ try {
             />
           </div>
         </div>
+
+        {/* Mobile tags — shown below image on small screens */}
+        {Object.keys(groupedTags).length > 0 && (
+          <div class="lg:hidden mt-4 space-y-3">
+            {TAG_CATEGORY_ORDER.map((cat) => groupedTags[cat] && (
+              <div>
+                <h3 class="text-xs font-semibold mb-1.5 {getTagCategoryColor(cat)}">{getTagCategoryLabel(cat)}</h3>
+                <div class="flex flex-wrap gap-1.5">
+                  {groupedTags[cat].map((tag: Tag) => (
+                    <a
+                      href={`/tags/${encodeURIComponent(tag.name)}`}
+                      class={`text-xs px-2 py-0.5 rounded-md border border-[var(--border-color)] hover:border-[var(--color-cyan-accent-start)] transition-colors ${getTagCategoryColor(tag.category)}`}
+                    >
+                      {tag.name}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      <!-- Sidebar -->
-      <aside class="w-full lg:w-80 flex-shrink-0">
+      <!-- Right: Info sidebar -->
+      <aside class="w-full lg:w-72 flex-shrink-0">
         <div class="card p-5 space-y-5">
-          <!-- Title -->
+          {/* Title */}
           {post.title && (
             <div>
               <h1 class="text-lg font-bold text-[var(--text-primary)] leading-snug">
@@ -71,6 +132,32 @@ try {
               </h1>
             </div>
           )}
+
+          {/* Rating badge */}
+          <div class="flex items-center gap-2">
+            <span class={`px-2.5 py-0.5 text-xs font-bold rounded border ${getRatingColorClass(post.rating)}`}>
+              {getRatingLabel(post.rating)}
+            </span>
+            {isAdmin && (
+              <div id="rating-editor" class="inline-flex items-center gap-1.5">
+                <select
+                  id="rating-select"
+                  class="text-xs px-2 py-1 rounded border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]"
+                >
+                  <option value="safe" selected={post.rating === "safe"}>公开 (Safe)</option>
+                  <option value="questionable" selected={post.rating === "questionable"}>私用 (Questionable)</option>
+                  <option value="explicit" selected={post.rating === "explicit"}>私用 (Explicit)</option>
+                </select>
+                <button
+                  id="rating-save"
+                  class="text-xs px-2 py-1 rounded gradient-bg text-white font-medium hover:opacity-90 transition-opacity hidden"
+                >
+                  保存
+                </button>
+                <span id="rating-msg" class="text-xs text-[var(--text-muted)] hidden"></span>
+              </div>
+            )}
+          </div>
 
           {/* Description — rendered as safe HTML (links open in new tab) */}
           {post.description && (
@@ -123,23 +210,6 @@ try {
           >
             查看原图
           </a>
-
-          {/* Tags */}
-          {post.tags && post.tags.length > 0 && (
-            <div>
-              <h2 class="text-sm font-medium text-[var(--text-muted)] mb-2">标签</h2>
-              <div class="flex flex-wrap gap-1.5">
-                {post.tags.map((tag: Tag) => (
-                  <a
-                    href={`/tags/${encodeURIComponent(tag.name)}`}
-                    class={`text-xs px-2 py-0.5 rounded-md border border-[var(--border-color)] hover:border-[var(--color-cyan-accent-start)] transition-colors ${getTagCategoryColor(tag.category)}`}
-                  >
-                    {tag.name}
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </aside>
     </div>
@@ -182,4 +252,45 @@ try {
       }
     }
   </script>
+
+  {/* Admin rating editor script */}
+  {isAdmin && (
+    <script is:inline>
+      const ratingSelect = document.getElementById('rating-select');
+      const ratingSave = document.getElementById('rating-save');
+      const ratingMsg = document.getElementById('rating-msg');
+      const originalValue = ratingSelect?.value;
+
+      if (ratingSelect && ratingSave && ratingMsg) {
+        ratingSelect.addEventListener('change', () => {
+          ratingSave.classList.remove('hidden');
+          ratingMsg.classList.add('hidden');
+        });
+
+        ratingSave.addEventListener('click', async () => {
+          const postId = window.location.pathname.split('/').pop();
+          const newRating = ratingSelect.value;
+          try {
+            ratingMsg.textContent = '保存中…';
+            ratingMsg.classList.remove('hidden');
+            const apiBase = document.querySelector('meta[name="api-base"]')?.content || '/api';
+            const resp = await fetch(`${apiBase}/posts/${postId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ rating: newRating }),
+            });
+            if (resp.ok) {
+              ratingMsg.textContent = '✓ 已保存';
+              ratingSave.classList.add('hidden');
+              setTimeout(() => ratingMsg.classList.add('hidden'), 2000);
+            } else {
+              ratingMsg.textContent = '✗ 保存失败';
+            }
+          } catch {
+            ratingMsg.textContent = '✗ 网络错误';
+          }
+        });
+      }
+    </script>
+  )}
 </BaseLayout>

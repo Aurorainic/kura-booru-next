@@ -10,7 +10,7 @@ import logging
 import re
 from typing import Optional
 
-from app.models.post import SourceSite
+from app.models.post import Rating, SourceSite
 from app.source_extractors.base import BaseExtractor, ExtractorResult
 
 logger = logging.getLogger(__name__)
@@ -62,7 +62,9 @@ class DanbooruExtractor(BaseExtractor):
                 title=result.get("title"),
                 description=result.get("description"),
                 tags=result.get("tags", []),
+                tag_categories=result.get("tag_categories", {}),
                 image_urls=result.get("image_urls", []),
+                rating=result.get("rating", Rating.safe),
             )
         except Exception:
             logger.exception("gallery-dl extraction failed for Danbooru URL: %s", url)

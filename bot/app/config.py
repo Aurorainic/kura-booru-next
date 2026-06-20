@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:4321"
     BOT_PORT: int = 8080
     BACKEND_API_URL: str = "http://backend:8000"
+    # Shared secret sent as X-Api-Key to the backend on every request. Required
+    # now that POST /api/tasks/ and POST /api/rebuild/ are gated by it.
+    BACKEND_API_KEY: str = ""
     REDIS_URL: str = "redis://redis:6379/0"
 
     @field_validator("BOT_ADMIN_IDS", mode="before")

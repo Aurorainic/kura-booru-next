@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Optional
 
-from app.models.post import SourceSite
+from app.models.post import Rating, SourceSite
 
 
 @dataclass
@@ -26,6 +26,7 @@ class ExtractorResult:
     tag_categories: dict[str, str] = field(default_factory=dict)
     image_urls: list[str] = field(default_factory=list)
     image_bytes: Optional[bytes] = None
+    rating: Rating = Rating.safe
 
 
 class BaseExtractor(ABC):

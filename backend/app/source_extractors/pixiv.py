@@ -10,7 +10,7 @@ import logging
 import re
 from typing import Optional
 
-from app.models.post import SourceSite
+from app.models.post import Rating, SourceSite
 from app.source_extractors.base import BaseExtractor, ExtractorResult
 
 logger = logging.getLogger(__name__)
@@ -75,6 +75,7 @@ class PixivExtractor(BaseExtractor):
                 tag_categories=result.get("tag_categories", {}),
                 image_urls=result.get("image_urls", []),
                 image_bytes=result.get("image_bytes"),
+                rating=result.get("rating", Rating.safe),
             )
         except Exception:
             logger.exception("gallery-dl extraction failed for Pixiv URL: %s", url)

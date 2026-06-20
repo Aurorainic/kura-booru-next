@@ -4,6 +4,8 @@ export type SourceSite = "pixiv" | "twitter" | "danbooru" | "other";
 
 export type TagCategory = "artist" | "character" | "copyright" | "general" | "meta";
 
+export type Rating = "safe" | "questionable" | "explicit";
+
 export interface Post {
   id: string;
   s3_key: string;
@@ -18,6 +20,7 @@ export interface Post {
   mime_type: string;
   title: string | null;
   description: string | null;
+  rating: Rating;
   created_at: string;
   tags?: Tag[];
 }
@@ -76,7 +79,20 @@ class ApiError extends Error {
   }
 }
 
-async function fetchApi<T>(endpoint: string, params?: Record<string, string | number | undefined>): Promise<T> {
+/**
+ * Core fetch wrapper. On the server (SSR) the request's cookie header is
+ * forwarded so the backend can read the admin session cookie; on the client
+ * the browser sends cookies automatically.
+ *
+ * @param ssrCookie - On SSR, pass Astro.locals.ssrCookie (the browser's Cookie
+ *                    header forwarded by middleware). On the client this is
+ *                    unnecessary because the browser sends cookies automatically.
+ */
+async function fetchApi<T>(
+  endpoint: string,
+  params?: Record<string, string | number | undefined>,
+  options?: RequestInit & { ssrCookie?: string },
+): Promise<T> {
   const url = new URL(`${BASE_URL}${endpoint}`);
 
   if (params) {
@@ -87,10 +103,22 @@ async function fetchApi<T>(endpoint: string, params?: Record<string, string | nu
     });
   }
 
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    ...((options?.headers as Record<string, string>) || {}),
+  };
+
+  // Forward the browser's Cookie header on SSR so the backend can read the
+  // admin session cookie. On the client the browser does this automatically.
+  const ssrCookie = options?.ssrCookie;
+  if (ssrCookie) {
+    headers["Cookie"] = ssrCookie;
+  }
+
+  const { ssrCookie: _sc, ...fetchOptions } = options || {};
   const response = await fetch(url.toString(), {
-    headers: {
-      Accept: "application/json",
-    },
+    ...fetchOptions,
+    headers,
   });
 
   if (!response.ok) {
@@ -102,12 +130,22 @@ async function fetchApi<T>(endpoint: string, params?: Record<string, string | nu
 
 // === Post APIs ===
 
-export async function fetchPosts(page: number = 1, perPage: number = 40): Promise<PostsResponse> {
-  return fetchApi<PostsResponse>("/posts", { page, per_page: perPage });
+export async function fetchPosts(page: number = 1, perPage: number = 40, rating?: Rating, ssrCookie?: string): Promise<PostsResponse> {
+  const params: Record<string, string | number | undefined> = { page, per_page: perPage };
+  if (rating) params.rating = rating;
+  return fetchApi<PostsResponse>("/posts", params, { ssrCookie });
 }
 
-export async function fetchPost(id: string): Promise<Post> {
-  return fetchApi<Post>(`/posts/${id}`);
+export async function fetchPost(id: string, ssrCookie?: string): Promise<Post> {
+  return fetchApi<Post>(`/posts/${id}`, undefined, { ssrCookie });
+}
+
+export async function updatePostRating(id: string, rating: Rating): Promise<Post> {
+  return fetchApi<Post>(`/posts/${id}`, undefined, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rating }),
+  });
 }
 
 // === Tag APIs ===
@@ -117,13 +155,14 @@ export async function fetchTags(
   sort: string = "count",
   page: number = 1,
   perPage: number = 100,
+  ssrCookie?: string,
 ): Promise<PaginatedResponse<Tag>> {
   return fetchApi<PaginatedResponse<Tag>>("/tags", {
     category,
     sort,
     page,
     per_page: perPage,
-  });
+  }, { ssrCookie });
 }
 
 // === Search API ===
@@ -132,14 +171,47 @@ export async function fetchSearch(
   query: string,
   page: number = 1,
   perPage: number = 40,
+  ssrCookie?: string,
 ): Promise<PostsResponse> {
-  return fetchApi<PostsResponse>("/search", { q: query, page, per_page: perPage });
+  return fetchApi<PostsResponse>("/search", { q: query, page, per_page: perPage }, { ssrCookie });
 }
 
 // === Autocomplete API ===
 
 export async function fetchAutocomplete(prefix: string): Promise<Tag[]> {
   return fetchApi<Tag[]>("/tags/autocomplete", { q: prefix, per_page: 10 });
+}
+
+// === Auth APIs ===
+
+export interface AuthStatus {
+  is_admin: boolean;
+}
+
+export async function fetchAuthStatus(ssrCookie?: string): Promise<AuthStatus> {
+  return fetchApi<AuthStatus>("/auth/status", undefined, { ssrCookie });
+}
+
+export async function login(username: string, password: string): Promise<{ ok: boolean; is_admin: boolean }> {
+  return fetchApi<{ ok: boolean; is_admin: boolean }>("/auth/login", undefined, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export async function logout(): Promise<{ ok: boolean }> {
+  return fetchApi<{ ok: boolean }>("/auth/logout", undefined, {
+    method: "POST",
+  });
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<{ ok: boolean }> {
+  return fetchApi<{ ok: boolean }>("/auth/change-password", undefined, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
 }
 
 // === Image URL Helpers ===
@@ -180,6 +252,26 @@ export function formatDate(dateString: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+// === Rating Helpers ===
+
+export function getRatingLabel(rating: Rating): string {
+  const labels: Record<Rating, string> = {
+    safe: "Safe",
+    questionable: "Questionable",
+    explicit: "Explicit",
+  };
+  return labels[rating] || rating;
+}
+
+export function getRatingColorClass(rating: Rating): string {
+  const classes: Record<Rating, string> = {
+    safe: "rating-safe",
+    questionable: "rating-questionable",
+    explicit: "rating-explicit",
+  };
+  return classes[rating] || "rating-safe";
 }
 
 export function getTagCategoryColor(category: TagCategory): string {

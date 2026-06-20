@@ -48,19 +48,21 @@ kura-booru-next/
 │   │   ├── config.py             # pydantic-settings from env vars
 │   │   ├── database.py           # SQLAlchemy async engine + session
 │   │   ├── api/                  # REST routes
-│   │   │   ├── posts.py          #   GET /api/posts, /posts/{id}, /posts/random, /posts/by-source
+│   │   │   ├── auth.py            #   POST /api/auth/login|logout, GET /api/auth/status
+│   │   │   ├── posts.py          #   GET /api/posts (rating filter), /posts/{id}, /posts/random, /posts/by-source, PATCH /posts/{id}
 │   │   │   ├── tags.py           #   GET /api/tags, /tags/{name}, /tags/autocomplete
-│   │   │   ├── search.py         #   GET /api/search?q=tag1+tag2
-│   │   │   ├── tasks.py          #   POST /api/tasks/ (enqueue image processing)
+│   │   │   ├── search.py         #   GET /api/search?q=tag1+tag2+rating:safe
+│   │   │   ├── tasks.py          #   POST /api/tasks/ (X-Api-Key required)
 │   │   │   ├── constants.py      #   Shared API constants (ALLOWED_PER_PAGE, clamp_per_page)
-│   │   │   └── webhook.py         #   POST /api/rebuild/ (cache purge)
+│   │   │   └── webhook.py         #   POST /api/rebuild/ (X-Api-Key required)
+│   │   ├── auth.py               # Admin auth (signed cookie, bcrypt verify, DB lookup, auto-create default admin)
 │   │   ├── models/               # SQLAlchemy models
-│   │   │   ├── post.py           #   Post model (SourceSite enum)
+│   │   │   ├── admin.py           #   Admin model (username, password_hash)
 │   │   │   ├── tag.py            #   Tag model (TagCategory enum)
 │   │   │   ├── post_tag.py       #   PostTag association
 │   │   │   └── tag_alias.py      #   TagAlias model
 │   │   ├── schemas/              # Pydantic schemas
-│   │   │   ├── post.py           #   PostRead, PostListRead
+│   │   │   ├── post.py           #   PostRead, PostListRead, PostRatingUpdate
 │   │   │   └── tag.py            #   TagRead, TagListRead
 │   │   ├── services/             # Business logic
 │   │   │   ├── s3.py             #   S3 storage (upload, delete, presigned URL, verify)
@@ -79,9 +81,12 @@ kura-booru-next/
 │   ├── alembic/                  # Database migrations
 │   │   ├── env.py                #   Async Alembic env
 │   │   └── versions/001_initial.py  # All tables + indexes
+│   │   └── versions/002_add_rating.py  # Rating enum + posts.rating column
 │   ├── alembic.ini
-│   ├── requirements.txt
+│   ├── requirements.txt          # + bcrypt, itsdangerous
 │   └── Dockerfile                # Multi-stage (dev + prod)
+│   └── scripts/
+│       └── generate_password_hash.py  # Admin password bcrypt generator
 ├── bot/              # aiogram 3 Telegram bot
 │   ├── app/
 │   │   ├── main.py              # Bot entry + aiohttp webhook server
@@ -104,8 +109,20 @@ kura-booru-next/
 │   │   ├── components/    # React Islands
 │   │   │   ├── ThemeToggle.tsx  # 3-state dark/light/auto toggle
 │   │   │   ├── Pagination.tsx  # Page nav + per-page selector (20/40/100)
-│   │   │   ├── PhotoAlbum.astro# Masonry grid (pure CSS Grid, SSR)
+│   │   │   ├── PhotoAlbum.astro# Masonry grid (rating badges for admin)
 │   │   │   └── SearchBar.tsx   # Tag autocomplete search
+│   │   ├── layouts/
+│   │   │   └── BaseLayout.astro # Nav + auth controls + theme + footer
+│   │   ├── middleware.ts   # SSR cookie forwarding + admin session resolution
+│   │   ├── pages/
+│   │   │   ├── index.astro      # Home (masonry + pagination + rating filter)
+│   │   │   ├── 404.astro        # 404 page
+│   │   │   ├── login.astro      # Admin login form
+│   │   │   ├── posts/[id].astro # Detail (Danbooru tag sidebar + rating badge + edit)
+│   │   │   ├── tags/index.astro # Tag cloud + table
+│   │   │   ├── tags/[name].astro# Tag detail (filtered posts)
+│   │   │   ├── search.astro     # Search results (+ rating:safe syntax)
+│   │   │   └── admin/posts.astro# Admin post management (rating filter + inline edit)
 │   │   ├── layouts/
 │   │   │   └── BaseLayout.astro # Nav + theme + footer (env-driven gitTag/repoUrl)
 │   │   ├── pages/
@@ -139,7 +156,7 @@ kura-booru-next/
 
 All config via `.env` file (see `infra/.env.example`). Secrets never in git. Backend `config.py` and bot `config.py` use pydantic-settings with type validation.
 
-## Key env vars: `APP_URL`, `APP_DOMAIN`, `SECRET_KEY`, `S3_ENDPOINT`, `S3_EXTERNAL_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET_NAME`, `S3_REGION`, `DATABASE_URL`, `POSTGRES_PASSWORD`, `REDIS_URL`, `BOT_TOKEN`, `BOT_WEBHOOK_URL`, `BOT_WEBHOOK_SECRET`, `BOT_ADMIN_IDS`, `BOT_PORT`, `FRONTEND_URL`, `MAX_IMAGE_SIZE`, `PIXIV_REFRESH_TOKEN`, `PIXIV_PHPSESSID`, `PUBLIC_API_URL`, `PUBLIC_S3_EXTERNAL_URL`, `INTERNAL_API_URL`.
+## Key env vars: `APP_URL`, `APP_DOMAIN`, `SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_SESSION_MAX_AGE`, `BACKEND_API_KEY`, `S3_ENDPOINT`, `S3_EXTERNAL_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET_NAME`, `S3_REGION`, `DATABASE_URL`, `POSTGRES_PASSWORD`, `REDIS_URL`, `BOT_TOKEN`, `BOT_WEBHOOK_URL`, `BOT_WEBHOOK_SECRET`, `BOT_ADMIN_IDS`, `BOT_PORT`, `FRONTEND_URL`, `MAX_IMAGE_SIZE`, `PIXIV_REFRESH_TOKEN`, `PIXIV_PHPSESSID`, `PUBLIC_API_URL`, `PUBLIC_S3_EXTERNAL_URL`, `INTERNAL_API_URL`.
 
 ### S3 Configuration (Generic)
 
@@ -164,21 +181,29 @@ The S3 layer works with **any** S3-compatible storage. Images are served **direc
 - **Pixiv auth requires both** refresh-token AND PHPSESSID cookie
 - **Caddy runs on host** — not in Docker Compose, reverse-proxies into Docker internal network
 - **S3 is generic** — no provider-specific code; switch via env vars only
+- **Content rating visibility** — anonymous visitors see only `safe` posts; `questionable`/`explicit` return 404 (existence hidden). Admin login unlocks all ratings.
+- **Admin auth is signed cookie** — `itsdangerous` signer with `SECRET_KEY`, `HttpOnly` + `Secure` (prod) + `SameSite=Lax`. No server-side session storage.
+- **Bot→backend auth is shared secret** — `BACKEND_API_KEY` env var sent as `X-Api-Key` header. When empty, gating is skipped (dev compat).
+- **⚠️ SSR cache constraint** — do NOT enable Souin/HTTP cache for SSR pages without `Vary: Cookie` + cookie-in-cache-key. Otherwise admin HTML leaks to anonymous users.
 
 ## API Endpoints
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/posts?page=1&per_page=40` | Paginated post list |
-| GET | `/api/posts/{id}` | Single post detail |
-| GET | `/api/posts/random` | Random post |
+| GET | `/api/posts?page=1&per_page=40&rating=safe` | Paginated post list (admin can filter by rating) |
+| GET | `/api/posts/{id}` | Single post detail (404 for non-safe if not admin) |
+| GET | `/api/posts/random` | Random post (safe-only for anonymous) |
 | GET | `/api/posts/by-source?source_site=pixiv&source_id=123` | Lookup by source |
+| PATCH | `/api/posts/{id}` | Update post rating (admin only) |
 | GET | `/api/tags?category=artist&sort=count` | Tag list with filtering |
 | GET | `/api/tags/{name}` | Tag detail |
 | GET | `/api/tags/autocomplete?q=prefix` | Tag name autocomplete |
-| GET | `/api/search?q=tag1+tag2` | Tag-based search (supports `-` exclusion) |
-| POST | `/api/tasks/` | Create image processing task |
-| POST | `/api/rebuild/` | Purge Caddy cache |
+| GET | `/api/search?q=tag1+tag2&rating=safe` | Tag search (supports `-` exclusion, `rating:` syntax for admin) |
+| POST | `/api/tasks/` | Create image processing task (requires X-Api-Key) |
+| POST | `/api/rebuild/` | Purge Caddy cache (requires X-Api-Key) |
+| POST | `/api/auth/login` | Admin login (username + password → set cookie) |
+| POST | `/api/auth/logout` | Admin logout (clear cookie) |
+| GET | `/api/auth/status` | Check admin session status |
 | GET | `/health` | Backend health check |
 | GET | `/i/{bucket}/{key}` | S3 image (Caddy direct proxy) |
 
@@ -230,9 +255,9 @@ All Dockerfiles have 3 stages: `dev` (hot-reload), `builder`, and production run
 
 ## Current Status
 
-**v0.1.2 Released.** Core features complete + tag categorization + HTML description rendering + bot forwarded message support.
+**v0.2.0 in development.** Rating system + admin auth + Danbooru-style UI on top of the v0.1.2 foundation.
 
-### What's Done (v0.1.0 → v0.1.1 → v0.1.2)
+### What's Done (v0.1.0 → v0.1.1 → v0.1.2 → v0.2.0-dev)
 - Full processing pipeline: Telegram bot → backend API → ARQ worker → gallery-dl → S3 storage
 - Frontend: Astro SSR with Tailwind v4, masonry grid, tag system, search, pagination
 - Bot: URL auto-detection, /save, /info, /search commands
@@ -241,12 +266,48 @@ All Dockerfiles have 3 stages: `dev` (hot-reload), `builder`, and production run
 - **Tag categorization**: Tags from Pixiv/Danbooru properly categorized (artist/character/copyright/general/meta) based on source metadata
 - **HTML description rendering**: Pixiv artwork descriptions with HTML links render correctly (sanitized with bleach)
 - **Bot forwarded message support**: Correctly processes forwarded channel messages with multiple URLs
+- **Rating system** (v0.2.0): Posts have `safe`/`questionable`/`explicit` rating (Danbooru-aligned). Anonymous visitors only see `safe` posts. Admin login unlocks all.
+- **Admin authentication** (v0.2.0): Single-admin login via signed cookie (`itsdangerous`). `POST /api/auth/login|logout|status`. `PATCH /api/posts/{id}` for rating edits.
+- **API key gating** (v0.2.0): `POST /api/tasks/` and `POST /api/rebuild/` require `X-Api-Key` header.
+- **Danbooru-style UI** (v0.2.0): Tag sidebar grouped by category with counts. Rating badge on cards (admin). Rating filter chips on index page (admin). Search supports `rating:safe` syntax (admin).
+- **Admin management page** (v0.2.0): `/admin/posts` with rating filter and inline rating change. Login page at `/login`.
+- **Source data rating** (v0.2.0): Pixiv `x_restrict` (0=safe,1=q,2=e) and Danbooru `rating` auto-mapped.
 
-### Known Limitations (Phase 4)
+### Known Limitations
 - Tag `post_count` auto-sync (currently needs manual SQL)
 - Twitter/Danbooru extractors need refinement
 - phash dedup optimization
-- No admin UI for managing posts/tags
+- No web URL ingestion UI yet (bot-only for now; planned for next phase)
+
+## Rating System & Auth Architecture
+
+### Content Rating
+- `safe` — always visible to everyone (like safebooru)
+- `questionable` — hidden from anonymous visitors; visible to admin
+- `explicit` — hidden from anonymous visitors; visible to admin
+- Gallery-dl metadata maps: Pixiv `x_restrict=0→safe,1→questionable,2→explicit`; Danbooru `rating:s→safe,q→questionable,e→explicit`
+- All list/search/detail endpoints filter `WHERE rating='safe'` for non-admin callers; non-safe posts return 404 (existence hidden)
+- Admin can change rating via `PATCH /api/posts/{id}` or inline dropdown on admin/posts page
+
+### Admin Auth
+- Admin credentials stored in `admins` DB table (not env vars)
+- On first startup, if the `admins` table is empty, a default admin is auto-created with username `ADMIN_USERNAME` (default "admin") and a **randomly generated password printed to the server logs** (WARNING level)
+- After first login, admin changes password via `/admin/password` web UI
+- Signed cookie (`kura_admin_session`) via `itsdangerous`, max age `ADMIN_SESSION_MAX_AGE` (default 7 days)
+- Cookie: HttpOnly, Secure (prod), SameSite=Lax, Path=/
+- Frontend Astro middleware reads cookie, verifies with backend `/api/auth/status`, injects `isAdmin` into `Astro.locals`
+- SSR pages pass `ssrCookie` to `fetchApi()` so backend can see the admin session
+- `POST /api/auth/change-password` allows password change (validates current password first)
+
+### API Key (Bot ↔ Backend)
+- `BACKEND_API_KEY` env var shared between bot and backend
+- Bot sends `X-Api-Key` header on all backend calls
+- Backend `require_api_key` dependency gates `POST /api/tasks/` and `POST /api/rebuild/`
+- When `BACKEND_API_KEY` is empty (dev), the check is skipped for backward compatibility
+
+### ⚠️ SSR Cache Constraint
+- **Do NOT enable Souin/HTTP cache for SSR pages without also adding `Vary: Cookie` and a cache key that includes the admin session cookie.** Otherwise, an admin's logged-in HTML (showing non-safe posts) could be served to anonymous visitors.
+- The current Caddyfile has no SSR cache block, so this is not an issue yet. Document this constraint prominently if/when enabling SSR caching.
 
 ## v1 Lessons Applied
 

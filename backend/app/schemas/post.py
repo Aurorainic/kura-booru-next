@@ -9,7 +9,7 @@ from typing import Optional
 import bleach
 from pydantic import BaseModel, Field, model_serializer
 
-from app.models.post import SourceSite
+from app.models.post import Rating, SourceSite
 from app.schemas.tag import TagRead
 
 # Tags allowed in descriptions (safe subset of HTML)
@@ -68,6 +68,7 @@ class PostRead(BaseModel):
     mime_type: str
     title: Optional[str] = None
     description: Optional[str] = None
+    rating: Rating = Rating.safe
     created_at: datetime
     tags: list[TagRead] = Field(default_factory=list)
 
@@ -107,3 +108,9 @@ class PostListRead(BaseModel):
             per_page=per_page,
             total_pages=total_pages,
         )
+
+
+class PostRatingUpdate(BaseModel):
+    """Request body for PATCH /api/posts/{id} — admin-only rating change."""
+
+    rating: Rating

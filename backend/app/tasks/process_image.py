@@ -22,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import async_session_factory
-from app.models.post import Post, SourceSite
+from app.models.post import Post, Rating, SourceSite
 from app.models.post_tag import PostTag
 from app.models.tag import Tag, TagCategory
 from app.models.tag_alias import TagAlias
@@ -131,6 +131,7 @@ async def process_image(ctx: dict[str, Any], source_url: str, source_site: str |
                 description = metadata.description
                 tag_names = metadata.tags
                 tag_categories = metadata.tag_categories
+                post_rating = metadata.rating
                 # Use extracted image URLs if available, otherwise use source URL
                 image_urls = metadata.image_urls if metadata.image_urls else [source_url]
             except Exception as exc:
@@ -139,6 +140,7 @@ async def process_image(ctx: dict[str, Any], source_url: str, source_site: str |
                 description = None
                 tag_names = []
                 tag_categories = {}
+                post_rating = Rating.safe
                 image_urls = [source_url]
 
             # Step 3: Run image processing pipeline
@@ -211,6 +213,7 @@ async def process_image(ctx: dict[str, Any], source_url: str, source_site: str |
                 phash=result.phash,
                 title=result.title,
                 description=result.description,
+                rating=post_rating,
             )
             db.add(post)
 

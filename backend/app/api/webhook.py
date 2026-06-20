@@ -3,6 +3,7 @@
 Provides an endpoint to purge Caddy Souin cache for specific paths.
 This is called after new images are uploaded to ensure the SSR cache
 is invalidated and fresh content is served.
+Gated behind the shared BACKEND_API_KEY (X-Api-Key header).
 """
 
 from __future__ import annotations
@@ -10,9 +11,10 @@ from __future__ import annotations
 import logging
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.auth import require_api_key
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -38,7 +40,7 @@ class PurgeResponse(BaseModel):
     errors: list[str] = Field(default_factory=list, description="Any errors encountered")
 
 
-@router.post("/", response_model=PurgeResponse)
+@router.post("/", response_model=PurgeResponse, dependencies=[Depends(require_api_key)])
 async def purge_cache(request: PurgeRequest):
     """Purge Caddy Souin cache for the specified paths.
 

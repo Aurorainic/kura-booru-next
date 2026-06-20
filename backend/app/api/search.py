@@ -3,8 +3,12 @@
 Supports tag-based search with inclusion and exclusion:
   q=tag1+tag2          → posts with tag1 AND tag2
   q=tag1+-tag2         → posts with tag1 but NOT tag2
+  q=tag1+rating:safe   → posts with tag1 AND rating=safe (admin only)
 
 Returns paginated results with post + tag data.
+
+Visibility: anonymous callers only ever see safe posts (the `rating:` filter
+is ignored and overridden to safe). Admins may filter by any rating.
 """
 
 from __future__ import annotations
@@ -16,8 +20,9 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import get_is_admin
 from app.database import get_db
-from app.models.post import Post
+from app.models.post import Post, Rating
 from app.models.post_tag import PostTag
 from app.models.tag import Tag
 from app.models.tag_alias import TagAlias
@@ -28,20 +33,33 @@ router = APIRouter()
 # Allowed per_page values
 ALLOWED_PER_PAGE = {20, 40, 100}
 
+# Matches "rating:safe", "rating:q", "rating:e" etc. (Danbooru-style syntax).
+# Captures the value part; full validation against Rating happens after.
+_RATING_RE = re.compile(r"^rating:(.+)$", re.IGNORECASE)
+_RATING_ALIASES = {
+    "s": Rating.safe,
+    "safe": Rating.safe,
+    "q": Rating.questionable,
+    "questionable": Rating.questionable,
+    "e": Rating.explicit,
+    "explicit": Rating.explicit,
+}
 
-def _parse_query(q: str) -> tuple[list[str], list[str]]:
-    """Parse a search query string into include and exclude tag lists.
 
-    Tags are separated by '+' (or spaces).
-    A tag prefixed with '-' is excluded.
+def _parse_query(q: str) -> tuple[list[str], list[str], Rating | None]:
+    """Parse a search query string into include/exclude tag lists + optional rating.
+
+    Tags are separated by '+' (or spaces). A tag prefixed with '-' is excluded.
+    A `rating:<value>` metatoken selects the rating filter (Danbooru syntax).
 
     Examples:
-        "tag1+tag2"      → (["tag1", "tag2"], [])
-        "tag1+-tag2"     → (["tag1"], ["tag2"])
-        "tag1 -tag2"     → (["tag1"], ["tag2"])
+        "tag1+tag2"        → (["tag1", "tag2"], [], None)
+        "tag1+-tag2"       → (["tag1"], ["tag2"], None)
+        "tag1+rating:safe" → (["tag1"], [], Rating.safe)
     """
     include_tags: list[str] = []
     exclude_tags: list[str] = []
+    rating: Rating | None = None
 
     # Split by '+' or spaces
     tokens = re.split(r"[+\s]+", q.strip())
@@ -50,6 +68,12 @@ def _parse_query(q: str) -> tuple[list[str], list[str]]:
         token = token.strip().lower()
         if not token:
             continue
+        # rating: metatoken (no leading '-', applies to whole result set)
+        m = _RATING_RE.match(token)
+        if m:
+            value = m.group(1).strip().lower()
+            rating = _RATING_ALIASES.get(value)
+            continue
         if token.startswith("-"):
             tag_name = token[1:].strip()
             if tag_name:
@@ -57,7 +81,7 @@ def _parse_query(q: str) -> tuple[list[str], list[str]]:
         else:
             include_tags.append(token)
 
-    return include_tags, exclude_tags
+    return include_tags, exclude_tags, rating
 
 
 async def _resolve_tag_name(db: AsyncSession, name: str) -> uuid.UUID | None:
@@ -81,22 +105,27 @@ async def _resolve_tag_name(db: AsyncSession, name: str) -> uuid.UUID | None:
 
 @router.get("/", response_model=PostListRead)
 async def search_posts(
-    q: str = Query(..., description="Search query: tag1+tag2+-exclude_tag"),
+    q: str = Query(..., description="Search query: tag1+tag2+-exclude_tag, rating:safe"),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     per_page: int = Query(40, description="Items per page (20, 40, or 100)"),
     db: AsyncSession = Depends(get_db),
+    is_admin: bool = Depends(get_is_admin),
 ):
     """Search posts by tags.
 
     Supports inclusion and exclusion:
       q=tag1+tag2       → posts with BOTH tag1 AND tag2
       q=tag1+-tag2      → posts with tag1 but NOT tag2
+      q=tag1+rating:s   → posts with tag1 AND rating=safe (admin only)
+
+    Visibility: anonymous callers always see only safe posts. Admins may use
+    the rating: filter; if they omit it, all ratings are returned.
     """
     # Validate per_page
     if per_page not in ALLOWED_PER_PAGE:
         per_page = 40
 
-    include_names, exclude_names = _parse_query(q)
+    include_names, exclude_names, requested_rating = _parse_query(q)
 
     # Resolve tag names to IDs
     include_ids: list[uuid.UUID] = []
@@ -142,6 +171,15 @@ async def search_posts(
             .correlate(Post)
         )
         base_stmt = base_stmt.where(Post.id.notin_(not_exists_stmt))
+
+    # Rating visibility filter.
+    # Anonymous callers are forced to safe regardless of any rating: token.
+    # Admins may filter by a specific rating, or see all if none requested.
+    if is_admin:
+        if requested_rating is not None:
+            base_stmt = base_stmt.where(Post.rating == requested_rating)
+    else:
+        base_stmt = base_stmt.where(Post.rating == Rating.safe)
 
     # Count total matching posts
     count_stmt = select(func.count()).select_from(base_stmt.subquery())

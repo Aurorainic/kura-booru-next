@@ -2,14 +2,21 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import Pagination from "@/components/Pagination.tsx";
 import PhotoAlbumGrid from "@/components/PhotoAlbum.astro";
-import { fetchPosts, clampPerPage, emptyPostsResponse } from "@/lib/api";
+import { fetchPosts, clampPerPage, emptyPostsResponse, type Rating } from "@/lib/api";
+
+const isAdmin = Astro.locals.isAdmin ?? false;
+const ssrCookie = Astro.locals.ssrCookie;
 
 const page = Math.max(1, parseInt(Astro.url.searchParams.get("page") || "1"));
 const perPage = clampPerPage(parseInt(Astro.url.searchParams.get("per_page") || "40"));
 
+// Rating filter: admins can filter by rating via ?rating=safe|questionable|explicit
+const ratingParam = Astro.url.searchParams.get("rating") as Rating | null;
+const rating: Rating | undefined = isAdmin && ratingParam ? ratingParam : undefined;
+
 let data;
 try {
-  data = await fetchPosts(page, perPage);
+  data = await fetchPosts(page, perPage, rating, ssrCookie);
 } catch {
   data = emptyPostsResponse();
 }
@@ -20,6 +27,7 @@ function buildPageUrl(p: number, pp: number): string {
   const params = new URLSearchParams();
   if (p > 1) params.set("page", String(p));
   if (pp !== 40) params.set("per_page", String(pp));
+  if (rating) params.set("rating", rating);
   const qs = params.toString();
   return qs ? `/?${qs}` : "/";
 }
@@ -35,11 +43,20 @@ function buildPageUrl(p: number, pp: number): string {
         </h1>
         <p class="text-sm text-[var(--text-muted)] mt-1">{total} 张插画</p>
       </div>
+      {isAdmin && (
+        <div class="flex items-center gap-2 text-sm">
+          <span class="text-[var(--text-muted)]">评级筛选:</span>
+          <a href="/" class={`px-2 py-0.5 rounded ${!rating ? "gradient-bg text-white" : "text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] border border-[var(--border-color)]"}`}>全部</a>
+          <a href="/?rating=safe" class={`px-2 py-0.5 rounded rating-safe ${rating === "safe" ? "ring-2 ring-current" : "opacity-70 hover:opacity-100"}`}>S</a>
+          <a href="/?rating=questionable" class={`px-2 py-0.5 rounded rating-questionable ${rating === "questionable" ? "ring-2 ring-current" : "opacity-70 hover:opacity-100"}`}>Q</a>
+          <a href="/?rating=explicit" class={`px-2 py-0.5 rounded rating-explicit ${rating === "explicit" ? "ring-2 ring-current" : "opacity-70 hover:opacity-100"}`}>E</a>
+        </div>
+      )}
     </div>
 
     <!-- Masonry grid -->
     {posts.length > 0 ? (
-      <PhotoAlbumGrid posts={posts} />
+      <PhotoAlbumGrid posts={posts} isAdmin={isAdmin} />
     ) : (
       <div class="flex flex-col items-center justify-center py-24 text-[var(--text-muted)]">
         <p class="text-xl mb-2">暂无插画</p>

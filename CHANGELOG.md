@@ -4,13 +4,54 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.3-pre1] - 2026-06-20
 
 ### Added
+- **Content rating system** — Posts now have a `safe`/`questionable`/`explicit` rating (aligned with Danbooru). Anonymous visitors only see safe posts; admin login unlocks all ratings.
+  - `Rating` enum and `rating` column on `Post` model (Alembic migration 002)
+  - Pixiv `x_restrict` and Danbooru `rating` metadata auto-mapped to our Rating enum
+  - All list/detail/search endpoints filter by rating for anonymous users
+  - `rating:safe`/`rating:q`/`rating:e` search syntax (admin only)
+- **Admin authentication** — Single-admin login with signed cookie session
+  - `POST /api/auth/login` / `POST /api/auth/logout` / `GET /api/auth/status` endpoints
+  - `POST /api/auth/change-password` — change password after first login
+  - `backend/app/auth.py` — itsdangerous signed cookie + bcrypt password verification
+  - Admin credentials stored in `admins` DB table (not env vars)
+  - First startup auto-creates a default admin with random password printed to logs
+  - `ADMIN_USERNAME` config var (default "admin") for the auto-created admin
+  - `ADMIN_SESSION_MAX_AGE` config var retained
+- **API key gating** — `POST /api/tasks/` and `POST /api/rebuild/` now require `X-Api-Key` header matching `BACKEND_API_KEY`
+  - Bot `backend_api.py` updated to send `X-Api-Key` header automatically
+  - `BACKEND_API_KEY` config var added to both backend and bot
+- **Danbooru-style tag sidebar** — Post detail page now groups tags by category (Copyright → Character → Artist → General → Meta) with counts, matching Danbooru's left-sidebar layout
+- **Rating badge and admin edit** — Posts display a colored rating badge (S/Q/E). Admin users see a dropdown to change rating directly on the detail page.
+- **Admin management page** — `/admin/posts` lists all posts (including non-safe) with inline rating change and filter
+- **Login page** — `/login` with username/password form
+- **Admin mode indicator** — Top banner "🔒 管理模式" visible when logged in
+- **Nav bar auth controls** — Login/Logout/Admin links in navigation
+- **404 page** — Proper 404 page (fixes redirect to non-existent `/404`)
+- **Middleware** — Astro middleware resolves admin session from cookie and injects `isAdmin`/`ssrCookie` into `Astro.locals`
+- **Admin `admins` DB table** — Alembic migration 003 adds the `admins` table for database-backed admin credentials
+- **Auto-generated admin password** — On first startup, if no admin exists, one is created with a random password printed to server logs (WARNING level). No more `ADMIN_PASSWORD_HASH` env var needed.
+- **Change password endpoint** — `POST /api/auth/change-password` for admins to update their password after first login
+- **Password change page** — `/admin/password` with current/new/confirm form
 
 ### Changed
+- **Frontend API client** — `fetchApi` now forwards SSR cookie header to backend for auth; all fetch functions accept `ssrCookie` param
+- **PhotoAlbum.astro** — Accepts `isAdmin` prop; shows Q/E rating badges on cards for admin users
+- **Post detail** — Redesigned to Danbooru three-column layout (tag sidebar + image + info sidebar) on desktop; mobile shows tags below image
+- **BaseLayout** — Reads `Astro.locals.isAdmin` to show admin/logout/login nav items and admin mode banner
+- **`.env.example`** — Added `ADMIN_USERNAME`, `ADMIN_SESSION_MAX_AGE`, `BACKEND_API_KEY` sections; removed `ADMIN_PASSWORD_HASH`
+- **`validate-env.sh`** — Added `BACKEND_API_KEY` and `ADMIN_SESSION_MAX_AGE` to production required vars; removed `ADMIN_PASSWORD_HASH`
 
-### Fixed
+### Removed
+- `ADMIN_PASSWORD_HASH` environment variable — admin credentials now stored in `admins` database table
+- `backend/scripts/generate_password_hash.py` — no longer needed; passwords are auto-generated on first startup
+
+### Security
+- `POST /api/tasks/` and `POST /api/rebuild/` are now gated by `X-Api-Key` (was previously unauthenticated)
+- Non-safe posts return 404 to anonymous users (existence hidden, not just 403)
+- Admin session cookies are HttpOnly, Secure (in production), SameSite=Lax
 
 ## [0.1.2] - 2026-06-19
 

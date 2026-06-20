@@ -13,12 +13,21 @@ _session: aiohttp.ClientSession | None = None
 
 
 async def get_session() -> aiohttp.ClientSession:
-    """Get or create the shared aiohttp client session."""
+    """Get or create the shared aiohttp client session.
+
+    If BACKEND_API_KEY is configured, every request automatically carries the
+    X-Api-Key header so that gated backend endpoints (POST /api/tasks/, etc.)
+    accept the call.
+    """
     global _session
     if _session is None or _session.closed:
+        headers: dict[str, str] = {}
+        if settings.BACKEND_API_KEY:
+            headers["X-Api-Key"] = settings.BACKEND_API_KEY
         _session = aiohttp.ClientSession(
             base_url=settings.BACKEND_API_URL,
             timeout=aiohttp.ClientTimeout(total=30),
+            headers=headers or None,
         )
     return _session
 

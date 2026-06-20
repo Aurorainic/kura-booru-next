@@ -1,12 +1,12 @@
 ---
-import { getPreviewUrl } from "@/lib/api";
-import type { Post } from "@/lib/api";
+import { getPreviewUrl, getRatingColorClass, type Post, type Rating } from "@/lib/api";
 
 interface Props {
   posts: Post[];
+  isAdmin?: boolean;
 }
 
-const { posts } = Astro.props;
+const { posts, isAdmin = false } = Astro.props;
 ---
 
 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3">
@@ -25,6 +25,12 @@ const { posts } = Astro.props;
           decoding="async"
           loading="lazy"
         />
+        {/* Rating badge — only visible to admin */}
+        {isAdmin && post.rating !== "safe" && (
+          <span class={`absolute top-1.5 left-1.5 px-1.5 py-0.5 text-xs font-bold rounded ${getRatingColorClass(post.rating)} border`}>
+            {post.rating === "questionable" ? "Q" : "E"}
+          </span>
+        )}
         {/* Hover overlay with tags */}
         <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-2">
           {post.tags && post.tags.length > 0 && (

@@ -20,9 +20,11 @@
 
 - 🔗 **甩链即存** — Telegram Bot 发链接，自动下载原图 + 元数据
 - 🏷️ **标签体系** — artist / character / copyright / general / meta 五类标签，支持别名
-- 🔍 **标签搜索** — `tag1+tag2` 组合搜索，`-tag2` 排除，自动补全
+- 🔍 **标签搜索** — `tag1+tag2` 组合搜索，`-tag2` 排除，`rating:safe` 评级筛选（管理员）
 - 📄 **分页浏览** — safebooru 风格，URL 可分享，每页 20/40/100 可选
 - 🖼️ **瀑布流布局** — CSS Grid 瀑布流，SSR 渲染，零 JS 首屏
+- 🔞 **内容评级** — safe/questionable/explicit 三级评级（对齐 Danbooru），访客只看 safe
+- 🔐 **管理后台** — 单管理员登录解锁 NSFW 可见性，内联改评级，评级筛选浏览
 - 🎨 **三态主题** — dark / light / auto 跟随系统
 - ⚡ **SSR + Caddy 缓存** — 5 分钟 TTL，近静态性能，新图立即可见
 - 🔄 **感知哈希去重** — phash 前缀桶索引，O(1) 查重
@@ -210,16 +212,20 @@ S3 层完全通用，只改 env vars 即可切换存储后端：
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/posts?page=1&per_page=40` | 分页帖子列表 |
-| GET | `/api/posts/{id}` | 帖子详情（含标签） |
-| GET | `/api/posts/random` | 随机帖子 |
+| GET | `/api/posts?page=1&per_page=40&rating=safe` | 分页帖子列表（admin 可按评级筛选） |
+| GET | `/api/posts/{id}` | 帖子详情（非 safe 对访客返回 404） |
+| GET | `/api/posts/random` | 随机帖子（访客仅 safe） |
 | GET | `/api/posts/by-source?source_site=pixiv&source_id=123` | 按来源查找 |
+| PATCH | `/api/posts/{id}` | 修改帖子评级（admin only） |
 | GET | `/api/tags?category=artist&sort=count` | 标签列表 |
 | GET | `/api/tags/{name}` | 标签详情 |
 | GET | `/api/tags/autocomplete?q=prefix` | 标签自动补全 |
-| GET | `/api/search?q=tag1+tag2` | 标签搜索（支持 `-` 排除） |
-| POST | `/api/tasks/` | 创建图片处理任务 |
-| POST | `/api/rebuild/` | 清除 Caddy 缓存 |
+| GET | `/api/search?q=tag1+tag2+rating:safe` | 标签搜索（支持 `-` 排除，`rating:` 筛选） |
+| POST | `/api/tasks/` | 创建图片处理任务（需 X-Api-Key） |
+| POST | `/api/rebuild/` | 清除 Caddy 缓存（需 X-Api-Key） |
+| POST | `/api/auth/login` | 管理员登录 |
+| POST | `/api/auth/logout` | 管理员登出 |
+| GET | `/api/auth/status` | 登录状态检查 |
 
 ## 🤖 Telegram Bot 指令
 
@@ -232,6 +238,21 @@ S3 层完全通用，只改 env vars 即可切换存储后端：
 | 直接发 URL | 自动识别并保存 |
 
 支持 Pixiv、Twitter/X、Danbooru 链接，未知 URL 自动 fallback 到通用下载。
+
+## 🔐 管理员认证
+
+首次部署时，系统自动创建默认管理员账户，密码输出到服务器日志（WARNING 级别）：
+
+```bash
+docker compose logs backend | grep "DEFAULT ADMIN CREATED"
+# 输出示例：
+# DEFAULT ADMIN CREATED (first startup)
+#   Username: admin
+#   Password: xYz123AbC456wQr
+#   >>> Change this password after first login! <<<
+```
+
+登录后请在 `/admin/password` 修改密码。管理员可查看所有评级内容（含 NSFW），匿名访客仅可见 Safe 级别。
 
 ## 📜 License
 
