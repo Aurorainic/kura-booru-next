@@ -161,9 +161,8 @@ async def verify_admin_login(
 async def ensure_default_admin(db: AsyncSession) -> None:
     """Create a default admin if the admins table is empty.
 
-    The password is randomly generated and printed to the logs at WARNING
-    level so it's visible on first deployment. After the first login, the
-    admin can change it from the web UI.
+    Uses ADMIN_USERNAME and ADMIN_PASSWORD from .env. If ADMIN_PASSWORD is
+    empty, falls back to a random password printed to the logs.
     """
     count_stmt = select(Admin)
     result = await db.execute(count_stmt)
@@ -172,7 +171,12 @@ async def ensure_default_admin(db: AsyncSession) -> None:
         return  # Table already has an admin, nothing to do
 
     username = settings.ADMIN_USERNAME or "admin"
-    raw_password = secrets.token_urlsafe(16)
+    if settings.ADMIN_PASSWORD:
+        raw_password = settings.ADMIN_PASSWORD
+        logger.info("Default admin created with configured password")
+    else:
+        raw_password = secrets.token_urlsafe(16)
+        logger.warning("ADMIN_PASSWORD not set — using random password")
     hashed = bcrypt.hashpw(
         raw_password.encode("utf-8"), bcrypt.gensalt()
     ).decode("utf-8")
@@ -186,7 +190,10 @@ async def ensure_default_admin(db: AsyncSession) -> None:
     logger.warning("DEFAULT ADMIN CREATED (first startup)")
     logger.warning("  Username: %s", username)
     logger.warning("  Password: %s", raw_password)
-    logger.warning("  >>> Change this password after first login! <<<")
+    if not settings.ADMIN_PASSWORD:
+        logger.warning("  >>> Set ADMIN_PASSWORD in .env and restart to use a fixed password! <<<")
+    else:
+        logger.warning("  Password configured via ADMIN_PASSWORD env var")
     logger.warning("=" * 60)
 
 

@@ -17,7 +17,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # Determine version
 if [ -n "${1:-}" ]; then
@@ -37,6 +37,10 @@ echo
 echo "--- Building backend ---"
 docker build \
     --target runner \
+    -t "kura-booru-next-backend:${VERSION}" \
+    -t "kura-booru-next-backend:latest" \
+    "${PROJECT_ROOT}/backend" 2>/dev/null || \
+docker build \
     -t "kura-booru-next-backend:${VERSION}" \
     -t "kura-booru-next-backend:latest" \
     "${PROJECT_ROOT}/backend"

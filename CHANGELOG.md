@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3-pre2] - 2026-06-20
+
+### Added
+- **`ADMIN_PASSWORD` environment variable** — Configurable password for the initial admin account (created on first startup). If empty, falls back to random password printed in logs.
+- **`backend/scripts/reset_admin_password.py`** — Utility script to reset the admin password to the configured `ADMIN_PASSWORD` env var.
+- **Astro `allowedHosts` auto-detection** — `astro.config.mjs` now auto-extracts hostname from `APP_URL` when `APP_DOMAIN` is not set, in addition to the existing `APP_DOMAIN` explicit config.
+
+### Changed
+- **Footer version label** — Removed redundant "Version" text: now displays just `{gitTag}` (e.g., `v0.1.3-pre2` instead of `Version v0.1.3-pre2`).
+- **`infra/.env.example`** — Updated `PUBLIC_S3_EXTERNAL_URL` documentation to clarify it should NOT include `/i/` path segment (images served directly from S3/CDN).
+- **`docker-compose.yml`** — Image tags bumped to `v0.1.3-pre2`.
+
+### Fixed
+- **Admin backend rating change not working** — `frontend/src/pages/admin/posts.astro` inline `<script is:inline>` contained TypeScript syntax (`as HTMLSelectElement`, arrow functions, template literals) which is NOT compiled by Astro's `is:inline` scripts. Converted to pure ES5 JavaScript. Also added instant visual feedback (rating badge updates immediately in the same row after successful change).
+- **`infra/scripts/build.sh`** — Fixed `PROJECT_ROOT` path from `../..` (was one level too shallow, pointing to `infra/`).
+
+### Security
+- Admin `PATCH /api/posts/{id}` endpoint returns 403 for unauthenticated requests (verified). Rating changes require valid admin session cookie.
+
 ## [0.1.3-pre1] - 2026-06-20
 
 ### Added

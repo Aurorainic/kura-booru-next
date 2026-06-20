@@ -15,11 +15,10 @@ class Settings(BaseSettings):
     SECRET_KEY: str = ""
 
     # ── Admin Auth ───────────────────────────────────────────────────
-    # Admin credentials are stored in the `admins` DB table.
-    # On first startup, a default admin is auto-created with a random
-    # password that is printed to the logs. After login, the admin can
-    # change their password from the web UI (/admin/password).
-    ADMIN_USERNAME: str = "admin"  # Used only for the auto-created default admin
+    # Admin credentials for the initial account created on first startup.
+    # After login, the admin can change password from the web UI.
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: str = ""  # REQUIRED in production — no default for security
     ADMIN_SESSION_MAX_AGE: int = 60 * 60 * 24 * 7  # 7 days
     # Shared secret for trusted internal callers (the bot, future web ingestion).
     # When non-empty, POST /api/tasks/ and POST /api/rebuild/ require

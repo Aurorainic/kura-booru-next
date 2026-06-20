@@ -217,7 +217,7 @@ export async function changePassword(currentPassword: string, newPassword: strin
 // === Image URL Helpers ===
 
 export function getImageUrl(key: string): string {
-  // Images are served directly via Caddy reverse proxy to S3
+  // Images are served directly from S3/CDN (not via Caddy proxy)
   const baseUrl = import.meta.env.PUBLIC_S3_EXTERNAL_URL || "/i";
   return `${baseUrl}/${key}`;
 }

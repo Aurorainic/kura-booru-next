@@ -21,9 +21,19 @@ export default defineConfig({
       },
     },
     server: {
-      allowedHosts: process.env.APP_DOMAIN
-        ? [process.env.APP_DOMAIN]
-        : true,
+      allowedHosts: (() => {
+        // Explicit APP_DOMAIN takes priority
+        if (process.env.APP_DOMAIN) return [process.env.APP_DOMAIN];
+        // Auto-extract hostname from APP_URL (e.g. https://kura-booru.lainns.xyz)
+        if (process.env.APP_URL) {
+          try {
+            const host = new URL(process.env.APP_URL).hostname;
+            if (host) return [host];
+          } catch {}
+        }
+        // Fallback: allow all hosts (dev convenience)
+        return true;
+      })(),
     },
   },
 });

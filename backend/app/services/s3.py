@@ -171,9 +171,10 @@ class S3Service:
         logger.debug("Deleted s3://%s/%s", self._bucket, key)
 
     def public_url(self, key: str) -> str:
-        """Construct the public URL for a key via the Caddy reverse proxy.
+        """Construct the public URL for a key served directly from S3/CDN.
 
-        This goes through ``/i/`` which Caddy proxies directly to S3.
+        This uses ``S3_EXTERNAL_URL`` (e.g. https://images.your-domain.com)
+        and appends the normalized key — no Caddy proxy involved.
         """
         key = _normalize_key(key)
         return f"{self._external_url}/{key}"
