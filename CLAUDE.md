@@ -48,16 +48,19 @@ kura-booru-next/
 │   │   ├── config.py             # pydantic-settings from env vars
 │   │   ├── database.py           # SQLAlchemy async engine + session
 │   │   ├── api/                  # REST routes
-│   │   │   ├── auth.py            #   POST /api/auth/login|logout, GET /api/auth/status
-│   │   │   ├── posts.py          #   GET /api/posts (rating filter), /posts/{id}, /posts/random, /posts/by-source, PATCH /posts/{id}
-│   │   │   ├── tags.py           #   GET /api/tags, /tags/{name}, /tags/autocomplete
+│   │   │   ├── auth.py            #   POST /api/auth/login|logout|change-password, GET /api/auth/status
+│   │   │   ├── posts.py          #   GET/PATCH/DELETE /api/posts
+│   │   │   ├── tags.py           #   GET /api/tags (safe-only counts for non-admin)
 │   │   │   ├── search.py         #   GET /api/search?q=tag1+tag2+rating:safe
-│   │   │   ├── tasks.py          #   POST /api/tasks/ (X-Api-Key required)
+│   │   │   ├── tasks.py          #   POST /api/tasks/ (X-Api-Key), POST /api/tasks/web-import (admin session)
+│   │   │   ├── auto_rating_rules.py # GET/POST/DELETE /api/auto-rating-rules (admin only)
 │   │   │   ├── constants.py      #   Shared API constants (ALLOWED_PER_PAGE, clamp_per_page)
 │   │   │   └── webhook.py         #   POST /api/rebuild/ (X-Api-Key required)
 │   │   ├── auth.py               # Admin auth (signed cookie, bcrypt verify, DB lookup, auto-create default admin)
 │   │   ├── models/               # SQLAlchemy models
 │   │   │   ├── admin.py           #   Admin model (username, password_hash)
+│   │   │   ├── auto_rating_rule.py #  AutoRatingRule model (tag_name → target_rating)
+│   │   │   ├── post.py            #   Post model (with Rating enum)
 │   │   │   ├── tag.py            #   Tag model (TagCategory enum)
 │   │   │   ├── post_tag.py       #   PostTag association
 │   │   │   └── tag_alias.py      #   TagAlias model
@@ -82,6 +85,8 @@ kura-booru-next/
 │   │   ├── env.py                #   Async Alembic env
 │   │   └── versions/001_initial.py  # All tables + indexes
 │   │   └── versions/002_add_rating.py  # Rating enum + posts.rating column
+│   │   └── versions/003_add_admin_table.py  # Admins table
+│   │   └── versions/004_add_auto_rating_rules.py  # Auto-rating rules table
 │   ├── alembic.ini
 │   ├── requirements.txt          # + bcrypt, itsdangerous
 │   └── Dockerfile                # Multi-stage (dev + prod)
@@ -122,17 +127,13 @@ kura-booru-next/
 │   │   │   ├── tags/index.astro # Tag cloud + table
 │   │   │   ├── tags/[name].astro# Tag detail (filtered posts)
 │   │   │   ├── search.astro     # Search results (+ rating:safe syntax)
-│   │   │   └── admin/posts.astro# Admin post management (rating filter + inline edit)
-│   │   ├── layouts/
-│   │   │   └── BaseLayout.astro # Nav + theme + footer (env-driven gitTag/repoUrl)
-│   │   ├── pages/
-│   │   │   ├── index.astro      # Home (masonry + pagination)
-│   │   │   ├── posts/[id].astro # Detail (full image + tags + source)
-│   │   │   ├── tags/index.astro # Tag cloud + table
-│   │   │   ├── tags/[name].astro# Tag detail (filtered posts)
-│   │   │   └── search.astro     # Search results
+│   │   │   └── admin/
+│   │   │       ├── posts.astro      # Admin post management (rating filter + inline edit + delete)
+│   │   │       ├── auto-rating.astro # Auto-rating rules (add/delete with tag autocomplete)
+│   │   │       ├── import.astro      # Batch URL import (textarea + status display)
+│   │   │       └── password.astro    # Change password
 │   │   ├── lib/
-│   │   │   ├── api.ts          # Typed API client + pagination helpers
+│   │   │   ├── api.ts          # Typed API client + pagination + auto-rating + import helpers
 │   │   │   └── utils.ts        # cn() utility
 │   │   └── styles/
 │   │       └── globals.css     # Tailwind v4 + theme tokens
@@ -195,14 +196,20 @@ The S3 layer works with **any** S3-compatible storage. Images are served **direc
 | GET | `/api/posts/random` | Random post (safe-only for anonymous) |
 | GET | `/api/posts/by-source?source_site=pixiv&source_id=123` | Lookup by source |
 | PATCH | `/api/posts/{id}` | Update post rating (admin only) |
-| GET | `/api/tags?category=artist&sort=count` | Tag list with filtering |
-| GET | `/api/tags/{name}` | Tag detail |
-| GET | `/api/tags/autocomplete?q=prefix` | Tag name autocomplete |
+| DELETE | `/api/posts/{id}` | Delete post (admin only; deletes S3 objects + decrements tag counts) |
+| GET | `/api/tags?category=artist&sort=count` | Tag list with filtering (non-admin: safe-only counts, hidden if 0 safe posts) |
+| GET | `/api/tags/{name}` | Tag detail (404 for non-admin if 0 safe posts) |
+| GET | `/api/tags/autocomplete?q=prefix` | Tag name autocomplete (non-admin: safe-only counts) |
 | GET | `/api/search?q=tag1+tag2&rating=safe` | Tag search (supports `-` exclusion, `rating:` syntax for admin) |
 | POST | `/api/tasks/` | Create image processing task (requires X-Api-Key) |
+| POST | `/api/tasks/web-import` | Batch import images (requires admin session) |
+| GET | `/api/auto-rating-rules` | List auto-rating rules (admin only) |
+| POST | `/api/auto-rating-rules` | Create auto-rating rule (admin only) |
+| DELETE | `/api/auto-rating-rules/{id}` | Delete auto-rating rule (admin only) |
 | POST | `/api/rebuild/` | Purge Caddy cache (requires X-Api-Key) |
 | POST | `/api/auth/login` | Admin login (username + password → set cookie) |
 | POST | `/api/auth/logout` | Admin logout (clear cookie) |
+| POST | `/api/auth/change-password` | Change admin password |
 | GET | `/api/auth/status` | Check admin session status |
 | GET | `/health` | Backend health check |
 | GET | `/i/{bucket}/{key}` | S3 image (Caddy direct proxy) |
@@ -255,29 +262,33 @@ All Dockerfiles have 3 stages: `dev` (hot-reload), `builder`, and production run
 
 ## Current Status
 
-**v0.2.0 in development.** Rating system + admin auth + Danbooru-style UI on top of the v0.1.2 foundation.
+**v0.2.0 released.** Full management panel + auto-rating + web import + visibility hardening on top of the v0.1.x foundation.
 
-### What's Done (v0.1.0 → v0.1.1 → v0.1.2 → v0.2.0-dev)
+### What's Done (v0.1.0 → v0.2.0)
 - Full processing pipeline: Telegram bot → backend API → ARQ worker → gallery-dl → S3 storage
 - Frontend: Astro SSR with Tailwind v4, masonry grid, tag system, search, pagination
 - Bot: URL auto-detection, /save, /info, /search commands
 - Infrastructure: Docker Compose, Caddy reverse proxy, MinIO/R2 S3
 - Production build: version-tagged Docker images, China mirror support, footer version display
-- **Tag categorization**: Tags from Pixiv/Danbooru properly categorized (artist/character/copyright/general/meta) based on source metadata
-- **HTML description rendering**: Pixiv artwork descriptions with HTML links render correctly (sanitized with bleach)
-- **Bot forwarded message support**: Correctly processes forwarded channel messages with multiple URLs
-- **Rating system** (v0.2.0): Posts have `safe`/`questionable`/`explicit` rating (Danbooru-aligned). Anonymous visitors only see `safe` posts. Admin login unlocks all.
-- **Admin authentication** (v0.2.0): Single-admin login via signed cookie (`itsdangerous`). `POST /api/auth/login|logout|status`. `PATCH /api/posts/{id}` for rating edits.
-- **API key gating** (v0.2.0): `POST /api/tasks/` and `POST /api/rebuild/` require `X-Api-Key` header.
-- **Danbooru-style UI** (v0.2.0): Tag sidebar grouped by category with counts. Rating badge on cards (admin). Rating filter chips on index page (admin). Search supports `rating:safe` syntax (admin).
-- **Admin management page** (v0.2.0): `/admin/posts` with rating filter and inline rating change. Login page at `/login`.
-- **Source data rating** (v0.2.0): Pixiv `x_restrict` (0=safe,1=q,2=e) and Danbooru `rating` auto-mapped.
+- **Tag categorization** (v0.1.2): Tags from Pixiv/Danbooru properly categorized
+- **HTML description rendering** (v0.1.2): Pixiv descriptions with HTML links render correctly
+- **Bot forwarded message support** (v0.1.2): Forwarded channel messages with multiple URLs
+- **Rating system** (v0.1.3): Posts have safe/questionable/explicit rating; anonymous only see safe
+- **Admin authentication** (v0.1.3): Signed cookie sessions, DB-backed admin, change password
+- **API key gating** (v0.1.3): Bot↔Backend shared secret via X-Api-Key header
+- **Danbooru-style UI** (v0.1.3): Tag sidebar, rating badges, rating filter, rating: syntax
+- **Post deletion** (v0.2.0): Admin delete with S3 cleanup + tag count decrement
+- **Auto-rating rules** (v0.2.0): Tag→rating mapping; automatic escalation on import
+- **Web-based import** (v0.2.0): Batch URL import via admin UI (not just bot)
+- **Tag visibility hardening** (v0.2.0): Non-admin users cannot see tags that only belong to non-safe posts
+- **Logout redirect** (v0.2.0): Logout now redirects to homepage instead of showing raw JSON
+- **Fixed password icon** (v0.2.0): Lock-closed icon instead of wrong tag icon
 
 ### Known Limitations
 - Tag `post_count` auto-sync (currently needs manual SQL)
 - Twitter/Danbooru extractors need refinement
 - phash dedup optimization
-- No web URL ingestion UI yet (bot-only for now; planned for next phase)
+- No SSE/WebSocket for real-time import progress
 
 ## Rating System & Auth Architecture
 
@@ -287,7 +298,9 @@ All Dockerfiles have 3 stages: `dev` (hot-reload), `builder`, and production run
 - `explicit` — hidden from anonymous visitors; visible to admin
 - Gallery-dl metadata maps: Pixiv `x_restrict=0→safe,1→questionable,2→explicit`; Danbooru `rating:s→safe,q→questionable,e→explicit`
 - All list/search/detail endpoints filter `WHERE rating='safe'` for non-admin callers; non-safe posts return 404 (existence hidden)
+- **Tag visibility**: Non-admin users cannot see tags that only belong to non-safe posts. Tag endpoints compute `post_count` via subquery counting only safe posts. Tags with 0 safe posts are completely hidden (404 for detail, filtered from list/autocomplete).
 - Admin can change rating via `PATCH /api/posts/{id}` or inline dropdown on admin/posts page
+- Admin can delete posts via `DELETE /api/posts/{id}` which also deletes S3 objects and decrements tag post_counts
 
 ### Admin Auth
 - Admin credentials stored in `admins` DB table (not env vars)
@@ -304,6 +317,18 @@ All Dockerfiles have 3 stages: `dev` (hot-reload), `builder`, and production run
 - Bot sends `X-Api-Key` header on all backend calls
 - Backend `require_api_key` dependency gates `POST /api/tasks/` and `POST /api/rebuild/`
 - When `BACKEND_API_KEY` is empty (dev), the check is skipped for backward compatibility
+
+### Web Import (Admin ↔ Backend)
+- `POST /api/tasks/web-import` uses admin session auth (not API key)
+- Accepts `{ urls: string[] }` and enqueues each URL as a separate ARQ task
+- Returns per-URL results with task IDs
+
+### Auto-Rating Rules
+- `AutoRatingRule` model maps tag names to target ratings (questionable/explicit)
+- Admin CRUD at `/api/auto-rating-rules`
+- During image processing (`process_image` task), after tags are resolved, rules are checked
+- Rules only escalate ratings (explicit > questionable > safe); never de-escalate
+- Multiple matching rules: most restrictive wins
 
 ### ⚠️ SSR Cache Constraint
 - **Do NOT enable Souin/HTTP cache for SSR pages without also adding `Vary: Cookie` and a cache key that includes the admin session cookie.** Otherwise, an admin's logged-in HTML (showing non-safe posts) could be served to anonymous visitors.

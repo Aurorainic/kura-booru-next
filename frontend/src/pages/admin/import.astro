@@ -1,0 +1,158 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+
+const isAdmin = Astro.locals.isAdmin ?? false;
+
+if (!isAdmin) {
+  return Astro.redirect("/login");
+}
+---
+
+<BaseLayout title="导入图片">
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-[var(--text-primary)]">
+          <span class="gradient-text">导入图片</span>
+        </h1>
+        <p class="text-sm text-[var(--text-muted)] mt-1">
+          通过链接批量导入插画，每行一个 URL
+        </p>
+      </div>
+      <a
+        href="/admin/posts"
+        class="text-sm text-[var(--text-muted)] hover:text-[var(--color-cyan-accent-start)] transition-colors"
+      >
+        ← 返回管理
+      </a>
+    </div>
+
+    <!-- Import form -->
+    <div class="card p-6 mb-6">
+      <label for="urls-input" class="block text-sm font-medium text-[var(--text-muted)] mb-2">
+        图片链接（每行一个）
+      </label>
+      <textarea
+        id="urls-input"
+        rows="8"
+        placeholder="https://www.pixiv.net/artworks/12345&#10;https://x.com/user/status/67890&#10;https://danbooru.donmai.us/posts/11111"
+        class="w-full px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] font-mono text-sm resize-y"
+      ></textarea>
+      <div class="flex items-center justify-between mt-3">
+        <span id="url-count" class="text-xs text-[var(--text-muted)]">0 个有效链接</span>
+        <button
+          id="import-btn"
+          type="button"
+          class="px-6 py-2 rounded-lg gradient-bg text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          开始导入
+        </button>
+      </div>
+    </div>
+
+    <!-- Results area -->
+    <div id="results-area" class="hidden">
+      <div class="card overflow-hidden">
+        <div class="px-4 py-3 border-b border-[var(--border-color)] flex items-center justify-between">
+          <h2 class="text-sm font-medium text-[var(--text-muted)]">
+            导入结果
+          </h2>
+          <span id="results-summary" class="text-xs text-[var(--text-muted)]"></span>
+        </div>
+        <div id="results-list" class="divide-y divide-[var(--border-color)] max-h-96 overflow-y-auto">
+        </div>
+      </div>
+    </div>
+  </div>
+</BaseLayout>
+
+<script is:inline>
+  var urlsInput = document.getElementById('urls-input');
+  var urlCount = document.getElementById('url-count');
+  var importBtn = document.getElementById('import-btn');
+  var resultsArea = document.getElementById('results-area');
+  var resultsList = document.getElementById('results-list');
+  var resultsSummary = document.getElementById('results-summary');
+
+  // Update URL count on input
+  urlsInput.addEventListener('input', function() {
+    var urls = getValidUrls();
+    urlCount.textContent = urls.length + ' 个有效链接';
+  });
+
+  function getValidUrls() {
+    return urlsInput.value
+      .split('\n')
+      .map(function(line) { return line.trim(); })
+      .filter(function(line) { return line.length > 0; });
+  }
+
+  // Import button click
+  importBtn.addEventListener('click', async function() {
+    var urls = getValidUrls();
+    if (urls.length === 0) {
+      alert('请输入至少一个链接');
+      return;
+    }
+
+    importBtn.disabled = true;
+    importBtn.textContent = '导入中…';
+    resultsList.innerHTML = '';
+    resultsArea.classList.remove('hidden');
+
+    try {
+      var resp = await fetch('/api/tasks/web-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls: urls }),
+      });
+
+      if (!resp.ok) {
+        var errData = await resp.json().catch(function() { return {}; });
+        alert('导入失败: ' + (errData.detail || 'HTTP ' + resp.status));
+        return;
+      }
+
+      var data = await resp.json();
+      var results = data.results || [];
+      var queued = 0;
+      var errors = 0;
+
+      results.forEach(function(result, index) {
+        var url = urls[index] || '未知链接';
+        var div = document.createElement('div');
+        div.className = 'px-4 py-2 flex items-center gap-2 text-sm';
+
+        if (result.status === 'queued' && result.task_id) {
+          queued++;
+          div.innerHTML =
+            '<span class="text-green-400">✓</span>' +
+            '<span class="text-[var(--text-primary)] truncate flex-1">' + escapeHtml(url) + '</span>' +
+            '<span class="text-xs text-[var(--text-muted)]">已入队</span>';
+        } else {
+          errors++;
+          div.innerHTML =
+            '<span class="text-red-400">✗</span>' +
+            '<span class="text-[var(--text-primary)] truncate flex-1">' + escapeHtml(url) + '</span>' +
+            '<span class="text-xs text-red-400">失败</span>';
+        }
+
+        resultsList.appendChild(div);
+      });
+
+      resultsSummary.textContent = queued + ' 已入队' + (errors > 0 ? '，' + errors + ' 失败' : '');
+    } catch (err) {
+      alert('网络错误: ' + err.message);
+    } finally {
+      importBtn.disabled = false;
+      importBtn.textContent = '开始导入';
+    }
+  });
+
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(text));
+    return div.innerHTML;
+  }
+</script>

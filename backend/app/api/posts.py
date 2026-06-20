@@ -1,15 +1,20 @@
 """REST API routes for posts.
 
-Provides paginated listing, single post detail, and random post endpoints.
+Provides paginated listing, single post detail, random post, and
+delete endpoints.
 
 Visibility: anonymous callers only ever see safe posts. An authenticated
 admin session unlocks questionable/explicit posts across every endpoint here.
 For single-post lookups, non-safe posts return 404 to anonymous callers so
 that their existence is not leaked.
+
+Delete: admin-only, removes post from DB (cascade to post_tags), deletes
+S3 objects (original, thumb, preview), and decrements tag post_counts.
 """
 
 from __future__ import annotations
 
+import logging
 import random
 import uuid
 
@@ -18,12 +23,18 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.constants import ALLOWED_PER_PAGE
-from app.auth import get_is_admin
+from app.auth import get_current_admin, get_is_admin
 from app.database import get_db
+from app.models.admin import Admin
 from app.models.post import Post, Rating, SourceSite
+from app.models.post_tag import PostTag
+from app.models.tag import Tag
 from app.schemas.post import PostListRead, PostRead, PostRatingUpdate
+from app.services.s3 import s3_service
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 
 def _apply_rating_filter(stmt, is_admin: bool):
@@ -171,6 +182,52 @@ async def update_post_rating(
     await db.commit()
     await db.refresh(post)
     return post
+
+
+@router.delete("/{post_id}", status_code=204)
+async def delete_post(
+    post_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+):
+    """Delete a post. Admin only.
+
+    Removes the post from the database, deletes all S3 objects
+    (original, thumb, preview), and decrements tag post_counts.
+    S3 deletions are best-effort — failures are logged but do not
+    prevent the DB record from being deleted.
+    """
+    stmt = select(Post).where(Post.id == post_id)
+    result = await db.execute(stmt)
+    post = result.scalar_one_or_none()
+    if post is None:
+        raise HTTPException(status_code=404, detail=f"Post {post_id} not found")
+
+    # Step 1: Collect tag IDs for count decrement
+    tag_stmt = select(PostTag.tag_id).where(PostTag.post_id == post_id)
+    tag_result = await db.execute(tag_stmt)
+    tag_ids = [row[0] for row in tag_result.all()]
+
+    # Step 2: Delete S3 objects (best-effort)
+    for key in (post.s3_key, post.thumb_key, post.preview_key):
+        try:
+            await s3_service.delete(key)
+        except Exception as exc:
+            logger.warning("Failed to delete S3 key %s: %s", key, exc)
+
+    # Step 3: Delete the post (cascades to post_tags via ON DELETE CASCADE)
+    await db.delete(post)
+
+    # Step 4: Decrement tag post_counts (use GREATEST to avoid negative)
+    if tag_ids:
+        await db.execute(
+            Tag.__table__.update()
+            .where(Tag.id.in_(tag_ids))
+            .values(post_count=func.greatest(Tag.post_count - 1, 0))
+        )
+
+    await db.commit()
+    return None
 
 
 @router.get("/{post_id}", response_model=PostRead)

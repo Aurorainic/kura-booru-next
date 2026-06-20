@@ -148,6 +148,12 @@ export async function updatePostRating(id: string, rating: Rating): Promise<Post
   });
 }
 
+export async function deletePost(id: string): Promise<void> {
+  await fetchApi<void>(`/posts/${id}`, undefined, {
+    method: "DELETE",
+  });
+}
+
 // === Tag APIs ===
 
 export async function fetchTags(
@@ -211,6 +217,48 @@ export async function changePassword(currentPassword: string, newPassword: strin
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+}
+
+// === Auto-Rating Rule APIs ===
+
+export interface AutoRatingRule {
+  id: string;
+  tag_name: string;
+  target_rating: Rating;
+  created_at: string;
+}
+
+export async function fetchAutoRatingRules(): Promise<AutoRatingRule[]> {
+  return fetchApi<AutoRatingRule[]>("/auto-rating-rules");
+}
+
+export async function createAutoRatingRule(tagName: string, targetRating: Rating): Promise<AutoRatingRule> {
+  return fetchApi<AutoRatingRule>("/auto-rating-rules", undefined, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tag_name: tagName, target_rating: targetRating }),
+  });
+}
+
+export async function deleteAutoRatingRule(ruleId: string): Promise<void> {
+  await fetchApi<void>(`/auto-rating-rules/${ruleId}`, undefined, {
+    method: "DELETE",
+  });
+}
+
+// === Task / Import APIs ===
+
+export interface ImportResult {
+  task_id: string;
+  status: string;
+}
+
+export async function webImport(urls: string[]): Promise<{ results: ImportResult[] }> {
+  return fetchApi<{ results: ImportResult[] }>("/tasks/web-import", undefined, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ urls }),
   });
 }
 

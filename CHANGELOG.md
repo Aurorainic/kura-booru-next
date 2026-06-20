@@ -4,6 +4,41 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-06-20
+
+### Added
+- **Post deletion** — Admin can delete posts from the management page. Deletes the database record (cascade to post_tags), removes all S3 objects (original, thumb, preview), and decrements tag post_counts.
+  - `DELETE /api/posts/{id}` endpoint (admin only, requires full admin session)
+  - Trash icon button in `/admin/posts` table with confirmation dialog
+  - Tag `post_count` decremented atomically with `GREATEST(post_count - 1, 0)` to prevent negative counts
+- **Tag-based auto-rating rules** — Automatically escalate post ratings when specific tags are present.
+  - `AutoRatingRule` model — maps tag name → target rating (questionable/explicit)
+  - `GET / POST / DELETE /api/auto-rating-rules` — CRUD endpoints (admin only)
+  - `process_image` task checks rules after tag resolution; only escalates (never de-escalates) the source-extracted rating
+  - `/admin/auto-rating` — Admin page to manage rules with tag autocomplete and inline delete
+  - Alembic migration 004 — `auto_rating_rules` table (reuses existing `rating_enum`)
+- **Web-based image import** — Batch import images via admin UI (previously bot-only).
+  - `POST /api/tasks/web-import` — Admin session auth (not API key), enqueues each URL as ARQ task
+  - `/admin/import` — Textarea for URLs (one per line), per-URL status display (queued ✓ / error ✗)
+  - Nav bar "导入" icon link for admin users
+- **Admin nav expansion** — Navigation bar now shows icons for: 管理, 自动评级规则, 导入图片, 修改密码, 退出
+
+### Changed
+- **Logout redirects to homepage** — Logout button now uses JS `fetch()` instead of form POST, redirecting to `/` after clearing the session cookie. No more raw `{"ok":true}` JSON page.
+- **Password change icon** — Replaced incorrect "tag" SVG icon with HeroIcons "lock-closed" outline icon.
+
+### Fixed
+- **Tag visibility leak for non-safe posts** — Anonymous users could previously see tag names, categories, and `post_count` that included non-safe posts, allowing inference of hidden content. Now:
+  - Tag `post_count` for anonymous users is computed dynamically via subquery, counting only safe-rated posts
+  - Tags with zero safe posts are completely hidden from tag lists, tag cloud, and autocomplete
+  - Single tag detail returns 404 for anonymous users if the tag has zero safe posts
+  - Admin users see the full denormalized `post_count` as before
+  - Added `is_admin: bool = Depends(get_is_admin)` to all three tag endpoints
+
+### Security
+- Tag endpoints now respect admin/non-admin visibility boundary, consistent with post endpoints
+- Auto-rating rules only escalate ratings (never de-escalate), preventing accidental public exposure of NSFW content
+
 ## [0.1.3-pre2] - 2026-06-20
 
 ### Added
@@ -81,12 +116,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - Pixiv `user.name` extracted as artist tag automatically
   - Category upgrade logic: existing "general" tags upgraded when source provides better category
   - Migration script for existing tags: `backend/scripts/recategorize_tags.py`
-
 - **Bot forwarded message support** — Bot now correctly processes forwarded Telegram channel messages containing image URLs.
   - Fixed `AuthMiddleware` to use `chat.id` (forwarding user) instead of `from_user.id` (channel ID) for private chat auth
   - Added `handle_photo_url` handler for forwarded messages with photo + caption URLs
   - Batch processing: multiple recognized URLs processed sequentially with progress updates
-
 - **HTML description rendering** — Pixiv artwork descriptions with HTML (hyperlinks, formatting) now render correctly in the frontend.
   - Backend: `bleach` library sanitizes HTML descriptions (allows safe tags: `<a>`, `<br>`, `<p>`, etc.)
   - Backend: External links automatically get `target="_blank"` + `rel="noopener noreferrer"`
@@ -155,4 +188,3 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - S3 key normalization + post-upload URL verification.
 - Explicit database indexes in Alembic migrations.
 - Database migration scripts (`migrate-db.sh`, `validate-env.sh`).
-

@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import async_session_factory
+from app.models.auto_rating_rule import AutoRatingRule
 from app.models.post import Post, Rating, SourceSite
 from app.models.post_tag import PostTag
 from app.models.tag import Tag, TagCategory
@@ -219,6 +220,35 @@ async def process_image(ctx: dict[str, Any], source_url: str, source_site: str |
 
             # Step 5: Create/update Tags and associate with Post
             tags = await _ensure_tags(db, result.tag_names, result.tag_categories)
+
+            # Step 5b: Check auto-rating rules
+            if tag_names:
+                rule_stmt = select(AutoRatingRule).where(
+                    AutoRatingRule.tag_name.in_(
+                        [n.strip().lower() for n in tag_names if n.strip()]
+                    )
+                )
+                rule_result = await db.execute(rule_stmt)
+                rules = rule_result.scalars().all()
+                if rules:
+                    _RATING_ORDER = {
+                        Rating.safe: 0,
+                        Rating.questionable: 1,
+                        Rating.explicit: 2,
+                    }
+                    most_restrictive = max(
+                        rules, key=lambda r: _RATING_ORDER[r.target_rating]
+                    )
+                    if _RATING_ORDER[most_restrictive.target_rating] > _RATING_ORDER.get(
+                        post_rating, 0
+                    ):
+                        logger.info(
+                            "Auto-rating override: %s -> %s (rule for tag '%s')",
+                            post_rating,
+                            most_restrictive.target_rating,
+                            most_restrictive.tag_name,
+                        )
+                        post_rating = most_restrictive.target_rating
             for tag in tags:
                 post_tag = PostTag(post_id=post.id, tag_id=tag.id)
                 db.add(post_tag)
