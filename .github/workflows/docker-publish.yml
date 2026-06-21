@@ -37,6 +37,8 @@ jobs:
         run: |
           TAG=${GITHUB_REF#refs/tags/}
           echo "version=$TAG" >> "$GITHUB_OUTPUT"
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "owner_lower=$OWNER_LOWER" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -55,7 +57,7 @@ jobs:
           build-args: |
             PUBLIC_GIT_TAG=${{ steps.meta.outputs.version }}
           tags: |
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}:${{ steps.meta.outputs.version }}
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}:latest
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner_lower }}/${{ matrix.image }}:${{ steps.meta.outputs.version }}
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner_lower }}/${{ matrix.image }}:latest
           provenance: false
           sbom: false
