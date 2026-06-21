@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>标签 — Kura Booru</title>
+  <script is:inline>
+    (function() {
+      const stored = localStorage.getItem('kura-theme-preference');
+      let resolved;
+      if (stored === 'light' || stored === 'dark') { resolved = stored; }
+      else { resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+      document.documentElement.classList.remove('light', 'dark');
+      document.documentElement.classList.add(resolved);
+    })();
+  </script>
+  <style>
+    :root {
+      --bg:oklch(99% 0.002 240);--surface:oklch(100% 0 0);--surface-alt:oklch(97% 0.003 240);
+      --fg:oklch(18% 0.012 250);--muted:oklch(54% 0.012 250);
+      --border:oklch(92% 0.005 250);--border-hover:oklch(82% 0.008 250);
+      --accent:oklch(72% 0.12 175);--accent-hover:oklch(65% 0.14 175);--accent-subtle:oklch(95% 0.03 175);
+      --success:oklch(65% 0.18 145);--warning:oklch(75% 0.16 85);--danger:oklch(62% 0.2 25);
+      --tag-artist:oklch(70% 0.16 55);--tag-character:oklch(68% 0.16 340);--tag-copyright:oklch(62% 0.16 290);
+      --tag-general:oklch(72% 0.12 175);--tag-meta:oklch(60% 0.01 250);
+      --shadow-sm:0 1px 2px oklch(0% 0 0 / 0.04);--shadow-md:0 4px 12px oklch(0% 0 0 / 0.06);--shadow-lg:0 12px 32px oklch(0% 0 0 / 0.08);
+      --font-display:-apple-system,BlinkMacSystemFont,'SF Pro Display',system-ui,sans-serif;
+      --font-body:-apple-system,BlinkMacSystemFont,'SF Pro Text',system-ui,sans-serif;
+      --font-mono:ui-monospace,'SF Mono','Cascadia Code',Menlo,monospace;
+      --radius-sm:6px;--radius-md:10px;--radius-lg:14px;--radius-full:9999px;
+      --ease-out:cubic-bezier(0.16,1,0.3,1);--duration-fast:120ms;--duration-normal:200ms;--duration-slow:350ms;
+      --nav-height:56px;--content-max:1400px;
+    }
+    .dark {
+      --bg:oklch(14% 0.008 260);--surface:oklch(18% 0.01 260);--surface-alt:oklch(22% 0.012 260);
+      --fg:oklch(92% 0.008 250);--muted:oklch(58% 0.012 250);
+      --border:oklch(28% 0.01 260);--border-hover:oklch(38% 0.014 260);
+      --accent:oklch(72% 0.12 175);--accent-hover:oklch(78% 0.14 175);--accent-subtle:oklch(22% 0.04 175);
+      --shadow-sm:0 1px 2px oklch(0% 0 0 / 0.2);--shadow-md:0 4px 12px oklch(0% 0 0 / 0.3);--shadow-lg:0 12px 32px oklch(0% 0 0 / 0.4);
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth;font-size:clamp(14px,0.875rem + 0.25vw,16px)}
+    body{font-family:var(--font-body);background:var(--bg);color:var(--fg);line-height:1.6;min-height:100vh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;transition:background var(--duration-slow) var(--ease-out),color var(--duration-slow) var(--ease-out)}
+    a{color:inherit;text-decoration:none}button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}img{display:block;max-width:100%}
+    :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--radius-sm)}
+    ::selection{background:var(--accent);color:var(--bg)}
+    ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+    .container{width:100%;max-width:var(--content-max);margin:0 auto;padding:0 1.5rem}
+    .gradient-text{background:linear-gradient(135deg,oklch(72% 0.12 175),oklch(78% 0.1 200));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+
+    /* Nav */
+    .nav{position:sticky;top:0;z-index:100;height:var(--nav-height);border-bottom:1px solid var(--border);background:oklch(14% 0.008 260 / 0.8);backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4);transition:background var(--duration-slow) var(--ease-out),border-color var(--duration-slow) var(--ease-out)}
+    :root:not(.dark) .nav{background:oklch(99% 0.002 240 / 0.85)}
+    .nav-inner{display:flex;align-items:center;justify-content:space-between;height:100%;gap:1rem}
+    .nav-brand{display:flex;align-items:baseline;gap:6px;font-family:var(--font-display);letter-spacing:-0.02em}
+    .nav-brand-name{font-size:1.25rem;font-weight:700}
+    .nav-brand-sub{font-size:1.25rem;font-weight:300;color:var(--muted)}
+    .nav-links{display:flex;align-items:center;gap:2px}
+    .nav-link{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--radius-sm);font-size:0.875rem;font-weight:500;color:var(--muted);transition:color var(--duration-fast),background var(--duration-fast)}
+    .nav-link:hover{color:var(--fg);background:var(--accent-subtle)}
+    .nav-link.active{color:var(--accent)}
+    .nav-link svg{width:16px;height:16px}
+    .nav-divider{width:1px;height:20px;background:var(--border);margin:0 4px}
+    .theme-toggle{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:var(--radius-sm);transition:background var(--duration-fast)}
+    .theme-toggle:hover{background:var(--accent-subtle)}
+    .theme-toggle svg{width:18px;height:18px;color:var(--muted);transition:color var(--duration-fast),transform var(--duration-normal)}
+    .theme-toggle:hover svg{color:var(--fg);transform:scale(1.1)}
+
+    /* Page header */
+    .page-header{display:flex;align-items:flex-end;justify-content:space-between;gap:1.5rem;padding-top:1.5rem;margin-bottom:1.5rem;flex-wrap:wrap}
+    .page-title{font-family:var(--font-display);font-size:clamp(1.5rem,2.5vw,2rem);font-weight:700;letter-spacing:-0.02em;line-height:1.2}
+    .page-subtitle{font-size:0.8125rem;color:var(--muted);margin-top:4px}
+
+    /* Sort toggle */
+    .sort-toggle{display:flex;align-items:center;gap:2px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:2px}
+    .sort-btn{padding:5px 12px;border-radius:4px;font-size:0.8125rem;font-weight:500;color:var(--muted);transition:all var(--duration-fast)}
+    .sort-btn:hover{color:var(--fg)}
+    .sort-btn.active{background:var(--accent-subtle);color:var(--accent)}
+
+    /* Category filter */
+    .category-filter{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2rem}
+    .category-chip{
+      display:inline-flex;align-items:center;padding:6px 14px;
+      border-radius:var(--radius-full);font-size:0.8125rem;font-weight:500;
+      border:1px solid var(--border);color:var(--muted);
+      transition:all var(--duration-fast);
+    }
+    .category-chip:hover{border-color:var(--border-hover);color:var(--fg)}
+    .category-chip.active{background:var(--accent);border-color:var(--accent);color:oklch(14% 0.008 260)}
+
+    /* Tag cloud */
+    .tag-cloud-card{
+      background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+      padding:1.5rem;margin-bottom:2rem;
+    }
+    .tag-cloud-label{font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:1rem}
+    .tag-cloud{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+    .tag-cloud-item{
+      display:inline-block;padding:3px 8px;border-radius:var(--radius-sm);
+      transition:all var(--duration-fast);cursor:pointer;
+    }
+    .tag-cloud-item:hover{transform:scale(1.08)}
+    .tag-cloud-item.artist{color:var(--tag-artist);background:oklch(70% 0.16 55 / 0.08)}
+    .tag-cloud-item.character{color:var(--tag-character);background:oklch(68% 0.16 340 / 0.08)}
+    .tag-cloud-item.copyright{color:var(--tag-copyright);background:oklch(62% 0.16 290 / 0.08)}
+    .tag-cloud-item.general{color:var(--tag-general);background:oklch(72% 0.12 175 / 0.08)}
+    .tag-cloud-item.meta{color:var(--tag-meta);background:oklch(60% 0.01 250 / 0.08)}
+    .tag-cloud-count{font-size:0.625rem;opacity:0.5;margin-left:2px;font-family:var(--font-mono)}
+
+    /* Tag table */
+    .tag-table-card{
+      background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+      overflow:hidden;
+    }
+    .tag-table-header{
+      padding:0.75rem 1rem;border-bottom:1px solid var(--border);
+      font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);
+    }
+    .tag-table{width:100%;border-collapse:collapse}
+    .tag-table th{
+      text-align:left;padding:0.75rem 1rem;font-size:0.75rem;font-weight:600;
+      color:var(--muted);border-bottom:1px solid var(--border);
+      text-transform:uppercase;letter-spacing:0.04em;
+    }
+    .tag-table th:last-child{text-align:right}
+    .tag-table td{padding:0.625rem 1rem;border-bottom:1px solid var(--border);font-size:0.875rem}
+    .tag-table td:last-child{text-align:right;font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;color:var(--muted)}
+    .tag-table tr:last-child td{border-bottom:none}
+    .tag-table tr{transition:background var(--duration-fast)}
+    .tag-table tr:hover{background:var(--accent-subtle)}
+    .tag-table a{color:var(--fg);font-weight:500;transition:color var(--duration-fast)}
+    .tag-table a:hover{color:var(--accent)}
+
+    .tag-category-pill{
+      display:inline-block;font-size:0.6875rem;padding:2px 8px;border-radius:var(--radius-sm);
+      font-weight:500;
+    }
+    .tag-category-pill.artist{color:var(--tag-artist);background:oklch(70% 0.16 55 / 0.1)}
+    .tag-category-pill.character{color:var(--tag-character);background:oklch(68% 0.16 340 / 0.1)}
+    .tag-category-pill.copyright{color:var(--tag-copyright);background:oklch(62% 0.16 290 / 0.1)}
+    .tag-category-pill.general{color:var(--tag-general);background:oklch(72% 0.12 175 / 0.1)}
+    .tag-category-pill.meta{color:var(--tag-meta);background:oklch(60% 0.01 250 / 0.1)}
+
+    /* Pagination */
+    .pagination{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:2rem 0;flex-wrap:wrap}
+    .pagination-nav{display:flex;align-items:center;gap:2px}
+    .pagination-btn{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:var(--radius-sm);font-size:0.875rem;font-weight:500;color:var(--muted);transition:all var(--duration-fast)}
+    .pagination-btn:hover:not(.active):not(:disabled){color:var(--fg);background:var(--accent-subtle)}
+    .pagination-btn.active{background:var(--accent);color:oklch(14% 0.008 260);font-weight:700}
+    .pagination-btn:disabled{opacity:0.3;cursor:not-allowed}
+
+    /* Footer */
+    .footer{border-top:1px solid var(--border);padding:1.5rem 0;margin-top:auto}
+    .footer-inner{display:flex;align-items:center;justify-content:space-between;font-size:0.8125rem;color:var(--muted)}
+    .footer-link{font-weight:500;transition:opacity var(--duration-fast)}.footer-link:hover{opacity:0.7}
+    .footer-tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:var(--radius-full);border:1px solid var(--border);font-family:var(--font-mono);font-size:0.6875rem;margin-left:8px}
+
+    @media(max-width:768px){
+      .nav-links{display:none}
+      .container{padding:0 1rem}
+      .page-header{flex-direction:column;align-items:flex-start}
+      .tag-table th,.tag-table td{padding:0.5rem 0.75rem}
+    }
+
+/* --- Noise texture --- */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.018;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 200px 200px;
+}
+.dark body::before { opacity: 0.03; }
+
+/* --- Page entrance --- */
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+main { animation: pageIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* --- Tag cloud entrance --- */
+@keyframes cloudIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.tag-cloud-card { animation: cloudIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both; }
+
+/* --- Table entrance --- */
+@keyframes tableIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.tag-table-card { animation: tableIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both; }
+
+/* --- Tag cloud item hover: gentle bounce --- */
+.tag-cloud-item {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s;
+}
+.tag-cloud-item:hover {
+  transform: scale(1.12);
+}
+
+/* --- Category filter: pill slide --- */
+.category-chip {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.category-chip::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  opacity: 0;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s;
+  border-radius: inherit;
+  z-index: -1;
+}
+.category-chip.active::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+/* --- Sort toggle: smooth active indicator --- */
+.sort-btn {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* --- Table row hover: subtle slide --- */
+.tag-table tr {
+  transition: background 120ms, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.tag-table tr:hover {
+  transform: translateX(2px);
+}
+
+/* --- Theme toggle spin --- */
+.theme-toggle svg { transition: color 120ms, transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.theme-toggle:active svg { transform: scale(0.85); }
+.theme-toggle.spin svg { transform: rotate(360deg) scale(1.1); }
+
+/* --- Reduced motion --- */
+@media (prefers-reduced-motion: reduce) {
+  .tag-cloud-card, .tag-table-card, main { animation: none; }
+  .tag-cloud-item:hover { transform: none; }
+  .tag-table tr:hover { transform: none; }
+}
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a href="/" class="nav-brand">
+        <span class="nav-brand-name gradient-text">Kura</span>
+        <span class="nav-brand-sub">Booru</span>
+      </a>
+      <div class="nav-links">
+        <a href="/" class="nav-link">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z"/></svg>
+          画廊
+        </a>
+        <a href="/search" class="nav-link">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
+          搜索
+        </a>
+        <a href="/tags" class="nav-link active">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.34a18.095 18.095 0 005.223-5.223c.534-.827.36-1.908-.34-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/></svg>
+          标签
+        </a>
+        <div class="nav-divider"></div>
+        <button class="theme-toggle" id="theme-toggle" title="切换主题">
+          <svg id="theme-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 9.75C3 14.142 6.858 18 11.25 18c1.488 0 2.885-.334 4.134-.932a9.717 9.717 0 006.368-2.066z"/></svg>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="flex-1">
+    <div class="container">
+      <!-- Header -->
+      <div class="page-header">
+        <div>
+          <h1 class="page-title"><span class="gradient-text">标签</span></h1>
+          <p class="page-subtitle">342 个标签</p>
+        </div>
+        <div class="sort-toggle">
+          <button class="sort-btn active">数量</button>
+          <button class="sort-btn">名称</button>
+        </div>
+      </div>
+
+      <!-- Category filter -->
+      <div class="category-filter">
+        <a href="/tags" class="category-chip active">全部</a>
+        <a href="/tags?category=artist" class="category-chip">画师</a>
+        <a href="/tags?category=character" class="category-chip">角色</a>
+        <a href="/tags?category=copyright" class="category-chip">作品</a>
+        <a href="/tags?category=general" class="category-chip">通用</a>
+        <a href="/tags?category=meta" class="category-chip">元信息</a>
+      </div>
+
+      <!-- Tag cloud -->
+      <div class="tag-cloud-card">
+        <div class="tag-cloud-label">标签云</div>
+        <div class="tag-cloud">
+          <a href="/tags/landscape" class="tag-cloud-item general" style="font-size:1.4rem">landscape<span class="tag-cloud-count">(89)</span></a>
+          <a href="/tags/sunset" class="tag-cloud-item general" style="font-size:1.2rem">sunset<span class="tag-cloud-count">(56)</span></a>
+          <a href="/tags/sky" class="tag-cloud-item general" style="font-size:1.6rem">sky<span class="tag-cloud-count">(201)</span></a>
+          <a href="/tags/nature" class="tag-cloud-item general" style="font-size:1.5rem">nature<span class="tag-cloud-count">(178)</span></a>
+          <a href="/tags/clouds" class="tag-cloud-item general" style="font-size:1.3rem">clouds<span class="tag-cloud-count">(134)</span></a>
+          <a href="/tags/water" class="tag-cloud-item general" style="font-size:1.1rem">water<span class="tag-cloud-count">(67)</span></a>
+          <a href="/tags/no_humans" class="tag-cloud-item general" style="font-size:1.7rem">no_humans<span class="tag-cloud-count">(445)</span></a>
+          <a href="/tags/highres" class="tag-cloud-item meta" style="font-size:1.8rem">highres<span class="tag-cloud-count">(890)</span></a>
+          <a href="/tags/absurdres" class="tag-cloud-item meta" style="font-size:1.5rem">absurdres<span class="tag-cloud-count">(567)</span></a>
+          <a href="/tags/original" class="tag-cloud-item copyright" style="font-size:1.3rem">original<span class="tag-cloud-count">(312)</span></a>
+          <a href="/tags/wlop" class="tag-cloud-item artist" style="font-size:1.1rem">wlop<span class="tag-cloud-count">(128)</span></a>
+          <a href="/tags/1girl" class="tag-cloud-item general" style="font-size:1.6rem">1girl<span class="tag-cloud-count">(234)</span></a>
+          <a href="/tags/long_hair" class="tag-cloud-item general" style="font-size:1.4rem">long_hair<span class="tag-cloud-count">(156)</span></a>
+          <a href="/tags/solo" class="tag-cloud-item general" style="font-size:1.5rem">solo<span class="tag-cloud-count">(189)</span></a>
+          <a href="/tags/dress" class="tag-cloud-item general" style="font-size:1rem">dress<span class="tag-cloud-count">(45)</span></a>
+          <a href="/tags/flower" class="tag-cloud-item general" style="font-size:0.9rem">flower<span class="tag-cloud-count">(34)</span></a>
+          <a href="/tags/night" class="tag-cloud-item general" style="font-size:1.2rem">night<span class="tag-cloud-count">(78)</span></a>
+          <a href="/tags/city" class="tag-cloud-item general" style="font-size:0.95rem">city<span class="tag-cloud-count">(41)</span></a>
+          <a href="/tags/sho_(sho_lwlw)" class="tag-cloud-item artist" style="font-size:0.85rem">sho_(sho_lwlw)<span class="tag-cloud-count">(42)</span></a>
+          <a href="/tags/fantasy" class="tag-cloud-item general" style="font-size:1.1rem">fantasy<span class="tag-cloud-count">(63)</span></a>
+        </div>
+      </div>
+
+      <!-- Tag table -->
+      <div class="tag-table-card">
+        <div class="tag-table-header">热门标签</div>
+        <table class="tag-table">
+          <thead>
+            <tr>
+              <th>标签</th>
+              <th>分类</th>
+              <th>数量</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><a href="/tags/highres">highres</a></td>
+              <td><span class="tag-category-pill meta">元信息</span></td>
+              <td>890</td>
+            </tr>
+            <tr>
+              <td><a href="/tags/no_humans">no_humans</a></td>
+              <td><span class="tag-category-pill general">通用</span></td>
+              <td>445</td>
+            </tr>
+            <tr>
+              <td><a href="/tags/absurdres">absurdres</a></td>
+              <td><span class="tag-category-pill meta">元信息</span></td>
+              <td>567</td>
+            </tr>
+            <tr>
+              <td><a href="/tags/sky">sky</a></td>
+              <td><span class="tag-category-pill general">通用</span></td>
+              <td>201</td>
+            </tr>
+            <tr>
+              <td><a href="/tags/1girl">1girl</a></td>
+              <td><span class="tag-category-pill general">通用</span></td>
+              <td>234</td>
+            </tr>
+            <tr>
+              <td><a href="/tags/solo">solo</a></td>
+              <td><span class="tag-category-pill general">通用</span></td>
+              <td>189</td>
+            </tr>
+            <tr>
+              <td><a href="/tags/nature">nature</a></td>
+              <td><span class="tag-category-pill general">通用</span></td>
+              <td>178</td>
+            </tr>
+            <tr>
+              <td><a href="/tags/long_hair">long_hair</a></td>
+              <td><span class="tag-category-pill general">通用</span></td>
+              <td>156</td>
+            </tr>
+            <tr>
+              <td><a href="/tags/clouds">clouds</a></td>
+              <td><span class="tag-category-pill general">通用</span></td>
+              <td>134</td>
+            </tr>
+            <tr>
+              <td><a href="/tags/wlop">wlop</a></td>
+              <td><span class="tag-category-pill artist">画师</span></td>
+              <td>128</td>
+            </tr>
+            <tr>
+              <td><a href="/tags/original">original</a></td>
+              <td><span class="tag-category-pill copyright">作品</span></td>
+              <td>312</td>
+            </tr>
+            <tr>
+              <td><a href="/tags/landscape">landscape</a></td>
+              <td><span class="tag-category-pill general">通用</span></td>
+              <td>89</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="pagination">
+        <nav class="pagination-nav" aria-label="分页">
+          <button class="pagination-btn" disabled>
+            <svg width="16" height="16" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+          </button>
+          <a href="#" class="pagination-btn active">1</a>
+          <a href="#" class="pagination-btn">2</a>
+          <a href="#" class="pagination-btn">3</a>
+          <a href="#" class="pagination-btn">4</a>
+          <button class="pagination-btn">
+            <svg width="16" height="16" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+          </button>
+        </nav>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <span>
+        <a href="#" class="footer-link gradient-text">Kura Booru (Next)</a>
+        <span class="footer-tag">v1.2.0</span>
+      </span>
+      <span>个人动漫插画收藏</span>
+    </div>
+  </footer>
+
+  <script>
+    // Theme toggle
+    (function() {
+      var btn = document.getElementById('theme-toggle');
+      var icon = document.getElementById('theme-icon');
+      var sunPath = 'M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z';
+      var moonPath = 'M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 9.75C3 14.142 6.858 18 11.25 18c1.488 0 2.885-.334 4.134-.932a9.717 9.717 0 006.368-2.066z';
+      var monitorPath = 'M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h13.5A2.25 2.25 0 0121 5.25z';
+      var states = ['auto', 'light', 'dark'];
+      var current = localStorage.getItem('kura-theme-preference') || 'auto';
+      function updateIcon() {
+        if (current === 'auto') icon.querySelector('path').setAttribute('d', monitorPath);
+        else if (current === 'light') icon.querySelector('path').setAttribute('d', sunPath);
+        else icon.querySelector('path').setAttribute('d', moonPath);
+      }
+      function applyTheme(t) {
+        var resolved = t === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : t;
+        document.documentElement.classList.remove('light', 'dark');
+        document.documentElement.classList.add(resolved);
+      }
+      btn.addEventListener('click', function() {
+        btn.classList.add('spin');
+        setTimeout(function() { btn.classList.remove('spin'); }, 500);
+        current = states[(states.indexOf(current) + 1) % states.length];
+        localStorage.setItem('kura-theme-preference', current);
+        applyTheme(current);
+        setTimeout(updateIcon, 200);
+      });
+      updateIcon();
+    })();
+
+    // Sort toggle
+    (function() {
+      var btns = document.querySelectorAll('.sort-btn');
+      btns.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          btns.forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+        });
+      });
+    })();
+
+    // Category filter
+    (function() {
+      var chips = document.querySelectorAll('.category-chip');
+      chips.forEach(function(chip) {
+        chip.addEventListener('click', function(e) {
+          e.preventDefault();
+          chips.forEach(function(c) { c.classList.remove('active'); });
+          chip.classList.add('active');
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

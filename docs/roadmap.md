@@ -7,8 +7,6 @@
 - [ ] 性能优化（Redis 缓存热门查询）
 - [ ] 端到端测试
 - [ ] SSR 缓存启用（需先解决 Vary: Cookie + 缓存 key 问题）
-- [ ] 监控与告警（Prometheus + Grafana）
-- [ ] 自动化 CI/CD（Gitea Actions）
 - [ ] 数据库定期备份 cron
 - [ ] Admin 密码修改后旧 session 失效机制
 - [ ] SSE/WebSocket 任务状态推送
@@ -27,8 +25,6 @@
 
 ## 长期愿景（v0.4+）
 
-- 监控（Prometheus + Grafana）
-- 自动化 CI/CD（Gitea Actions）
 - 数据库定期备份 cron
 - SSE/WebSocket 任务状态推送
 - Twitter 完整 extractor

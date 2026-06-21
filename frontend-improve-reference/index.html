@@ -1,0 +1,1541 @@
+<!doctype html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="个人动漫插画收藏与展示平台" />
+  <meta name="theme-color" content="#7DD3C0" />
+  <title>Kura Booru</title>
+  <script is:inline>
+    (function() {
+      const stored = localStorage.getItem('kura-theme-preference');
+      let resolved;
+      if (stored === 'light' || stored === 'dark') {
+        resolved = stored;
+      } else {
+        resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      document.documentElement.classList.remove('light', 'dark');
+      document.documentElement.classList.add(resolved);
+    })();
+  </script>
+  <style>
+    /* === Design Tokens — Modern Minimal + Kura Brand === */
+    :root {
+      /* Surfaces */
+      --bg:          oklch(99% 0.002 240);
+      --surface:     oklch(100% 0 0);
+      --surface-alt: oklch(97% 0.003 240);
+
+      /* Text */
+      --fg:    oklch(18% 0.012 250);
+      --muted: oklch(54% 0.012 250);
+
+      /* Borders & Dividers */
+      --border:       oklch(92% 0.005 250);
+      --border-hover: oklch(82% 0.008 250);
+
+      /* Brand Accent — single color, not gradient */
+      --accent:        oklch(72% 0.12 175);
+      --accent-hover:  oklch(65% 0.14 175);
+      --accent-subtle: oklch(95% 0.03 175);
+
+      /* Status */
+      --success: oklch(65% 0.18 145);
+      --warning: oklch(75% 0.16 85);
+      --danger:  oklch(62% 0.2 25);
+
+      /* Tag categories */
+      --tag-artist:     oklch(70% 0.16 55);
+      --tag-character:  oklch(68% 0.16 340);
+      --tag-copyright:  oklch(62% 0.16 290);
+      --tag-general:    oklch(72% 0.12 175);
+      --tag-meta:       oklch(60% 0.01 250);
+
+      /* Shadows */
+      --shadow-sm:  0 1px 2px oklch(0% 0 0 / 0.04);
+      --shadow-md:  0 4px 12px oklch(0% 0 0 / 0.06);
+      --shadow-lg:  0 12px 32px oklch(0% 0 0 / 0.08);
+
+      /* Typography */
+      --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+      --font-body:    -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+      --font-mono:    ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+
+      /* Spacing scale */
+      --space-xs: 0.25rem;
+      --space-sm: 0.5rem;
+      --space-md: 1rem;
+      --space-lg: 1.5rem;
+      --space-xl: 2rem;
+      --space-2xl: 3rem;
+      --space-3xl: 4rem;
+
+      /* Radii */
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --radius-xl: 20px;
+      --radius-full: 9999px;
+
+      /* Transitions */
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --duration-fast: 120ms;
+      --duration-normal: 200ms;
+      --duration-slow: 350ms;
+
+      /* Layout */
+      --nav-height: 56px;
+      --content-max: 1400px;
+      --sidebar-width: 240px;
+    }
+
+    .dark {
+      --bg:          oklch(14% 0.008 260);
+      --surface:     oklch(18% 0.01 260);
+      --surface-alt: oklch(22% 0.012 260);
+      --fg:          oklch(92% 0.008 250);
+      --muted:       oklch(58% 0.012 250);
+      --border:      oklch(28% 0.01 260);
+      --border-hover:oklch(38% 0.014 260);
+      --accent:      oklch(72% 0.12 175);
+      --accent-hover:oklch(78% 0.14 175);
+      --accent-subtle:oklch(22% 0.04 175);
+      --shadow-sm:  0 1px 2px oklch(0% 0 0 / 0.2);
+      --shadow-md:  0 4px 12px oklch(0% 0 0 / 0.3);
+      --shadow-lg:  0 12px 32px oklch(0% 0 0 / 0.4);
+    }
+
+    /* === Reset & Base === */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      scroll-behavior: smooth;
+      -webkit-text-size-adjust: 100%;
+      font-size: clamp(14px, 0.875rem + 0.25vw, 16px);
+    }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      transition: background var(--duration-slow) var(--ease-out), color var(--duration-slow) var(--ease-out);
+    }
+
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+    img { display: block; max-width: 100%; }
+    ul, ol { list-style: none; }
+
+    /* === Focus === */
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+      border-radius: var(--radius-sm);
+    }
+
+    /* === Selection === */
+    ::selection {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    /* === Scrollbar === */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+    /* === Utility Classes === */
+    .container {
+      width: 100%;
+      max-width: var(--content-max);
+      margin: 0 auto;
+      padding: 0 var(--space-lg);
+    }
+
+    .gradient-text {
+      background: linear-gradient(135deg, oklch(72% 0.12 175), oklch(78% 0.1 200));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .sr-only {
+      position: absolute; width: 1px; height: 1px;
+      padding: 0; margin: -1px; overflow: hidden;
+      clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+    }
+
+    /* === Navigation === */
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      height: var(--nav-height);
+      border-bottom: 1px solid var(--border);
+      background: oklch(14% 0.008 260 / 0.8);
+      backdrop-filter: blur(16px) saturate(1.4);
+      -webkit-backdrop-filter: blur(16px) saturate(1.4);
+      transition: background var(--duration-slow) var(--ease-out), border-color var(--duration-slow) var(--ease-out);
+    }
+
+    :root:not(.dark) .nav {
+      background: oklch(99% 0.002 240 / 0.85);
+    }
+
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 100%;
+      gap: var(--space-md);
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      font-family: var(--font-display);
+      letter-spacing: -0.02em;
+      flex-shrink: 0;
+    }
+
+    .nav-brand-name {
+      font-size: 1.25rem;
+      font-weight: 700;
+    }
+
+    .nav-brand-sub {
+      font-size: 1.25rem;
+      font-weight: 300;
+      color: var(--muted);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .nav-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--muted);
+      transition: color var(--duration-fast), background var(--duration-fast);
+      white-space: nowrap;
+    }
+
+    .nav-link:hover {
+      color: var(--fg);
+      background: var(--accent-subtle);
+    }
+
+    .nav-link.active {
+      color: var(--accent);
+    }
+
+    .nav-link svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    .nav-divider {
+      width: 1px;
+      height: 20px;
+      background: var(--border);
+      margin: 0 4px;
+      flex-shrink: 0;
+    }
+
+    /* Theme toggle */
+    .theme-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      transition: background var(--duration-fast);
+    }
+
+    .theme-toggle:hover {
+      background: var(--accent-subtle);
+    }
+
+    .theme-toggle svg {
+      width: 18px;
+      height: 18px;
+      color: var(--muted);
+      transition: color var(--duration-fast), transform var(--duration-normal);
+    }
+
+    .theme-toggle:hover svg {
+      color: var(--fg);
+      transform: scale(1.1);
+    }
+
+    /* Admin dropdown */
+    .admin-trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--accent);
+      transition: background var(--duration-fast);
+    }
+
+    .admin-trigger:hover {
+      background: var(--accent-subtle);
+    }
+
+    .admin-trigger svg { width: 16px; height: 16px; }
+    .admin-chevron { width: 14px !important; height: 14px !important; transition: transform var(--duration-fast); }
+    .admin-trigger.open .admin-chevron { transform: rotate(180deg); }
+
+    .admin-dropdown {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      width: 180px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-lg);
+      padding: 4px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-4px);
+      transition: opacity var(--duration-fast), visibility var(--duration-fast), transform var(--duration-fast) var(--ease-out);
+      z-index: 200;
+    }
+
+    .admin-dropdown.open {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .admin-dropdown a,
+    .admin-dropdown button {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.8125rem;
+      color: var(--fg);
+      transition: background var(--duration-fast);
+      text-align: left;
+    }
+
+    .admin-dropdown a:hover,
+    .admin-dropdown button:hover {
+      background: var(--accent-subtle);
+    }
+
+    .admin-dropdown svg {
+      width: 16px;
+      height: 16px;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .admin-dropdown .danger { color: var(--danger); }
+    .admin-dropdown .danger svg { color: var(--danger); }
+
+    .admin-separator {
+      height: 1px;
+      background: var(--border);
+      margin: 4px 8px;
+    }
+
+    /* Mobile menu */
+    .mobile-menu-btn {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+    }
+
+    .mobile-menu-btn:hover { background: var(--accent-subtle); }
+    .mobile-menu-btn svg { width: 20px; height: 20px; color: var(--muted); }
+
+    .mobile-menu {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 150;
+      background: oklch(0% 0 0 / 0.5);
+      backdrop-filter: blur(4px);
+    }
+
+    .mobile-menu.open { display: block; }
+
+    .mobile-menu-panel {
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: min(280px, 80vw);
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      padding: var(--space-lg);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-sm);
+      animation: slideIn var(--duration-normal) var(--ease-out);
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); }
+      to { transform: translateX(0); }
+    }
+
+    .mobile-menu-panel a {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.9375rem;
+      font-weight: 500;
+      color: var(--fg);
+      transition: background var(--duration-fast);
+    }
+
+    .mobile-menu-panel a:hover { background: var(--accent-subtle); }
+    .mobile-menu-panel svg { width: 20px; height: 20px; color: var(--muted); }
+
+    .mobile-menu-close {
+      align-self: flex-end;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-sm);
+      margin-bottom: var(--space-md);
+    }
+
+    .mobile-menu-close:hover { background: var(--accent-subtle); }
+    .mobile-menu-close svg { width: 20px; height: 20px; }
+
+    /* Admin banner */
+    .admin-banner {
+      background: var(--accent-subtle);
+      border-bottom: 1px solid oklch(72% 0.12 175 / 0.2);
+      color: var(--accent);
+      text-align: center;
+      font-size: 0.75rem;
+      font-weight: 500;
+      padding: 4px var(--space-md);
+      letter-spacing: 0.02em;
+    }
+
+    /* === Page Header === */
+    .page-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: var(--space-lg);
+      margin-bottom: var(--space-xl);
+      padding-top: var(--space-xl);
+    }
+
+    .page-title {
+      font-family: var(--font-display);
+      font-size: clamp(1.5rem, 2.5vw, 2rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+
+    .page-subtitle {
+      font-size: 0.8125rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* === Filter Bar === */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      flex-wrap: wrap;
+    }
+
+    .filter-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 12px;
+      border-radius: var(--radius-full);
+      font-size: 0.8125rem;
+      font-weight: 500;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      transition: all var(--duration-fast);
+      white-space: nowrap;
+    }
+
+    .filter-chip:hover {
+      border-color: var(--border-hover);
+      color: var(--fg);
+    }
+
+    .filter-chip.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: oklch(14% 0.008 260);
+    }
+
+    .filter-chip.rating-safe.active { background: var(--success); border-color: var(--success); }
+    .filter-chip.rating-q.active { background: var(--warning); border-color: var(--warning); }
+    .filter-chip.rating-e.active { background: var(--danger); border-color: var(--danger); }
+
+    /* === Masonry Grid === */
+    .masonry {
+      columns: 2;
+      column-gap: 12px;
+    }
+
+    @media (min-width: 640px)  { .masonry { columns: 3; } }
+    @media (min-width: 768px)  { .masonry { columns: 4; } }
+    @media (min-width: 1024px) { .masonry { columns: 5; } }
+    @media (min-width: 1280px) { .masonry { columns: 6; } }
+
+    .masonry-item {
+      break-inside: avoid;
+      margin-bottom: 12px;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      position: relative;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      transition: border-color var(--duration-fast), box-shadow var(--duration-normal) var(--ease-out);
+    }
+
+    .masonry-item:hover {
+      border-color: var(--border-hover);
+      box-shadow: var(--shadow-md);
+    }
+
+    .masonry-item img {
+      width: 100%;
+      height: auto;
+      display: block;
+      transition: transform var(--duration-slow) var(--ease-out);
+    }
+
+    .masonry-item:hover img {
+      transform: scale(1.02);
+    }
+
+    /* Hover overlay */
+    .masonry-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, oklch(0% 0 0 / 0.7) 0%, oklch(0% 0 0 / 0) 50%);
+      opacity: 0;
+      transition: opacity var(--duration-normal) var(--ease-out);
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 10px;
+      pointer-events: none;
+    }
+
+    .masonry-item:hover .masonry-overlay {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .masonry-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .masonry-tag {
+      font-size: 0.6875rem;
+      padding: 2px 7px;
+      border-radius: var(--radius-sm);
+      background: oklch(100% 0 0 / 0.15);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      max-width: 90px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .masonry-tag-more {
+      font-size: 0.6875rem;
+      padding: 2px 7px;
+      border-radius: var(--radius-sm);
+      background: oklch(100% 0 0 / 0.15);
+      backdrop-filter: blur(8px);
+      color: oklch(100% 0 0 / 0.7);
+    }
+
+    /* Rating badge */
+    .rating-badge {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      font-size: 0.625rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      letter-spacing: 0.04em;
+      z-index: 2;
+    }
+
+    .rating-badge.safe { background: oklch(65% 0.18 145 / 0.9); color: #fff; }
+    .rating-badge.questionable { background: oklch(75% 0.16 85 / 0.9); color: oklch(20% 0.02 85); }
+    .rating-badge.explicit { background: oklch(62% 0.2 25 / 0.9); color: #fff; }
+
+    /* === Pagination === */
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-md);
+      padding: var(--space-xl) 0;
+      flex-wrap: wrap;
+    }
+
+    .pagination-nav {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .pagination-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--muted);
+      transition: all var(--duration-fast);
+    }
+
+    .pagination-btn:hover:not(.active):not(:disabled) {
+      color: var(--fg);
+      background: var(--accent-subtle);
+    }
+
+    .pagination-btn.active {
+      background: var(--accent);
+      color: oklch(14% 0.008 260);
+      font-weight: 700;
+    }
+
+    .pagination-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .pagination-ellipsis {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      color: var(--muted);
+      font-size: 0.875rem;
+    }
+
+    .per-page {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.8125rem;
+      color: var(--muted);
+    }
+
+    .per-page a {
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      transition: all var(--duration-fast);
+    }
+
+    .per-page a:hover { color: var(--fg); background: var(--accent-subtle); }
+    .per-page a.active { background: var(--accent); color: oklch(14% 0.008 260); font-weight: 700; }
+
+    /* === Empty State === */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-3xl) var(--space-lg);
+      text-align: center;
+    }
+
+    .empty-state-icon {
+      width: 64px;
+      height: 64px;
+      color: var(--border);
+      margin-bottom: var(--space-lg);
+    }
+
+    .empty-state-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      margin-bottom: var(--space-sm);
+    }
+
+    .empty-state-desc {
+      font-size: 0.875rem;
+      color: var(--muted);
+      max-width: 320px;
+    }
+
+    /* === Footer === */
+    .footer {
+      border-top: 1px solid var(--border);
+      padding: var(--space-xl) 0;
+      margin-top: auto;
+    }
+
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.8125rem;
+      color: var(--muted);
+    }
+
+    .footer-link {
+      font-weight: 500;
+      transition: opacity var(--duration-fast);
+    }
+
+    .footer-link:hover { opacity: 0.7; }
+
+    .footer-tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+      border: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      margin-left: 8px;
+    }
+
+    /* === Responsive === */
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .mobile-menu-btn { display: flex; }
+      .page-header { flex-direction: column; align-items: flex-start; }
+      .container { padding: 0 var(--space-md); }
+      .masonry { column-gap: 8px; }
+      .masonry-item { margin-bottom: 8px; border-radius: var(--radius-sm); }
+    }
+
+    @media (min-width: 769px) {
+      .mobile-menu-btn { display: none; }
+      .mobile-menu { display: none !important; }
+    }
+
+    /* === Inline search (gallery page) === */
+    .inline-search {
+      position: relative;
+      max-width: 320px;
+    }
+
+    .inline-search input {
+      width: 100%;
+      padding: 7px 12px 7px 34px;
+      border-radius: var(--radius-full);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--fg);
+      font-size: 0.8125rem;
+      transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+    }
+
+    .inline-search input::placeholder { color: var(--muted); }
+
+    .inline-search input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-subtle);
+    }
+
+    .inline-search-icon {
+      position: absolute;
+      left: 11px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 16px;
+      height: 16px;
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    /* === View toggle === */
+    .view-toggle {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 2px;
+    }
+
+    .view-toggle-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 28px;
+      border-radius: 4px;
+      transition: all var(--duration-fast);
+    }
+
+    .view-toggle-btn svg { width: 16px; height: 16px; color: var(--muted); }
+    .view-toggle-btn.active { background: var(--accent-subtle); }
+    .view-toggle-btn.active svg { color: var(--accent); }
+    .view-toggle-btn:hover:not(.active) svg { color: var(--fg); }
+
+    /* ============================================
+       MOTION & TEXTURE SYSTEM
+       ============================================ */
+
+    /* --- Subtle noise texture overlay --- */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      pointer-events: none;
+      opacity: 0.018;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-repeat: repeat;
+      background-size: 200px 200px;
+    }
+    .dark body::before { opacity: 0.03; }
+
+    /* --- Page entrance --- */
+    @keyframes pageIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    main { animation: pageIn 0.5s var(--ease-out) both; }
+
+    /* --- Staggered card entrance --- */
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(20px) scale(0.97); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .masonry-item {
+      animation: cardIn 0.5s var(--ease-out) both;
+    }
+    .masonry-item:nth-child(1)  { animation-delay: 0.02s; }
+    .masonry-item:nth-child(2)  { animation-delay: 0.06s; }
+    .masonry-item:nth-child(3)  { animation-delay: 0.10s; }
+    .masonry-item:nth-child(4)  { animation-delay: 0.14s; }
+    .masonry-item:nth-child(5)  { animation-delay: 0.18s; }
+    .masonry-item:nth-child(6)  { animation-delay: 0.22s; }
+    .masonry-item:nth-child(7)  { animation-delay: 0.26s; }
+    .masonry-item:nth-child(8)  { animation-delay: 0.30s; }
+    .masonry-item:nth-child(9)  { animation-delay: 0.34s; }
+    .masonry-item:nth-child(10) { animation-delay: 0.38s; }
+    .masonry-item:nth-child(11) { animation-delay: 0.42s; }
+    .masonry-item:nth-child(12) { animation-delay: 0.46s; }
+
+    /* Respect reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      .masonry-item, main { animation: none; }
+    }
+
+    /* --- Card hover: enhanced with glow + lift --- */
+    .masonry-item {
+      transition: border-color var(--duration-fast),
+                  box-shadow 0.35s var(--ease-out),
+                  transform 0.35s var(--ease-out);
+    }
+    .masonry-item:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 24px oklch(72% 0.12 175 / 0.08),
+                  0 2px 8px oklch(0% 0 0 / 0.06);
+    }
+    .dark .masonry-item:hover {
+      box-shadow: 0 8px 24px oklch(72% 0.12 175 / 0.12),
+                  0 2px 8px oklch(0% 0 0 / 0.2);
+    }
+
+    /* --- Tag pills: slide-in on hover overlay --- */
+    @keyframes tagSlideUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .masonry-item:hover .masonry-tag,
+    .masonry-item:hover .masonry-tag-more {
+      animation: tagSlideUp 0.25s var(--ease-out) both;
+    }
+    .masonry-item:hover .masonry-tag:nth-child(1),
+    .masonry-item:hover .masonry-tag-more:nth-child(1) { animation-delay: 0s; }
+    .masonry-item:hover .masonry-tag:nth-child(2),
+    .masonry-item:hover .masonry-tag-more:nth-child(2) { animation-delay: 0.03s; }
+    .masonry-item:hover .masonry-tag:nth-child(3),
+    .masonry-item:hover .masonry-tag-more:nth-child(3) { animation-delay: 0.06s; }
+    .masonry-item:hover .masonry-tag:nth-child(4),
+    .masonry-item:hover .masonry-tag-more:nth-child(4) { animation-delay: 0.09s; }
+
+    /* --- Admin dropdown: spring-like bounce --- */
+    @keyframes dropIn {
+      from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+      60%  { transform: translateY(2px) scale(1.01); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes dropOut {
+      from { opacity: 1; transform: translateY(0) scale(1); }
+      to   { opacity: 0; transform: translateY(-6px) scale(0.96); }
+    }
+    .admin-dropdown.open {
+      animation: dropIn 0.3s var(--ease-out) both;
+    }
+    .admin-dropdown.closing {
+      animation: dropOut 0.15s ease-in both;
+    }
+
+    /* --- Theme toggle: rotation transition --- */
+    .theme-toggle svg {
+      transition: color var(--duration-fast),
+                  transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .theme-toggle:active svg {
+      transform: scale(0.85);
+    }
+    .theme-toggle.spin svg {
+      transform: rotate(360deg) scale(1.1);
+    }
+
+    /* --- Filter chips: smooth width + bg --- */
+    .filter-chip {
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s var(--ease-out);
+    }
+    .filter-chip::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--accent);
+      opacity: 0;
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.3s var(--ease-out), opacity 0.3s;
+      border-radius: inherit;
+      z-index: -1;
+    }
+    .filter-chip.active::after {
+      opacity: 1;
+      transform: scaleX(1);
+    }
+
+    /* --- Page header: underline sweep --- */
+    .page-title {
+      position: relative;
+      display: inline-block;
+    }
+    .page-title::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      bottom: -3px;
+      height: 2px;
+      width: 0;
+      background: var(--accent);
+      border-radius: 1px;
+      transition: width 0.6s var(--ease-out);
+    }
+    .page-title.visible::after {
+      width: 100%;
+    }
+
+    /* --- Pagination: press feedback --- */
+    .pagination-btn:not(:disabled) {
+      transition: all var(--duration-fast);
+    }
+    .pagination-btn:not(:disabled):active {
+      transform: scale(0.92);
+    }
+
+    /* --- Button press (shared) --- */
+    .action-press {
+      transition: transform 0.1s ease, box-shadow var(--duration-fast);
+    }
+    .action-press:active {
+      transform: scale(0.96);
+    }
+
+    /* --- Nav link: underline on hover --- */
+    .nav-link {
+      position: relative;
+    }
+    .nav-link::after {
+      content: '';
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 4px;
+      height: 1.5px;
+      background: var(--accent);
+      border-radius: 1px;
+      transform: scaleX(0);
+      transform-origin: center;
+      transition: transform 0.25s var(--ease-out);
+    }
+    .nav-link:hover::after,
+    .nav-link.active::after {
+      transform: scaleX(1);
+    }
+
+    /* --- Skeleton shimmer for loading images --- */
+    @keyframes shimmer {
+      0%   { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .masonry-item img {
+      background: linear-gradient(
+        90deg,
+        var(--surface-alt) 25%,
+        var(--border) 37%,
+        var(--surface-alt) 63%
+      );
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+    }
+    .masonry-item img.loaded {
+      animation: none;
+      background: none;
+    }
+
+    /* --- Admin banner: gentle pulse --- */
+    @keyframes bannerPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.85; }
+    }
+    .admin-banner {
+      animation: bannerPulse 3s ease-in-out infinite;
+    }
+
+    /* --- Scroll-triggered fade for page header --- */
+    .page-header {
+      transition: opacity 0.3s, transform 0.3s var(--ease-out);
+    }
+    .page-header.scrolled-past {
+      opacity: 0.6;
+      transform: translateY(-2px);
+    }
+
+    /* --- Mobile menu: backdrop fade --- */
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    .mobile-menu.open {
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    /* --- View toggle: pill slide --- */
+    .view-toggle {
+      position: relative;
+    }
+    .view-toggle-btn {
+      position: relative;
+      z-index: 1;
+      transition: color 0.2s;
+    }
+    .view-toggle-btn.active {
+      transition: color 0.2s 0.05s;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a href="/" class="nav-brand">
+        <span class="nav-brand-name gradient-text">Kura</span>
+        <span class="nav-brand-sub">Booru</span>
+      </a>
+
+      <div class="nav-links">
+        <a href="/" class="nav-link active">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z"/></svg>
+          画廊
+        </a>
+        <a href="/search" class="nav-link">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
+          搜索
+        </a>
+        <a href="/tags" class="nav-link">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.34a18.095 18.095 0 005.223-5.223c.534-.827.36-1.908-.34-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6z"/></svg>
+          标签
+        </a>
+
+        <div class="nav-divider"></div>
+
+        <!-- Admin dropdown -->
+        <div style="position:relative" id="admin-wrapper">
+          <button class="admin-trigger" id="admin-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>
+            管理
+            <svg class="admin-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+          </button>
+          <div class="admin-dropdown" id="admin-dropdown">
+            <a href="/admin/posts">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z"/></svg>
+              图片管理
+            </a>
+            <a href="/admin/auto-rating">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75"/></svg>
+              自动评级
+            </a>
+            <a href="/admin/import">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+              导入图片
+            </a>
+            <div class="admin-separator"></div>
+            <a href="/admin/password">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>
+              修改密码
+            </a>
+            <button class="danger" id="logout-btn">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9"/></svg>
+              退出登录
+            </button>
+          </div>
+        </div>
+
+        <div class="nav-divider"></div>
+
+        <button class="theme-toggle" id="theme-toggle" title="切换主题">
+          <svg id="theme-icon-moon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 9.75C3 14.142 6.858 18 11.25 18c1.488 0 2.885-.334 4.134-.932a9.717 9.717 0 006.368-2.066z"/></svg>
+        </button>
+      </div>
+
+      <!-- Mobile menu button -->
+      <button class="mobile-menu-btn" id="mobile-menu-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Admin banner -->
+  <div class="admin-banner">
+    管理模式 — 可见所有评级内容（含敏感/限制）
+  </div>
+
+  <!-- Main content -->
+  <main class="flex-1">
+    <div class="container">
+      <!-- Page header -->
+      <div class="page-header">
+        <div>
+          <h1 class="page-title"><span class="gradient-text">画廊</span></h1>
+          <p class="page-subtitle">1,247 张插画</p>
+        </div>
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+          <!-- Inline search -->
+          <div class="inline-search">
+            <svg class="inline-search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
+            <input type="text" placeholder="搜索标签…" id="inline-search-input" />
+          </div>
+          <!-- View toggle -->
+          <div class="view-toggle">
+            <button class="view-toggle-btn active" title="瀑布流">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"/></svg>
+            </button>
+            <button class="view-toggle-btn" title="列表">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z"/></svg>
+            </button>
+          </div>
+          <!-- Rating filter (admin) -->
+          <div class="filter-bar">
+            <a href="/" class="filter-chip active">全部</a>
+            <a href="/?rating=safe" class="filter-chip rating-safe">公开</a>
+            <a href="/?rating=questionable" class="filter-chip rating-q">敏感</a>
+            <a href="/?rating=explicit" class="filter-chip rating-e">限制</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Masonry grid -->
+      <div class="masonry" id="gallery">
+        <!-- Card 1 -->
+        <a href="/posts/abc123" class="masonry-item">
+          <img src="https://picsum.photos/seed/kura1/400/560" alt="插画" loading="lazy" />
+          <span class="rating-badge explicit">限</span>
+          <div class="masonry-overlay">
+            <div class="masonry-tags">
+              <span class="masonry-tag">landscape</span>
+              <span class="masonry-tag">sunset</span>
+              <span class="masonry-tag">sky</span>
+              <span class="masonry-tag-more">+8</span>
+            </div>
+          </div>
+        </a>
+        <!-- Card 2 -->
+        <a href="/posts/def456" class="masonry-item">
+          <img src="https://picsum.photos/seed/kura2/400/300" alt="插画" loading="lazy" />
+          <div class="masonry-overlay">
+            <div class="masonry-tags">
+              <span class="masonry-tag">character</span>
+              <span class="masonry-tag">uniform</span>
+              <span class="masonry-tag-more">+3</span>
+            </div>
+          </div>
+        </a>
+        <!-- Card 3 -->
+        <a href="/posts/ghi789" class="masonry-item">
+          <img src="https://picsum.photos/seed/kura3/400/500" alt="插画" loading="lazy" />
+          <span class="rating-badge questionable">敏</span>
+          <div class="masonry-overlay">
+            <div class="masonry-tags">
+              <span class="masonry-tag">artwork</span>
+              <span class="masonry-tag">water</span>
+              <span class="masonry-tag">blue</span>
+              <span class="masonry-tag-more">+12</span>
+            </div>
+          </div>
+        </a>
+        <!-- Card 4 -->
+        <a href="/posts/jkl012" class="masonry-item">
+          <img src="https://picsum.photos/seed/kura4/400/350" alt="插画" loading="lazy" />
+          <div class="masonry-overlay">
+            <div class="masonry-tags">
+              <span class="masonry-tag">forest</span>
+              <span class="masonry-tag">nature</span>
+            </div>
+          </div>
+        </a>
+        <!-- Card 5 -->
+        <a href="/posts/mno345" class="masonry-item">
+          <img src="https://picsum.photos/seed/kura5/400/600" alt="插画" loading="lazy" />
+          <div class="masonry-overlay">
+            <div class="masonry-tags">
+              <span class="masonry-tag">portrait</span>
+              <span class="masonry-tag">girl</span>
+              <span class="masonry-tag-more">+5</span>
+            </div>
+          </div>
+        </a>
+        <!-- Card 6 -->
+        <a href="/posts/pqr678" class="masonry-item">
+          <img src="https://picsum.photos/seed/kura6/400/280" alt="插画" loading="lazy" />
+          <div class="masonry-overlay">
+            <div class="masonry-tags">
+              <span class="masonry-tag">city</span>
+              <span class="masonry-tag">night</span>
+              <span class="masonry-tag">lights</span>
+            </div>
+          </div>
+        </a>
+        <!-- Card 7 -->
+        <a href="/posts/stu901" class="masonry-item">
+          <img src="https://picsum.photos/seed/kura7/400/450" alt="插画" loading="lazy" />
+          <span class="rating-badge explicit">限</span>
+          <div class="masonry-overlay">
+            <div class="masonry-tags">
+              <span class="masonry-tag">fantasy</span>
+              <span class="masonry-tag">dragon</span>
+              <span class="masonry-tag-more">+6</span>
+            </div>
+          </div>
+        </a>
+        <!-- Card 8 -->
+        <a href="/posts/vwx234" class="masonry-item">
+          <img src="https://picsum.photos/seed/kura8/400/380" alt="插画" loading="lazy" />
+          <div class="masonry-overlay">
+            <div class="masonry-tags">
+              <span class="masonry-tag">flower</span>
+              <span class="masonry-tag">spring</span>
+            </div>
+          </div>
+        </a>
+        <!-- Card 9 -->
+        <a href="/posts/yza567" class="masonry-item">
+          <img src="https://picsum.photos/seed/kura9/400/520" alt="插画" loading="lazy" />
+          <div class="masonry-overlay">
+            <div class="masonry-tags">
+              <span class="masonry-tag">ocean</span>
+              <span class="masonry-tag">wave</span>
+              <span class="masonry-tag-more">+4</span>
+            </div>
+          </div>
+        </a>
+        <!-- Card 10 -->
+        <a href="/posts/bcd890" class="masonry-item">
+          <img src="https://picsum.photos/seed/kura10/400/320" alt="插画" loading="lazy" />
+          <span class="rating-badge questionable">敏</span>
+          <div class="masonry-overlay">
+            <div class="masonry-tags">
+              <span class="masonry-tag">cat</span>
+              <span class="masonry-tag">cute</span>
+              <span class="masonry-tag">animal</span>
+            </div>
+          </div>
+        </a>
+        <!-- Card 11 -->
+        <a href="/posts/efg123" class="masonry-item">
+          <img src="https://picsum.photos/seed/kura11/400/440" alt="插画" loading="lazy" />
+          <div class="masonry-overlay">
+            <div class="masonry-tags">
+              <span class="masonry-tag">space</span>
+              <span class="masonry-tag">stars</span>
+              <span class="masonry-tag-more">+7</span>
+            </div>
+          </div>
+        </a>
+        <!-- Card 12 -->
+        <a href="/posts/hij456" class="masonry-item">
+          <img src="https://picsum.photos/seed/kura12/400/360" alt="插画" loading="lazy" />
+          <div class="masonry-overlay">
+            <div class="masonry-tags">
+              <span class="masonry-tag">mountain</span>
+              <span class="masonry-tag">snow</span>
+            </div>
+          </div>
+        </a>
+      </div>
+
+      <!-- Pagination -->
+      <div class="pagination">
+        <nav class="pagination-nav" aria-label="分页">
+          <button class="pagination-btn" disabled aria-label="上一页">
+            <svg width="16" height="16" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+          </button>
+          <a href="/?page=1" class="pagination-btn active">1</a>
+          <a href="/?page=2" class="pagination-btn">2</a>
+          <a href="/?page=3" class="pagination-btn">3</a>
+          <span class="pagination-ellipsis">…</span>
+          <a href="/?page=32" class="pagination-btn">32</a>
+          <button class="pagination-btn" aria-label="下一页">
+            <svg width="16" height="16" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+          </button>
+        </nav>
+        <div class="per-page">
+          <span>每页</span>
+          <a href="/?per_page=20">20</a>
+          <a href="/?per_page=40" class="active">40</a>
+          <a href="/?per_page=100">100</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <span>
+        <a href="https://gitea.lainns.xyz/lainsaka/kura-booru-next" target="_blank" rel="noopener noreferrer" class="footer-link gradient-text">Kura Booru (Next)</a>
+        <span class="footer-tag">v1.2.0</span>
+      </span>
+      <span>个人动漫插画收藏</span>
+    </div>
+  </footer>
+
+  <!-- Mobile menu -->
+  <div class="mobile-menu" id="mobile-menu">
+    <div class="mobile-menu-panel">
+      <button class="mobile-menu-close" id="mobile-menu-close">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+      <a href="/">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z"/></svg>
+        画廊
+      </a>
+      <a href="/search">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
+        搜索
+      </a>
+      <a href="/tags">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.34a18.095 18.095 0 005.223-5.223c.534-.827.36-1.908-.34-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/></svg>
+        标签
+      </a>
+      <div style="height:1px; background:var(--border); margin:8px 0;"></div>
+      <a href="/admin/posts">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>
+        管理面板
+      </a>
+    </div>
+  </div>
+
+  <script>
+    // Theme toggle — with spin animation
+    (function() {
+      var btn = document.getElementById('theme-toggle');
+      var icon = document.getElementById('theme-icon-moon');
+      var sunPath = 'M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z';
+      var moonPath = 'M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 9.75C3 14.142 6.858 18 11.25 18c1.488 0 2.885-.334 4.134-.932a9.717 9.717 0 006.368-2.066z';
+      var monitorPath = 'M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h13.5A2.25 2.25 0 0121 5.25z';
+
+      var states = ['auto', 'light', 'dark'];
+      var current = localStorage.getItem('kura-theme-preference') || 'auto';
+
+      function updateIcon() {
+        var p = current;
+        if (p === 'auto') icon.querySelector('path').setAttribute('d', monitorPath);
+        else if (p === 'light') icon.querySelector('path').setAttribute('d', sunPath);
+        else icon.querySelector('path').setAttribute('d', moonPath);
+        btn.title = '主题：' + (p === 'auto' ? '自动' : p === 'light' ? '浅色' : '深色');
+      }
+
+      function applyTheme(t) {
+        var resolved = t;
+        if (t === 'auto') resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.classList.remove('light', 'dark');
+        document.documentElement.classList.add(resolved);
+      }
+
+      btn.addEventListener('click', function() {
+        // Trigger spin animation
+        btn.classList.add('spin');
+        setTimeout(function() { btn.classList.remove('spin'); }, 500);
+
+        current = states[(states.indexOf(current) + 1) % states.length];
+        localStorage.setItem('kura-theme-preference', current);
+        applyTheme(current);
+        // Delay icon swap to mid-rotation
+        setTimeout(updateIcon, 200);
+      });
+
+      updateIcon();
+    })();
+
+    // Admin dropdown — with closing animation
+    (function() {
+      var btn = document.getElementById('admin-btn');
+      var dropdown = document.getElementById('admin-dropdown');
+      if (!btn || !dropdown) return;
+
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (dropdown.classList.contains('open')) {
+          dropdown.classList.add('closing');
+          dropdown.classList.remove('open');
+          btn.classList.remove('open');
+          setTimeout(function() { dropdown.classList.remove('closing'); }, 150);
+        } else {
+          dropdown.classList.remove('closing');
+          dropdown.classList.add('open');
+          btn.classList.add('open');
+        }
+      });
+
+      document.addEventListener('click', function(e) {
+        var wrapper = document.getElementById('admin-wrapper');
+        if (wrapper && !wrapper.contains(e.target)) {
+          if (dropdown.classList.contains('open')) {
+            dropdown.classList.add('closing');
+            dropdown.classList.remove('open');
+            btn.classList.remove('open');
+            setTimeout(function() { dropdown.classList.remove('closing'); }, 150);
+          }
+        }
+      });
+    })();
+
+    // Mobile menu
+    (function() {
+      var openBtn = document.getElementById('mobile-menu-btn');
+      var menu = document.getElementById('mobile-menu');
+      var closeBtn = document.getElementById('mobile-menu-close');
+      if (!openBtn || !menu) return;
+
+      openBtn.addEventListener('click', function() { menu.classList.add('open'); });
+      closeBtn.addEventListener('click', function() { menu.classList.remove('open'); });
+      menu.addEventListener('click', function(e) {
+        if (e.target === menu) menu.classList.remove('open');
+      });
+    })();
+
+    // Inline search
+    (function() {
+      var input = document.getElementById('inline-search-input');
+      if (!input) return;
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && input.value.trim()) {
+          window.location.href = '/search?q=' + encodeURIComponent(input.value.trim());
+        }
+      });
+    })();
+
+    // View toggle
+    (function() {
+      var btns = document.querySelectorAll('.view-toggle-btn');
+      btns.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          btns.forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+        });
+      });
+    })();
+
+    // Image loaded: remove shimmer
+    (function() {
+      document.querySelectorAll('.masonry-item img').forEach(function(img) {
+        if (img.complete) {
+          img.classList.add('loaded');
+        } else {
+          img.addEventListener('load', function() { img.classList.add('loaded'); });
+        }
+      });
+    })();
+
+    // Page title underline entrance
+    (function() {
+      var title = document.querySelector('.page-title');
+      if (title) {
+        setTimeout(function() { title.classList.add('visible'); }, 300);
+      }
+    })();
+
+    // Scroll: dim page header
+    (function() {
+      var header = document.querySelector('.page-header');
+      if (!header) return;
+      var ticking = false;
+      window.addEventListener('scroll', function() {
+        if (!ticking) {
+          requestAnimationFrame(function() {
+            header.classList.toggle('scrolled-past', window.scrollY > 80);
+            ticking = false;
+          });
+          ticking = true;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
