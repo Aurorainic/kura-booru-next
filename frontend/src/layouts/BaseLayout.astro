@@ -169,9 +169,13 @@ const isAdmin = Astro.locals.isAdmin ?? false;
       </div>
     </nav>
 
-    {isAdmin && (
-      <div class="bg-[var(--accent-subtle)] border-b border-[var(--accent-color)]/20 text-[var(--accent-color)] text-center text-xs py-1 font-medium" style="animation: bannerPulse 3s ease-in-out infinite;">
+    {isAdmin ? (
+      <div class="bg-[var(--accent-subtle)] border-b border-[var(--accent-color)]/20 text-[var(--accent-color)] text-center text-xs py-1 font-medium">
         🔒 管理模式 — 可见所有评级内容（含敏感/限制）
+      </div>
+    ) : (
+      <div class="bg-oklch(0.93 0.02 240) dark:bg-oklch(0.25 0.015 260) border-b border-oklch(0.82 0.01 240) dark:border-oklch(0.35 0.015 260) text-center text-xs py-1 text-oklch(0.35 0.02 260) dark:text-oklch(0.7 0.02 240)">
+        本项目开发中 | 非管理员仅可浏览<strong>安全</strong>内容
       </div>
     )}
 
