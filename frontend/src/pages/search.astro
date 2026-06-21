@@ -26,14 +26,6 @@ if (query) {
     // Keep empty results
   }
 }
-
-function buildPageUrl(p: number, pp: number): string {
-  const params = new URLSearchParams();
-  params.set("q", query);
-  if (p > 1) params.set("page", String(p));
-  if (pp !== 40) params.set("per_page", String(pp));
-  return `/search?${params.toString()}`;
-}
 ---
 
 <BaseLayout title={query ? `搜索：${query}` : "搜索"} description={query ? `"${query}" 的搜索结果` : "按标签搜索插画"}>
@@ -109,7 +101,6 @@ function buildPageUrl(p: number, pp: number): string {
         currentPage={page}
         totalPages={total_pages}
         perPage={perPage}
-        buildUrl={buildPageUrl}
       />
     )}
   </div>

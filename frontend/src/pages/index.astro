@@ -22,15 +22,6 @@ try {
 }
 
 const { items: posts, total, total_pages } = data;
-
-function buildPageUrl(p: number, pp: number): string {
-  const params = new URLSearchParams();
-  if (p > 1) params.set("page", String(p));
-  if (pp !== 40) params.set("per_page", String(pp));
-  if (rating) params.set("rating", rating);
-  const qs = params.toString();
-  return qs ? `/?${qs}` : "/";
-}
 ---
 
 <BaseLayout title={page > 1 ? `第 ${page} 页` : undefined} description={`浏览动漫插画 — 共 ${total} 张`}>
@@ -87,7 +78,6 @@ function buildPageUrl(p: number, pp: number): string {
         currentPage={page}
         totalPages={total_pages}
         perPage={perPage}
-        buildUrl={buildPageUrl}
       />
     )}
   </div>

@@ -27,15 +27,6 @@ const categories = [
   { value: "meta", label: "元信息" },
 ];
 
-function buildPageUrl(p: number, pp: number): string {
-  const params = new URLSearchParams();
-  if (p > 1) params.set("page", String(p));
-  if (sort !== "count") params.set("sort", sort);
-  if (category) params.set("category", category);
-  const qs = params.toString();
-  return qs ? `/tags?${qs}` : "/tags";
-}
-
 // Tag cloud: compute font sizes based on post_count
 const maxCount = tags.length > 0 ? Math.max(...tags.map((t: any) => t.post_count)) : 1;
 const minCount = tags.length > 0 ? Math.min(...tags.map((t: any) => t.post_count)) : 0;
@@ -190,7 +181,6 @@ function getTagCategoryBg(cat: TagCategory): string {
         currentPage={page}
         totalPages={total_pages}
         perPage={perPage}
-        buildUrl={buildPageUrl}
       />
     )}
   </div>

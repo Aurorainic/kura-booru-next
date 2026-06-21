@@ -29,14 +29,6 @@ try {
 } catch {
   // Tag not found or not visible — category is best-effort
 }
-
-function buildPageUrl(p: number, pp: number): string {
-  const params = new URLSearchParams();
-  if (p > 1) params.set("page", String(p));
-  if (pp !== 40) params.set("per_page", String(pp));
-  const qs = params.toString();
-  return qs ? `/tags/${encodeURIComponent(tagName)}?${qs}` : `/tags/${encodeURIComponent(tagName)}`;
-}
 ---
 
 <BaseLayout title={`标签：${tagName}`} description={`共有 ${total} 张插画使用了标签 "${tagName}"`}>
@@ -83,7 +75,6 @@ function buildPageUrl(p: number, pp: number): string {
         currentPage={page}
         totalPages={total_pages}
         perPage={perPage}
-        buildUrl={buildPageUrl}
       />
     )}
   </div>
