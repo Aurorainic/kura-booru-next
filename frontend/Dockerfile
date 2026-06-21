@@ -33,7 +33,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ARG PUBLIC_GIT_TAG=dev
+ARG APP_URL
+ARG APP_DOMAIN
 ENV PUBLIC_GIT_TAG=${PUBLIC_GIT_TAG}
+ENV APP_URL=${APP_URL}
+ENV APP_DOMAIN=${APP_DOMAIN}
 ENV NODE_ENV=production
 RUN npm run build
 
