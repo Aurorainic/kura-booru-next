@@ -13,6 +13,24 @@ export default defineConfig({
     mode: "standalone",
   }),
   integrations: [react()],
+  site: process.env.APP_URL || undefined,
+  security: {
+    checkOrigin: true,
+    allowedDomains: (() => {
+      const domains = [];
+      // Allow the production domain (e.g. https://kura-booru.lainns.xyz)
+      if (process.env.APP_URL) {
+        try {
+          domains.push(new URL(process.env.APP_URL).origin);
+        } catch {}
+      }
+      // Also allow an explicit APP_DOMAIN if set
+      if (process.env.APP_DOMAIN) {
+        domains.push(process.env.APP_DOMAIN);
+      }
+      return domains;
+    })(),
+  },
   vite: {
     plugins: [tailwindcss(), tsconfigPaths()],
     resolve: {
