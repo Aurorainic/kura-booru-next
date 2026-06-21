@@ -4,9 +4,9 @@ Orchestrates the full flow: download → phash check → thumbnail generation �
 S3 upload → return ProcessedResult.
 
 Key design decisions:
-- HEAD check Content-Length before downloading (reject > MAX_IMAGE_SIZE)
+- HEAD check Content-Length before downloading (reject > MAX_IMAGE_SIZE, skip if 0)
 - Stream-based S3 uploads (no memory buffering of originals)
-- Pillows for thumbnail/preview generation
+- Pillow for thumbnail/preview generation (WebP preferred, JPEG fallback)
 - phash dedup with prefix-bucket indexing
 """
 
@@ -108,28 +108,34 @@ def _generate_thumbnail(
     """Generate a thumbnail from image bytes.
 
     Returns (thumbnail_bytes, thumbnail_mime_type).
+    Uses WebP format for better quality at smaller file sizes,
+    especially for anime line art. Falls back to JPEG if WebP is unavailable.
     """
     img = Image.open(BytesIO(image_bytes))
 
     # Preserve EXIF orientation
     img = ImageOps.exif_transpose(img)
 
-    # Convert RGBA/P modes to RGB for JPEG output
+    # Convert RGBA/P modes to RGB for output
     if img.mode in ("RGBA", "P", "LA"):
         img = img.convert("RGB")
 
     img.thumbnail(size, Image.Resampling.LANCZOS)
 
     buf = BytesIO()
-    # Always output thumbnails as JPEG for smaller file size
-    img.save(buf, format="JPEG", quality=85, optimize=True)
-    return buf.getvalue(), "image/jpeg"
+    try:
+        img.save(buf, format="WEBP", quality=80, method=4)
+        return buf.getvalue(), "image/webp"
+    except Exception:
+        buf = BytesIO()
+        img.save(buf, format="JPEG", quality=85, optimize=True)
+        return buf.getvalue(), "image/jpeg"
 
 
 async def _head_check(url: str, session: aiohttp.ClientSession) -> tuple[int, str]:
     """HEAD check to get Content-Length and Content-Type before downloading.
 
-    Raises ImageTooLargeError if size exceeds MAX_IMAGE_SIZE.
+    Raises ImageTooLargeError if size exceeds MAX_IMAGE_SIZE (when limit > 0).
     Returns (content_length, content_type).
     """
     async with session.head(url, allow_redirects=True) as resp:
@@ -137,7 +143,7 @@ async def _head_check(url: str, session: aiohttp.ClientSession) -> tuple[int, st
         content_length = int(resp.headers.get("Content-Length", 0))
         content_type = resp.headers.get("Content-Type", "application/octet-stream")
 
-        if content_length > settings.MAX_IMAGE_SIZE:
+        if settings.MAX_IMAGE_SIZE > 0 and content_length > settings.MAX_IMAGE_SIZE:
             raise ImageTooLargeError(content_length, settings.MAX_IMAGE_SIZE)
 
         return content_length, content_type
@@ -156,10 +162,10 @@ async def download_and_process(
 ) -> ProcessedResult:
     """Full image processing pipeline.
 
-    1. HEAD check Content-Length (reject > MAX_IMAGE_SIZE)
+    1. HEAD check Content-Length (reject > MAX_IMAGE_SIZE when limit > 0)
     2. Download image bytes (or use pre-downloaded bytes)
     3. Compute phash and check duplicates
-    4. Generate thumbnails (thumb 150×150, preview 850×850)
+    4. Generate thumbnails (WebP preferred, JPEG fallback)
     5. Upload originals + thumbnails to S3
     6. Return ProcessedResult
     """
@@ -183,7 +189,7 @@ async def download_and_process(
         logger.info("Using pre-downloaded image bytes (%d bytes), skipping HTTP download", content_length)
 
         file_size = len(image_bytes)
-        if file_size > settings.MAX_IMAGE_SIZE:
+        if settings.MAX_IMAGE_SIZE > 0 and file_size > settings.MAX_IMAGE_SIZE:
             raise ImageTooLargeError(file_size, settings.MAX_IMAGE_SIZE)
 
         mime_type = content_type.split(";")[0].strip()

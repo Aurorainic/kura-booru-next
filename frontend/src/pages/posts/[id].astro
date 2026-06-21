@@ -144,9 +144,9 @@ for (const cat of TAG_CATEGORY_ORDER) {
                   id="rating-select"
                   class="text-xs px-2 py-1 rounded border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]"
                 >
-                  <option value="safe" selected={post.rating === "safe"}>公开 (Safe)</option>
-                  <option value="questionable" selected={post.rating === "questionable"}>私用 (Questionable)</option>
-                  <option value="explicit" selected={post.rating === "explicit"}>私用 (Explicit)</option>
+                  <option value="safe" selected={post.rating === "safe"}>公开</option>
+                  <option value="questionable" selected={post.rating === "questionable"}>敏感</option>
+                  <option value="explicit" selected={post.rating === "explicit"}>限制</option>
                 </select>
                 <button
                   id="rating-save"

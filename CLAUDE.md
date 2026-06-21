@@ -175,7 +175,7 @@ The S3 layer works with **any** S3-compatible storage. Images are served **direc
 
 ## Key Constraints
 
-- **6MB image size limit** — HEAD check before download, reject with message if exceeded
+- **Image size limit** — `MAX_IMAGE_SIZE` env var (0 = no limit, >0 = byte limit). Default is 0 (unlimited).
 - **Pagination, not infinite scroll** — like safebooru, with per-page count selector (20/40/100)
 - **gallery-dl as Python library** — not subprocess, use `DownloadJob` API in ThreadPoolExecutor
 - **gallery-dl config is global singleton** — set once at startup from env vars, never modify concurrently
@@ -293,10 +293,10 @@ All Dockerfiles have 3 stages: `dev` (hot-reload), `builder`, and production run
 ## Rating System & Auth Architecture
 
 ### Content Rating
-- `safe` — always visible to everyone (like safebooru)
-- `questionable` — hidden from anonymous visitors; visible to admin
-- `explicit` — hidden from anonymous visitors; visible to admin
-- Gallery-dl metadata maps: Pixiv `x_restrict=0→safe,1→questionable,2→explicit`; Danbooru `rating:s→safe,q→questionable,e→explicit`
+- `safe` — 公开：always visible to everyone (like safebooru)
+- `questionable` — 敏感：hidden from anonymous visitors; visible to admin
+- `explicit` — 限制：hidden from anonymous visitors; visible to admin
+- Danbooru metadata auto-populates rating (`rating:s→safe,q→questionable,e→explicit`); Pixiv `x_restrict` mapping is intentionally removed (unreliable, all Pixiv images default to safe)
 - All list/search/detail endpoints filter `WHERE rating='safe'` for non-admin callers; non-safe posts return 404 (existence hidden)
 - **Tag visibility**: Non-admin users cannot see tags that only belong to non-safe posts. Tag endpoints compute `post_count` via subquery counting only safe posts. Tags with 0 safe posts are completely hidden (404 for detail, filtered from list/autocomplete).
 - Admin can change rating via `PATCH /api/posts/{id}` or inline dropdown on admin/posts page
@@ -324,10 +324,10 @@ All Dockerfiles have 3 stages: `dev` (hot-reload), `builder`, and production run
 - Returns per-URL results with task IDs
 
 ### Auto-Rating Rules
-- `AutoRatingRule` model maps tag names to target ratings (questionable/explicit)
+- `AutoRatingRule` model maps tag names to target ratings (敏感/限制)
 - Admin CRUD at `/api/auto-rating-rules`
 - During image processing (`process_image` task), after tags are resolved, rules are checked
-- Rules only escalate ratings (explicit > questionable > safe); never de-escalate
+- Rules only escalate ratings (限制 > 敏感 > 公开); never de-escalate
 - Multiple matching rules: most restrictive wins
 
 ### ⚠️ SSR Cache Constraint

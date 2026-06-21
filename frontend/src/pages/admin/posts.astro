@@ -38,9 +38,9 @@ function buildPageUrl(p: number, r: string): string {
 
 const ratingOptions: { value: string; label: string }[] = [
   { value: "", label: "全部" },
-  { value: "safe", label: "Safe (公开)" },
-  { value: "questionable", label: "Questionable (私用)" },
-  { value: "explicit", label: "Explicit (私用)" },
+  { value: "safe", label: "公开" },
+  { value: "questionable", label: "敏感" },
+  { value: "explicit", label: "限制" },
 ];
 ---
 
@@ -123,9 +123,9 @@ const ratingOptions: { value: string; label: string }[] = [
                       data-post-id={post.id}
                       data-current-rating={post.rating}
                     >
-                      <option value="safe" selected={post.rating === "safe"}>公开 Safe</option>
-                      <option value="questionable" selected={post.rating === "questionable"}>私用 Q</option>
-                      <option value="explicit" selected={post.rating === "explicit"}>私用 E</option>
+                      <option value="safe" selected={post.rating === "safe"}>公开</option>
+                      <option value="questionable" selected={post.rating === "questionable"}>敏感</option>
+                      <option value="explicit" selected={post.rating === "explicit"}>限制</option>
                     </select>
                     <button
                       class="delete-post-btn text-red-400 hover:text-red-300 transition-colors p-1"
@@ -200,7 +200,7 @@ const ratingOptions: { value: string; label: string }[] = [
           if (row) {
             var badge = row.querySelector('td:nth-child(4) span');
             if (badge) {
-              var labelMap = { safe: 'Safe', questionable: 'Questionable', explicit: 'Explicit' };
+              var labelMap = { safe: '公开', questionable: '敏感', explicit: '限制' };
               var classMap = { safe: 'rating-safe', questionable: 'rating-questionable', explicit: 'rating-explicit' };
               badge.textContent = labelMap[newRating] || newRating;
               badge.className = 'px-2 py-0.5 text-xs font-bold rounded border ' + (classMap[newRating] || 'rating-safe');

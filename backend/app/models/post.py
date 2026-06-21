@@ -17,13 +17,13 @@ class SourceSite(str, enum.Enum):
 
 
 class Rating(str, enum.Enum):
-    """Post content rating, aligned with Danbooru's system.
+    """Post content rating.
 
     Visibility rules:
-      - safe           → always visible (public)
-      - questionable   → hidden from anonymous visitors
-      - explicit       → hidden from anonymous visitors
-    gallery-dl metadata (Pixiv x_restrict, Danbooru rating) auto-populates this.
+      - safe           → always visible (公开)
+      - questionable   → hidden from anonymous visitors (敏感)
+      - explicit       → hidden from anonymous visitors (限制)
+    Danbooru metadata auto-populates this; Pixiv x_restrict mapping removed.
     """
 
     safe = "safe"

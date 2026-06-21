@@ -19,7 +19,7 @@ if (!isAdmin) {
 
 let rules: AutoRatingRule[] = [];
 try {
-  rules = await fetchAutoRatingRules();
+  rules = await fetchAutoRatingRules(ssrCookie);
 } catch {
   // Rules fetch failed, show empty state
 }
@@ -78,8 +78,8 @@ try {
             id="rating-select"
             class="w-full px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
           >
-            <option value="questionable">Questionable (私用)</option>
-            <option value="explicit">Explicit (私用)</option>
+            <option value="questionable">敏感</option>
+            <option value="explicit">限制</option>
           </select>
         </div>
         <button
@@ -203,7 +203,7 @@ try {
     addBtn.textContent = '添加中…';
 
     try {
-      var resp = await fetch('/api/auto-rating-rules', {
+      var resp = await fetch('/api/auto-rating-rules/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tag_name: tagName, target_rating: rating }),

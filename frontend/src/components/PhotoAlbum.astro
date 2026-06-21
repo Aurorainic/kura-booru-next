@@ -9,26 +9,26 @@ interface Props {
 const { posts, isAdmin = false } = Astro.props;
 ---
 
-<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3">
+<div class="columns-2 sm:columns-3 md:columns-4 lg:columns-5 xl:columns-6 2xl:columns-7 gap-3">
   {posts.map((post) => (
     <a
       href={`/posts/${post.id}`}
-      class="group block rounded-xl overflow-hidden card"
+      class="group block mb-3 rounded-xl overflow-hidden card break-inside-avoid"
     >
-      <div class="relative overflow-hidden" style="aspect-ratio: 1 / 1; contain: paint layout;">
+      <div class="relative overflow-hidden">
         <img
           src={getPreviewUrl(post)}
           alt={post.title || `作品 ${post.id.slice(0, 8)}`}
-          width="400"
-          height="400"
-          class="w-full h-full object-cover"
+          width={post.width}
+          height={post.height}
+          class="w-full h-auto"
           decoding="async"
           loading="lazy"
         />
         {/* Rating badge — only visible to admin */}
         {isAdmin && post.rating !== "safe" && (
           <span class={`absolute top-1.5 left-1.5 px-1.5 py-0.5 text-xs font-bold rounded ${getRatingColorClass(post.rating)} border`}>
-            {post.rating === "questionable" ? "Q" : "E"}
+            {post.rating === "questionable" ? "敏" : "限"}
           </span>
         )}
         {/* Hover overlay with tags */}

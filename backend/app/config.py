@@ -57,7 +57,7 @@ class Settings(BaseSettings):
         return v
 
     # ── Image Processing ─────────────────────────────────────────────
-    MAX_IMAGE_SIZE: int = 6291456  # 6 MB
+    MAX_IMAGE_SIZE: int = 0  # 0 = no limit
     THUMB_SIZE: str = "400x400"
     PREVIEW_SIZE: str = "1200x1200"
 

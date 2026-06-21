@@ -47,9 +47,9 @@ function buildPageUrl(p: number, pp: number): string {
         <div class="flex items-center gap-2 text-sm">
           <span class="text-[var(--text-muted)]">评级筛选:</span>
           <a href="/" class={`px-2 py-0.5 rounded ${!rating ? "gradient-bg text-white" : "text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] border border-[var(--border-color)]"}`}>全部</a>
-          <a href="/?rating=safe" class={`px-2 py-0.5 rounded rating-safe ${rating === "safe" ? "ring-2 ring-current" : "opacity-70 hover:opacity-100"}`}>S</a>
-          <a href="/?rating=questionable" class={`px-2 py-0.5 rounded rating-questionable ${rating === "questionable" ? "ring-2 ring-current" : "opacity-70 hover:opacity-100"}`}>Q</a>
-          <a href="/?rating=explicit" class={`px-2 py-0.5 rounded rating-explicit ${rating === "explicit" ? "ring-2 ring-current" : "opacity-70 hover:opacity-100"}`}>E</a>
+          <a href="/?rating=safe" class={`px-2 py-0.5 rounded rating-safe ${rating === "safe" ? "ring-2 ring-current" : "opacity-70 hover:opacity-100"}`}>公开</a>
+          <a href="/?rating=questionable" class={`px-2 py-0.5 rounded rating-questionable ${rating === "questionable" ? "ring-2 ring-current" : "opacity-70 hover:opacity-100"}`}>敏感</a>
+          <a href="/?rating=explicit" class={`px-2 py-0.5 rounded rating-explicit ${rating === "explicit" ? "ring-2 ring-current" : "opacity-70 hover:opacity-100"}`}>限制</a>
         </div>
       )}
     </div>

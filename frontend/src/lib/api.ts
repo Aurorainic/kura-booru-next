@@ -133,7 +133,7 @@ async function fetchApi<T>(
 export async function fetchPosts(page: number = 1, perPage: number = 40, rating?: Rating, ssrCookie?: string): Promise<PostsResponse> {
   const params: Record<string, string | number | undefined> = { page, per_page: perPage };
   if (rating) params.rating = rating;
-  return fetchApi<PostsResponse>("/posts", params, { ssrCookie });
+  return fetchApi<PostsResponse>("/posts/", params, { ssrCookie });
 }
 
 export async function fetchPost(id: string, ssrCookie?: string): Promise<Post> {
@@ -163,7 +163,7 @@ export async function fetchTags(
   perPage: number = 100,
   ssrCookie?: string,
 ): Promise<PaginatedResponse<Tag>> {
-  return fetchApi<PaginatedResponse<Tag>>("/tags", {
+  return fetchApi<PaginatedResponse<Tag>>("/tags/", {
     category,
     sort,
     page,
@@ -179,7 +179,7 @@ export async function fetchSearch(
   perPage: number = 40,
   ssrCookie?: string,
 ): Promise<PostsResponse> {
-  return fetchApi<PostsResponse>("/search", { q: query, page, per_page: perPage }, { ssrCookie });
+  return fetchApi<PostsResponse>("/search/", { q: query, page, per_page: perPage }, { ssrCookie });
 }
 
 // === Autocomplete API ===
@@ -229,21 +229,23 @@ export interface AutoRatingRule {
   created_at: string;
 }
 
-export async function fetchAutoRatingRules(): Promise<AutoRatingRule[]> {
-  return fetchApi<AutoRatingRule[]>("/auto-rating-rules");
+export async function fetchAutoRatingRules(ssrCookie?: string): Promise<AutoRatingRule[]> {
+  return fetchApi<AutoRatingRule[]>("/auto-rating-rules/", undefined, { ssrCookie });
 }
 
-export async function createAutoRatingRule(tagName: string, targetRating: Rating): Promise<AutoRatingRule> {
-  return fetchApi<AutoRatingRule>("/auto-rating-rules", undefined, {
+export async function createAutoRatingRule(tagName: string, targetRating: Rating, ssrCookie?: string): Promise<AutoRatingRule> {
+  return fetchApi<AutoRatingRule>("/auto-rating-rules/", undefined, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ tag_name: tagName, target_rating: targetRating }),
+    ssrCookie,
   });
 }
 
-export async function deleteAutoRatingRule(ruleId: string): Promise<void> {
+export async function deleteAutoRatingRule(ruleId: string, ssrCookie?: string): Promise<void> {
   await fetchApi<void>(`/auto-rating-rules/${ruleId}`, undefined, {
     method: "DELETE",
+    ssrCookie,
   });
 }
 
@@ -306,9 +308,9 @@ export function formatDate(dateString: string): string {
 
 export function getRatingLabel(rating: Rating): string {
   const labels: Record<Rating, string> = {
-    safe: "Safe",
-    questionable: "Questionable",
-    explicit: "Explicit",
+    safe: "公开",
+    questionable: "敏感",
+    explicit: "限制",
   };
   return labels[rating] || rating;
 }

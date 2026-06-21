@@ -35,8 +35,8 @@ settings = get_settings()
 # ThreadPoolExecutor for running synchronous gallery-dl calls
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="gallery_dl")
 
-# Mapping from source-specific rating fields to our Rating enum.
-_PIXIV_RESTRICT_MAP = {0: Rating.safe, 1: Rating.questionable, 2: Rating.explicit}
+# Mapping from Danbooru rating field to our Rating enum.
+# Pixiv x_restrict mapping removed — it does not reliably classify content.
 _DANBOORU_RATING_MAP = {
     "s": Rating.safe, "safe": Rating.safe,
     "q": Rating.questionable, "questionable": Rating.questionable,
@@ -178,14 +178,9 @@ def _download_sync(url: str) -> dict[str, Any]:
                                 result.setdefault("tags", []).insert(0, artist_name)
                                 result.setdefault("tag_categories", {})[artist_name] = "artist"
 
-                        # Extract rating from source metadata
-                        # Pixiv: x_restrict field (0=safe, 1=q, 2=e)
-                        x_restrict = metadata.get("x_restrict")
-                        if isinstance(x_restrict, int):
-                            result["rating"] = _PIXIV_RESTRICT_MAP.get(
-                                x_restrict, Rating.safe
-                            )
-                        # Danbooru: rating field ("s"/"q"/"e" or full names)
+                        # Extract rating from Danbooru source metadata only.
+                        # Pixiv x_restrict is intentionally ignored — it does not
+                        # reliably classify content and all Pixiv images default to safe.
                         source_rating = metadata.get("rating")
                         if isinstance(source_rating, str):
                             result["rating"] = _DANBOORU_RATING_MAP.get(
