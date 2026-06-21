@@ -3,7 +3,7 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 import {
   fetchPosts, clampPerPage, emptyPostsResponse,
   getRatingColorClass, getRatingLabel, getSourceSiteLabel,
-  formatFileSize, formatDate,
+  getThumbUrl, formatFileSize, formatDate,
   type Rating,
 } from "@/lib/api";
 
@@ -90,7 +90,7 @@ const ratingOptions: { value: string; label: string }[] = [
                 <td class="py-2 px-2">
                   <a href={`/posts/${post.id}`}>
                     <img
-                      src={post.thumb_key ? `/i/${post.thumb_key}` : "/placeholder.svg"}
+                      src={post.thumb_key ? getThumbUrl(post) : "/placeholder.svg"}
                       alt=""
                       class="w-12 h-12 object-cover rounded"
                       loading="lazy"

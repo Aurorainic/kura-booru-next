@@ -2,7 +2,7 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import Pagination from "@/components/Pagination.tsx";
 import PhotoAlbumGrid from "@/components/PhotoAlbum.astro";
-import { fetchSearch, fetchTags, getTagCategoryColor, getTagCategoryLabel, clampPerPage, emptyPostsResponse, type TagCategory, type Tag } from "@/lib/api";
+import { fetchSearch, fetchTag, getTagCategoryColor, getTagCategoryLabel, clampPerPage, emptyPostsResponse, type TagCategory } from "@/lib/api";
 
 const tagName = decodeURIComponent(Astro.params.name!);
 const ssrCookie = Astro.locals.ssrCookie;
@@ -21,16 +21,13 @@ try {
 
 const { items: posts, total, total_pages } = data;
 
-// Try to resolve tag category by searching for the tag name
+// Resolve tag category via the single-tag endpoint
 let tagCategory: TagCategory | null = null;
 try {
-  const tagsData = await fetchTags(undefined, "name", 1, 1000, ssrCookie);
-  const matchedTag = tagsData.items.find((t: Tag) => t.name === tagName);
-  if (matchedTag) {
-    tagCategory = matchedTag.category;
-  }
+  const tag = await fetchTag(tagName, ssrCookie);
+  tagCategory = tag.category;
 } catch {
-  // Category lookup is best-effort
+  // Tag not found or not visible — category is best-effort
 }
 
 function buildPageUrl(p: number, pp: number): string {

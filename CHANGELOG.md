@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-06-21
+
+### Fixed
+- **Logout not actually clearing session** — Replaced client-side `fetch()` logout with a server-side Astro endpoint (`POST /logout`). The previous approach had a race condition: the browser navigated to `/` before the `Set-Cookie` header from the logout response was applied, leaving the old session cookie alive. The new SSR endpoint forwards the cookie to the backend, injects the `Set-Cookie` deletion into a 302 redirect, and the browser processes it as a native navigation — guaranteeing the cookie is cleared before the next page request.
+- **Admin posts page thumbnails broken with direct S3/CDN** — `admin/posts.astro` was using hardcoded `/i/{thumb_key}` paths instead of the `getThumbUrl()` helper. When `PUBLIC_S3_EXTERNAL_URL` points to R2/CDN directly (not via Caddy `/i/*` proxy), all admin list thumbnails returned 404.
+- **Duplicate `<script define:vars>` block in auto-rating page** — Removed the second identical `TAG_NAMES` injection block (copy-paste leftover).
+- **Dead `meta[name="api-base"]` query in post detail** — The rating editor script queried a `<meta>` tag that doesn't exist in the template. Replaced with a direct `'/api'` constant.
+- **`image_urls` not deduplicated in process_image** — gallery-dl's infojson branch could append duplicate URLs, causing unnecessary download retries. Added `list(dict.fromkeys(...))` dedup.
+
+### Changed
+- **Logout button is now a form POST** — The "退出登录" button changed from a JS `fetch()` + `window.location.href` to a native `<form action="/logout" method="post">`, eliminating the cookie/navigation race condition entirely.
+- **Frontend version** bumped to `0.2.3`.
+
 ## [0.2.2] - 2026-06-21
 
 ### Added
@@ -21,6 +34,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 - **Logout not working on HTTPS** — `clear_session_cookie` was missing `secure` and `httponly` parameters, causing browsers to silently ignore the cookie deletion directive when the site uses HTTPS. The delete must match all attributes (`Secure`, `HttpOnly`, `SameSite`, `Path`) used when setting the cookie.
+
+## [0.2.1] - 2026-06-21
+
+### Added
+- **Bot rating selection menu** — After image processing completes, the Bot now shows inline keyboard buttons (🟢 公开 / 🟡 敏感 / 🔴 限制) for the admin to choose the post's rating, instead of auto-linking with the source-extracted rating. This gives admins direct control over content classification.
+
+### Changed
+- **Rating label rename** — Rating display labels updated for consistency across the UI.
+- **Pixiv mapping removal** — Pixiv `x_restrict` field no longer auto-maps to rating (unreliable indicator); all Pixiv images now default to `safe` and must be manually escalated.
+- **Masonry layout** — Improved masonry grid rendering on the frontend.
+- **WebP thumbnails** — Thumbnails now generated in WebP format for smaller file sizes.
+- **Admin dropdown** — Admin navigation consolidated into a dropdown menu in the top bar.
+- **File limit removal** — `MAX_IMAGE_SIZE` default changed to 0 (unlimited).
+- **SSR cookie fix** — Frontend middleware correctly forwards admin session cookie on SSR requests.
 
 ## [0.2.0] - 2026-06-20
 

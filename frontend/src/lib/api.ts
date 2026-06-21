@@ -116,9 +116,17 @@ async function fetchApi<T>(
   }
 
   const { ssrCookie: _sc, ...fetchOptions } = options || {};
+
+  // On the client (browser), always include credentials so that cookies
+  // (especially the admin session cookie) are sent with cross-origin requests
+  // when PUBLIC_API_URL points to a different domain. Without this, the
+  // browser omits cookies on cross-origin fetch, breaking login/logout/status.
+  const isBrowser = typeof window !== "undefined";
+
   const response = await fetch(url.toString(), {
     ...fetchOptions,
     headers,
+    ...(isBrowser ? { credentials: "include" as RequestCredentials } : {}),
   });
 
   if (!response.ok) {
@@ -155,6 +163,10 @@ export async function deletePost(id: string): Promise<void> {
 }
 
 // === Tag APIs ===
+
+export async function fetchTag(name: string, ssrCookie?: string): Promise<Tag> {
+  return fetchApi<Tag>(`/tags/${encodeURIComponent(name)}`, undefined, { ssrCookie });
+}
 
 export async function fetchTags(
   category?: TagCategory,

@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardBut
 
 from app.config import settings
 from app.handlers.info import format_post_info
-from app.handlers.url_handler import _confirmed_posts, _RATING_ORDER, _RATING_LABELS
+from app.handlers.url_handler import _is_confirmed, _mark_confirmed, _RATING_ORDER, _RATING_LABELS
 from app.services.backend_api import get_post, update_post_rating
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ async def callback_rate_post(callback: CallbackQuery) -> None:
 
     _, post_id, rating = parts
 
-    if post_id in _confirmed_posts:
+    if await _is_confirmed(post_id):
         await callback.answer("已确认 / Already confirmed", show_alert=True)
         return
 
@@ -42,7 +42,7 @@ async def callback_rate_post(callback: CallbackQuery) -> None:
     success = await update_post_rating(post_id, rating)
 
     if success:
-        _confirmed_posts.add(post_id)
+        await _mark_confirmed(post_id)
         rating_label = _RATING_LABELS.get(rating, rating)
         post_url = f"{settings.FRONTEND_URL}/posts/{post_id}"
         keyboard = InlineKeyboardMarkup(inline_keyboard=[

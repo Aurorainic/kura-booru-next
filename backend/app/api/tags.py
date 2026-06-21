@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_is_admin
 from app.database import get_db
+from app.api.constants import ALLOWED_PER_PAGE
 from app.models.post import Post, Rating
 from app.models.post_tag import PostTag
 from app.models.tag import Tag, TagCategory
@@ -24,9 +25,6 @@ from app.models.tag_alias import TagAlias
 from app.schemas.tag import TagListRead, TagRead
 
 router = APIRouter()
-
-# Allowed per_page values
-ALLOWED_PER_PAGE = {20, 40, 100}
 
 
 def _safe_post_count_subquery():

@@ -6,20 +6,20 @@
 
 ### 标签类型
 - **`latest`** — 始终指向当前最新稳定版本，用于日常部署和拉取
-- **`v0.1.0`, `v0.1.1`, ...** — 版本化标签，用于回滚和审计
+- **`v0.2.3`, ...** — 版本化标签，用于回滚和审计
 
 ### 标签生命周期
-1. **构建时**：每次发布同时打 `latest` 和 `v0.1.x` 双标签
+1. **构建时**：每次发布同时打 `latest` 和 `v0.2.x` 双标签
 2. **推送时**：同时推送到 SWR（latest + versioned）
 3. **部署时**：生产环境使用 `latest` 标签，确保自动获取最新版本
-4. **回滚时**：指定具体版本标签（如 `v0.1.2`）进行回滚
+4. **回滚时**：指定具体版本标签（如 `v0.2.3`）进行回滚
 
 ### 示例流程
 ```bash
-# v0.1.2 发布流程
-docker build -t kura-booru-next-backend:v0.1.2 -t kura-booru-next-backend:latest ./backend
-docker build -t kura-booru-next-bot:v0.1.2 -t kura-booru-next-bot:latest ./bot
-docker build -t kura-booru-next-frontend:v0.1.2 -t kura-booru-next-frontend:latest ./frontend
+# v0.2.3 发布流程
+docker build -t kura-booru-next-backend:v0.2.3 -t kura-booru-next-backend:latest ./backend
+docker build -t kura-booru-next-bot:v0.2.3 -t kura-booru-next-bot:latest ./bot
+docker build -t kura-booru-next-frontend:v0.2.3 -t kura-booru-next-frontend:latest ./frontend
 ```
 
 ---
@@ -28,13 +28,13 @@ docker build -t kura-booru-next-frontend:v0.1.2 -t kura-booru-next-frontend:late
 
 ```bash
 # Backend (API + Worker 共用) — 默认 CMD 启动 uvicorn，Worker 运行时覆盖为 ARQ
-docker build --provenance=false --sbom=false -t kura-booru-next-backend:v0.1.2 -t kura-booru-next-backend:latest ./backend
+docker build --provenance=false --sbom=false -t kura-booru-next-backend:v0.2.3 -t kura-booru-next-backend:latest ./backend
 
 # Bot — aiogram 3 Telegram Bot (webhook mode)
-docker build --provenance=false --sbom=false -t kura-booru-next-bot:v0.1.2 -t kura-booru-next-bot:latest ./bot
+docker build --provenance=false --sbom=false -t kura-booru-next-bot:v0.2.3 -t kura-booru-next-bot:latest ./bot
 
 # Frontend — Astro SSR (Node.js runtime)
-docker build --provenance=false --sbom=false -t kura-booru-next-frontend:v0.1.2 -t kura-booru-next-frontend:latest ./frontend
+docker build --provenance=false --sbom=false -t kura-booru-next-frontend:v0.2.3 -t kura-booru-next-frontend:latest ./frontend
 ```
 
 > **注意**：
@@ -57,7 +57,7 @@ docker login swr.cn-east-3.myhuaweicloud.com
 ## 打标签 & 推送到 SWR
 
 ```bash
-VERSION=v0.1.2
+VERSION=v0.2.3
 REGISTRY="swr.cn-east-3.myhuaweicloud.com/lainsaka"
 
 # 1. Backend (API + Worker 共用)
@@ -85,16 +85,16 @@ docker push ${REGISTRY}/kura-booru-next-frontend:latest
 
 ```bash
 # Backend (API)
-docker run -p 8000:8000 --env-file .env kura-booru-next-backend:v0.1.2
+docker run -p 8000:8000 --env-file .env kura-booru-next-backend:v0.2.3
 
 # Worker (ARQ)
-docker run --env-file .env kura-booru-next-backend:v0.1.2 arq app.tasks.worker.WorkerSettings
+docker run --env-file .env kura-booru-next-backend:v0.2.3 arq app.tasks.worker.WorkerSettings
 
 # Bot
-docker run -p 8080:8080 --env-file .env kura-booru-next-bot:v0.1.2
+docker run -p 8080:8080 --env-file .env kura-booru-next-bot:v0.2.3
 
 # Frontend
-docker run -p 4321:4321 --env-file .env kura-booru-next-frontend:v0.1.2
+docker run -p 4321:4321 --env-file .env kura-booru-next-frontend:v0.2.3
 ```
 
 ---
@@ -132,7 +132,7 @@ docker compose up -d
 ### 回滚流程
 ```bash
 # 修改 docker-compose.yml 中的镜像标签为具体版本
-# 例如：image: kura-booru-next-backend:v0.1.2
+# 例如：image: kura-booru-next-backend:v0.2.3
 
 # 然后重新部署
 docker compose up -d
@@ -150,7 +150,7 @@ docker images | grep kura-booru
 docker rmi kura-booru-next-backend:v0.1.0 kura-booru-next-backend:v0.1.1
 
 # 批量删除除 latest 和当前版本外的所有旧版本
-CURRENT_VERSION="v0.1.2"
+CURRENT_VERSION="v0.2.3"
 docker images --format "{{.Repository}}:{{.Tag}}" | grep kura-booru | grep -v latest | grep -v ${CURRENT_VERSION} | xargs docker rmi -f
 ```
 

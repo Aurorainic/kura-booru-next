@@ -64,7 +64,7 @@ async def create_process_task(request: ProcessImageRequest):
 class WebImportRequest(BaseModel):
     """Request body for web-based batch image import."""
 
-    urls: list[str] = Field(..., description="List of image URLs to import")
+    urls: list[str] = Field(..., max_length=50, description="List of image URLs to import (max 50)")
 
 
 class WebImportResponse(BaseModel):

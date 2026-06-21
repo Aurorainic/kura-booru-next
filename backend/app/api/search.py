@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_is_admin
 from app.database import get_db
+from app.api.constants import ALLOWED_PER_PAGE
 from app.models.post import Post, Rating
 from app.models.post_tag import PostTag
 from app.models.tag import Tag
@@ -29,9 +30,6 @@ from app.models.tag_alias import TagAlias
 from app.schemas.post import PostListRead
 
 router = APIRouter()
-
-# Allowed per_page values
-ALLOWED_PER_PAGE = {20, 40, 100}
 
 # Matches "rating:safe", "rating:q", "rating:e" etc. (Danbooru-style syntax).
 # Captures the value part; full validation against Rating happens after.

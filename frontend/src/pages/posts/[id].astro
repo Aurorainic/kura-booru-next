@@ -273,7 +273,7 @@ for (const cat of TAG_CATEGORY_ORDER) {
           try {
             ratingMsg.textContent = '保存中…';
             ratingMsg.classList.remove('hidden');
-            const apiBase = document.querySelector('meta[name="api-base"]')?.content || '/api';
+            const apiBase = '/api';
             const resp = await fetch(`${apiBase}/posts/${postId}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },

@@ -1,7 +1,9 @@
 # Caddyfile for Kura Booru Next — placed on HOST machine at /etc/caddy/Caddyfile
 #
-# IMPORTANT: This file is a TEMPLATE. You MUST edit the values below:
-#   1. Replace all lainns.xyz domains with YOUR domain
+# ⚠️  THIS IS A TEMPLATE — DO NOT USE AS-IS IN PRODUCTION ⚠️
+#
+# You MUST edit the values below before deploying:
+#   1. Replace {APP_DOMAIN} with YOUR domain (e.g., kura-booru.example.com)
 #   2. Replace the S3 image proxy upstream (handle /i/*) with your S3/CDN domain
 #   3. Remove unrelated blocks (gitea, astrbot, etc.) — they are just examples
 #
@@ -13,7 +15,7 @@
 # See infra/.env.example for the full list of environment variables.
 # ──────────────────────────────────────────────────────────────────────
 
-kura-booru.lainns.xyz {
+{APP_DOMAIN} {
 	encode zstd gzip
 
 	header {
@@ -45,8 +47,8 @@ kura-booru.lainns.xyz {
 	# - AWS S3:  https://your-bucket.s3.region.amazonaws.com
 	handle /i/* {
 		uri strip_prefix /i
-		reverse_proxy https://images.kura-booru.lainns.xyz {
-			header_up Host images.kura-booru.lainns.xyz
+		reverse_proxy https://images.{APP_DOMAIN} {
+			header_up Host images.{APP_DOMAIN}
 		}
 	}
 

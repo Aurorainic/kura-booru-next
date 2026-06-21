@@ -21,8 +21,24 @@ URL_PATTERN = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
 # Limit URLs processed per message to avoid abuse
 URL_MESSAGE_LIMIT = 10
 
-# In-memory set of post IDs that have been confirmed via rating selection
-_confirmed_posts: set[str] = set()
+# In-memory set of post IDs that have been confirmed via rating selection.
+# Stored in Redis with TTL so state survives restarts and works with multiple workers.
+# Key: kura:confirmed_posts:{post_id}, TTL: 24h
+_CONFIRMED_POSTS_TTL = 86400  # 24 hours
+
+
+async def _is_confirmed(post_id: str) -> bool:
+    """Check if a post has already been confirmed via rating selection."""
+    from app.services.arq_client import get_arq_pool
+    pool = await get_arq_pool()
+    return await pool.exists(f"kura:confirmed_posts:{post_id}") > 0
+
+
+async def _mark_confirmed(post_id: str) -> None:
+    """Mark a post as confirmed via rating selection (with TTL)."""
+    from app.services.arq_client import get_arq_pool
+    pool = await get_arq_pool()
+    await pool.setex(f"kura:confirmed_posts:{post_id}", _CONFIRMED_POSTS_TTL, "1")
 
 # Seconds to wait for manual rating before auto-confirming
 RATING_COUNTDOWN_SECONDS = 10
@@ -30,6 +46,17 @@ RATING_COUNTDOWN_SECONDS = 10
 # Rating priority: higher value = more restrictive
 _RATING_ORDER = {"safe": 0, "questionable": 1, "explicit": 2}
 _RATING_LABELS = {"safe": "🟢 公开", "questionable": "🟡 敏感", "explicit": "🔴 限制"}
+
+# ── URL patterns: MIRROR of backend/app/services/url_patterns.py — keep in sync ──
+# When updating patterns, update backend/app/services/url_patterns.py first,
+# then sync changes here. The bot is a separate Python package and cannot
+# import from the backend directly.
+
+# Regex to normalize phixiv.net proxy URLs back to pixiv.net
+_PHIXIV_NORMALIZE = re.compile(
+    r"https?://(?:www\.)?phixiv\.net",
+    re.IGNORECASE,
+)
 
 # Source site detection patterns mapped to (site_name, id_capture_group)
 SOURCE_PATTERNS: list[tuple[re.Pattern, str]] = [
@@ -81,14 +108,11 @@ def identify_source(url: str) -> tuple[str, str] | None:
 
     Returns (source_site, source_id) or None if not recognized.
     Also normalizes proxy URLs (e.g. phixiv.net → pixiv.net).
+
+    MIRROR of backend/app/services/url_patterns.py:identify_source — keep in sync.
     """
     # Normalize phixiv.net proxy URLs back to pixiv.net
-    normalized = re.sub(
-        r"https?://(?:www\.)?phixiv\.net",
-        "https://www.pixiv.net",
-        url,
-        flags=re.IGNORECASE,
-    )
+    normalized = _PHIXIV_NORMALIZE.sub("https://www.pixiv.net", url)
 
     for pattern, site_name in SOURCE_PATTERNS:
         match = pattern.search(normalized)
@@ -117,7 +141,7 @@ async def _countdown_and_auto_confirm(
 
     # Countdown display
     for remaining in range(RATING_COUNTDOWN_SECONDS, 0, -1):
-        if post_id in _confirmed_posts:
+        if await _is_confirmed(post_id):
             return  # User already selected
         try:
             await processing_msg.edit_text(
@@ -137,10 +161,10 @@ async def _countdown_and_auto_confirm(
         await asyncio.sleep(1)
 
     # Countdown finished — auto-confirm
-    if post_id in _confirmed_posts:
+    if await _is_confirmed(post_id):
         return
 
-    _confirmed_posts.add(post_id)
+    await _mark_confirmed(post_id)
 
     # If the auto-rating differs from the post's current rating, update it
     post_url = f"{settings.FRONTEND_URL}/posts/{post_id}"

@@ -7,32 +7,13 @@ and metadata via gallery-dl.
 from __future__ import annotations
 
 import logging
-import re
 from typing import Optional
 
 from app.models.post import Rating, SourceSite
+from app.services.url_patterns import PIXIV_URL_PATTERNS
 from app.source_extractors.base import BaseExtractor, ExtractorResult
 
 logger = logging.getLogger(__name__)
-
-# URL patterns for Pixiv illustrations
-PIXIV_URL_PATTERNS = [
-    # https://www.pixiv.net/artworks/12345678
-    re.compile(
-        r"(?:https?://)?(?:www\.)?pixiv\.net/(?:artworks|illust)/(\d+)",
-        re.IGNORECASE,
-    ),
-    # https://www.pixiv.net/member_illust.php?illust_id=12345678
-    re.compile(
-        r"(?:https?://)?(?:www\.)?pixiv\.net/member_illust\.php\?.*illust_id=(\d+)",
-        re.IGNORECASE,
-    ),
-    # https://www.phixiv.net/artworks/12345678 (Pixiv proxy)
-    re.compile(
-        r"(?:https?://)?(?:www\.)?phixiv\.net/(?:artworks|illust)/(\d+)",
-        re.IGNORECASE,
-    ),
-]
 
 
 class PixivExtractor(BaseExtractor):
