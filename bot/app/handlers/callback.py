@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardBut
 
 from app.config import settings
 from app.handlers.info import format_post_info
-from app.handlers.url_handler import _is_confirmed, _mark_confirmed, _RATING_ORDER, _RATING_LABELS
+from app.handlers.url_handler import _is_confirmed, _mark_confirmed, _RATING_ORDER, _RATING_LABELS, cancel_countdown
 from app.services.backend_api import get_post, update_post_rating
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,7 @@ async def callback_rate_post(callback: CallbackQuery) -> None:
     user can override it (including choosing a less restrictive rating).
     """
     data = callback.data
+    logger.info("callback_rate_post: data=%r, from_user=%s", data, callback.from_user)
     if data is None:
         return
 
@@ -38,8 +39,12 @@ async def callback_rate_post(callback: CallbackQuery) -> None:
         await callback.answer("已确认 / Already confirmed", show_alert=True)
         return
 
+    # Cancel the countdown task so it doesn't overwrite our edit
+    cancel_countdown(post_id)
+
     # Update rating via backend API — user's choice overrides auto-rating
     success = await update_post_rating(post_id, rating)
+    logger.info("callback_rate_post: update_post_rating(%s, %s) = %s", post_id, rating, success)
 
     if success:
         await _mark_confirmed(post_id)
@@ -55,8 +60,8 @@ async def callback_rate_post(callback: CallbackQuery) -> None:
                 f"Source ID: {post_id[:8]}…",
                 reply_markup=keyboard,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.error("callback_rate_post: edit_text failed: %s", exc)
         await callback.answer()
     else:
         await callback.answer("更新失败 / Update failed", show_alert=True)

@@ -66,7 +66,7 @@ services:
   # Bot — aiogram 3.x Telegram Bot (webhook mode)
   # ---------------------------------------------------------------------------
   bot:
-    image: kura-booru-next-bot:v0.2.3
+    image: kura-booru-next-bot:v0.3.0-pre
     container_name: kura-bot
     restart: unless-stopped
     ports:

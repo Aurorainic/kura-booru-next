@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 router = Router()
 
+# Active countdown tasks keyed by post_id — used to cancel countdown when user
+# selects a rating button before timeout.
+_countdown_tasks: dict[str, asyncio.Task] = {}
+
 # URL detection pattern — matches http(s) URLs in message text
 URL_PATTERN = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
 
@@ -39,6 +43,19 @@ async def _mark_confirmed(post_id: str) -> None:
     from app.services.arq_client import get_arq_pool
     pool = await get_arq_pool()
     await pool.setex(f"kura:confirmed_posts:{post_id}", _CONFIRMED_POSTS_TTL, "1")
+
+
+def cancel_countdown(post_id: str) -> bool:
+    """Cancel the countdown task for a post if one is running.
+
+    Returns True if a task was found and canceled, False otherwise.
+    Called from the callback handler when the user selects a rating button.
+    """
+    task = _countdown_tasks.pop(post_id, None)
+    if task is not None and not task.done():
+        task.cancel()
+        return True
+    return False
 
 # Seconds to wait for manual rating before auto-confirming
 RATING_COUNTDOWN_SECONDS = 10
@@ -134,52 +151,63 @@ async def _countdown_and_auto_confirm(
 
     If auto_rating was set by backend rules (e.g. tag matched a rule), use that.
     Otherwise default to safe.
+
+    This task is tracked in _countdown_tasks so it can be canceled when the user
+    selects a rating button before timeout.
     """
     final_rating = auto_rating or "safe"
     final_label = _RATING_LABELS.get(final_rating, final_rating)
     rule_hint = f"（自动规则）" if auto_rating else "（默认）"
 
-    # Countdown display
-    for remaining in range(RATING_COUNTDOWN_SECONDS, 0, -1):
+    try:
+        # Countdown display
+        for remaining in range(RATING_COUNTDOWN_SECONDS, 0, -1):
+            if await _is_confirmed(post_id):
+                return  # User already selected
+            try:
+                await processing_msg.edit_text(
+                    f"⏳ 等待评级 / Awaiting rating ({remaining}s)\n"
+                    f"Source: {source_site} | ID: {source_id}\n"
+                    f"请选择评级 / Select rating:",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [
+                            InlineKeyboardButton(text="🟢 公开", callback_data=f"rate:{post_id}:safe"),
+                            InlineKeyboardButton(text="🟡 敏感", callback_data=f"rate:{post_id}:questionable"),
+                            InlineKeyboardButton(text="🔴 限制", callback_data=f"rate:{post_id}:explicit"),
+                        ]
+                    ]),
+                )
+            except Exception:
+                pass  # Message deleted or edit rate-limited
+            await asyncio.sleep(1)
+
+        # Countdown finished — auto-confirm
         if await _is_confirmed(post_id):
-            return  # User already selected
+            return
+
+        await _mark_confirmed(post_id)
+
+        # If the auto-rating differs from the post's current rating, update it
+        post_url = f"{settings.FRONTEND_URL}/posts/{post_id}"
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🖼 查看作品 / View", url=post_url)]
+        ])
         try:
             await processing_msg.edit_text(
-                f"⏳ 等待评级 / Awaiting rating ({remaining}s)\n"
-                f"Source: {source_site} | ID: {source_id}\n"
-                f"请选择评级 / Select rating:",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [
-                        InlineKeyboardButton(text="🟢 公开", callback_data=f"rate:{post_id}:safe"),
-                        InlineKeyboardButton(text="🟡 敏感", callback_data=f"rate:{post_id}:questionable"),
-                        InlineKeyboardButton(text="🔴 限制", callback_data=f"rate:{post_id}:explicit"),
-                    ]
-                ]),
+                f"✅ 处理完成\n"
+                f"评级: {final_label} {rule_hint}\n"
+                f"Source: {source_site} | ID: {source_id}",
+                reply_markup=keyboard,
             )
         except Exception:
-            pass  # Message deleted or edit rate-limited
-        await asyncio.sleep(1)
-
-    # Countdown finished — auto-confirm
-    if await _is_confirmed(post_id):
+            pass  # Message deleted or too old
+    except asyncio.CancelledError:
+        # User selected a rating button — countdown is no longer needed.
+        # The callback handler will edit the message with the user's choice.
         return
-
-    await _mark_confirmed(post_id)
-
-    # If the auto-rating differs from the post's current rating, update it
-    post_url = f"{settings.FRONTEND_URL}/posts/{post_id}"
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🖼 查看作品 / View", url=post_url)]
-    ])
-    try:
-        await processing_msg.edit_text(
-            f"✅ 处理完成\n"
-            f"评级: {final_label} {rule_hint}\n"
-            f"Source: {source_site} | ID: {source_id}",
-            reply_markup=keyboard,
-        )
-    except Exception:
-        pass  # Message deleted or too old
+    finally:
+        # Always clean up the task reference
+        _countdown_tasks.pop(post_id, None)
 
 
 async def _poll_and_notify(
@@ -241,11 +269,12 @@ async def _poll_and_notify(
             except Exception:
                 pass
             # 10s countdown → auto-confirm
-            asyncio.create_task(
+            countdown_task = asyncio.create_task(
                 _countdown_and_auto_confirm(
                     processing_msg, post_id, source_site, source_id, auto_rating
                 )
             )
+            _countdown_tasks[post_id] = countdown_task
         else:
             try:
                 await processing_msg.edit_text(
