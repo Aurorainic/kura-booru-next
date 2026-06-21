@@ -10,7 +10,7 @@ import logging
 from typing import Optional
 
 from app.models.post import Rating, SourceSite
-from app.services.url_patterns import PIXIV_URL_PATTERNS
+from app.services.url_patterns import PIXIV_PATTERNS
 from app.source_extractors.base import BaseExtractor, ExtractorResult
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ class PixivExtractor(BaseExtractor):
         Returns:
             The illustration ID as a string, or None if not found.
         """
-        for pattern in PIXIV_URL_PATTERNS:
+        for pattern in PIXIV_PATTERNS:
             match = pattern.search(url)
             if match:
                 return match.group(1)
@@ -86,4 +86,4 @@ class PixivExtractor(BaseExtractor):
     @staticmethod
     def can_handle(url: str) -> bool:
         """Check if this extractor can handle the given URL."""
-        return any(pattern.search(url) for pattern in PIXIV_URL_PATTERNS)
+        return any(pattern.search(url) for pattern in PIXIV_PATTERNS)
