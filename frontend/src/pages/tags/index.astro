@@ -27,59 +27,72 @@ const categories = [
   { value: "meta", label: "元信息" },
 ];
 
-function buildPageUrl(p: number, pp: number): string {
-  const params = new URLSearchParams();
-  if (p > 1) params.set("page", String(p));
-  if (sort !== "count") params.set("sort", sort);
-  if (category) params.set("category", category);
-  const qs = params.toString();
-  return qs ? `/tags?${qs}` : "/tags";
-}
-
 // Tag cloud: compute font sizes based on post_count
 const maxCount = tags.length > 0 ? Math.max(...tags.map((t: any) => t.post_count)) : 1;
 const minCount = tags.length > 0 ? Math.min(...tags.map((t: any) => t.post_count)) : 0;
 const countRange = maxCount - minCount || 1;
+
+// Map tag category to CSS variable for inline color
+function getTagCategoryVar(cat: TagCategory): string {
+  const map: Record<string, string> = {
+    artist: "var(--color-tag-artist)",
+    character: "var(--color-tag-character)",
+    copyright: "var(--color-tag-copyright)",
+    general: "var(--color-tag-general)",
+    meta: "var(--color-tag-meta)",
+  };
+  return map[cat] || "var(--color-tag-general)";
+}
+
+function getTagCategoryBg(cat: TagCategory): string {
+  const map: Record<string, string> = {
+    artist: "oklch(70% 0.16 55 / 0.08)",
+    character: "oklch(68% 0.16 340 / 0.08)",
+    copyright: "oklch(62% 0.16 290 / 0.08)",
+    general: "oklch(72% 0.12 175 / 0.08)",
+    meta: "oklch(60% 0.01 250 / 0.08)",
+  };
+  return map[cat] || "oklch(72% 0.12 175 / 0.08)";
+}
 ---
 
 <BaseLayout title="标签" description={`浏览 ${total} 个标签，按分类查看`}>
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+  <div class="max-w-[1400px] mx-auto px-6 lg:px-8 py-6">
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-end justify-between gap-6 mb-8 pt-2 flex-wrap">
       <div>
-        <h1 class="text-2xl font-bold text-[var(--text-primary)]">
-          <span class="gradient-text">标签</span>
+        <h1 class="gradient-text" style="font-size: clamp(1.5rem, 2.5vw, 2rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.2;">
+          标签
         </h1>
-        <p class="text-sm text-[var(--text-muted)] mt-1">{total} 个标签</p>
+        <p class="text-[0.8125rem] text-[var(--text-muted)] mt-1">{total} 个标签</p>
       </div>
 
-      <!-- Sort toggle -->
-      <div class="flex items-center gap-2 text-sm">
-        <span class="text-[var(--text-muted)]">排序：</span>
+      <!-- Sort toggle (button group) -->
+      <div class="inline-flex items-center bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[var(--radius-sm)] p-0.5">
         <a
           href={`/tags?sort=count${category ? `&category=${category}` : ""}`}
-          class={`px-2 py-1 rounded transition-colors ${sort === "count" ? "gradient-bg text-[var(--color-dark-bg)] font-bold" : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]"}`}
+          class={`px-3 py-1 rounded-[var(--radius-sm)] text-sm font-medium transition-all duration-[var(--duration-fast)] ${sort === "count" ? "bg-[var(--accent-subtle)] text-[var(--accent-color)] font-semibold" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"}`}
         >
           数量
         </a>
         <a
           href={`/tags?sort=name${category ? `&category=${category}` : ""}`}
-          class={`px-2 py-1 rounded transition-colors ${sort === "name" ? "gradient-bg text-[var(--color-dark-bg)] font-bold" : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]"}`}
+          class={`px-3 py-1 rounded-[var(--radius-sm)] text-sm font-medium transition-all duration-[var(--duration-fast)] ${sort === "name" ? "bg-[var(--accent-subtle)] text-[var(--accent-color)] font-semibold" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"}`}
         >
           名称
         </a>
       </div>
     </div>
 
-    <!-- Category filter -->
+    <!-- Category filter (pill chips) -->
     <div class="flex items-center gap-2 mb-8 flex-wrap">
       {categories.map((cat) => (
         <a
           href={`/tags?category=${cat.value}&sort=${sort}`}
-          class={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 ${
+          class={`filter-chip ${
             (category || "") === cat.value
-              ? "gradient-bg text-[var(--color-dark-bg)]"
-              : "text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[var(--color-cyan-accent-start)]"
+              ? "active"
+              : ""
           }`}
         >
           {cat.label}
@@ -89,7 +102,7 @@ const countRange = maxCount - minCount || 1;
 
     <!-- Tag cloud -->
     {tags.length > 0 && (
-      <div class="card p-6 mb-8">
+      <div class="card p-6 mb-8" style="animation: cloudIn var(--duration-slow) var(--ease-out);">
         <h2 class="text-sm font-medium text-[var(--text-muted)] mb-4">标签云</h2>
         <div class="flex flex-wrap gap-2.5 items-baseline">
           {tags.slice(0, 80).map((tag: any) => {
@@ -97,11 +110,11 @@ const countRange = maxCount - minCount || 1;
             return (
               <a
                 href={`/tags/${encodeURIComponent(tag.name)}`}
-                class={`inline-block rounded-md px-1.5 py-0.5 transition-all duration-150 hover:scale-110 hover:shadow-sm ${getTagCategoryColor(tag.category as TagCategory)}`}
-                style={`font-size: ${size}rem`}
+                class="inline-block rounded-[var(--radius-sm)] px-1.5 py-0.5 transition-all duration-[var(--duration-fast)] hover:scale-110"
+                style={`font-size: ${size}rem; color: ${getTagCategoryVar(tag.category as TagCategory)}; background: ${getTagCategoryBg(tag.category as TagCategory)}; transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);`}
               >
                 {tag.name}
-                <span class="text-xs opacity-50 ml-0.5">({tag.post_count})</span>
+                <span class="text-[0.625rem] opacity-50 ml-0.5 font-mono">{tag.post_count}</span>
               </a>
             );
           })}
@@ -111,7 +124,7 @@ const countRange = maxCount - minCount || 1;
 
     <!-- Popular tags list -->
     {tags.length > 0 && (
-      <div class="card overflow-hidden">
+      <div class="card overflow-hidden" style="animation: tableIn var(--duration-slow) var(--ease-out);">
         <div class="px-4 py-3 border-b border-[var(--border-color)]">
           <h2 class="text-sm font-medium text-[var(--text-muted)]">
             {sort === "count" ? "热门标签" : "全部标签"}
@@ -120,28 +133,28 @@ const countRange = maxCount - minCount || 1;
         <table class="w-full">
           <thead>
             <tr class="border-b border-[var(--border-color)]">
-              <th class="text-left px-4 py-3 text-sm font-medium text-[var(--text-muted)]">标签</th>
-              <th class="text-left px-4 py-3 text-sm font-medium text-[var(--text-muted)]">分类</th>
-              <th class="text-right px-4 py-3 text-sm font-medium text-[var(--text-muted)]">数量</th>
+              <th class="text-left px-4 py-3 text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">标签</th>
+              <th class="text-left px-4 py-3 text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">分类</th>
+              <th class="text-right px-4 py-3 text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">数量</th>
             </tr>
           </thead>
           <tbody>
             {tags.map((tag: any) => (
-              <tr class="border-b border-[var(--border-color)] hover:bg-[var(--bg-primary)] transition-colors">
+              <tr class="border-b border-[var(--border-color)] hover:bg-[var(--accent-subtle)] transition-all duration-[var(--duration-fast)]" style="transition-timing-function: var(--ease-out);">
                 <td class="px-4 py-2">
                   <a
                     href={`/tags/${encodeURIComponent(tag.name)}`}
-                    class="text-[var(--text-primary)] hover:text-[var(--color-cyan-accent-start)] transition-colors font-medium"
+                    class="text-[var(--text-primary)] hover:text-[var(--accent-color)] transition-colors duration-[var(--duration-fast)] font-medium"
                   >
                     {tag.name}
                   </a>
                 </td>
                 <td class="px-4 py-2">
-                  <span class={`text-xs px-2 py-0.5 rounded-md border ${getTagCategoryColor(tag.category as TagCategory)}`}>
+                  <span class="text-[0.6875rem] px-2 py-0.5 rounded-[var(--radius-sm)]" style={`color: ${getTagCategoryVar(tag.category as TagCategory)}; background: ${getTagCategoryBg(tag.category as TagCategory)};`}>
                     {getTagCategoryLabel(tag.category as TagCategory)}
                   </span>
                 </td>
-                <td class="px-4 py-2 text-right text-sm text-[var(--text-muted)]">
+                <td class="px-4 py-2 text-right text-sm text-[var(--text-muted)] font-mono tabular-nums">
                   {tag.post_count}
                 </td>
               </tr>
@@ -153,7 +166,10 @@ const countRange = maxCount - minCount || 1;
 
     {tags.length === 0 && (
       <div class="flex flex-col items-center justify-center py-24 text-[var(--text-muted)]">
-        <p class="text-xl mb-2">暂无标签</p>
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 mb-4 text-[var(--border-color)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 8.25h13.5M5.25 8.25V18a2.25 2.25 0 0 0 2.25 2.25h10.5A2.25 2.25 0 0 0 20.25 18V8.25m-15 0V6a2.25 2.25 0 0 1 2.25-2.25h10.5A2.25 2.25 0 0 1 20.25 6v2.25m-15 0h13.5" />
+        </svg>
+        <p class="text-lg font-semibold mb-1">暂无标签</p>
         <p class="text-sm">添加插画后标签会自动出现</p>
       </div>
     )}
@@ -165,7 +181,6 @@ const countRange = maxCount - minCount || 1;
         currentPage={page}
         totalPages={total_pages}
         perPage={perPage}
-        buildUrl={buildPageUrl}
       />
     )}
   </div>

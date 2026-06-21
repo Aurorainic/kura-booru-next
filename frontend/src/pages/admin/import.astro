@@ -9,7 +9,7 @@ if (!isAdmin) {
 ---
 
 <BaseLayout title="导入图片">
-  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+  <div class="max-w-4xl mx-auto px-6 lg:px-8 py-6">
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
       <div>
@@ -22,7 +22,7 @@ if (!isAdmin) {
       </div>
       <a
         href="/admin/posts"
-        class="text-sm text-[var(--text-muted)] hover:text-[var(--color-cyan-accent-start)] transition-colors"
+        class="text-sm text-[var(--text-muted)] hover:text-[var(--accent-color)] transition-colors"
       >
         ← 返回管理
       </a>
@@ -37,14 +37,14 @@ if (!isAdmin) {
         id="urls-input"
         rows="8"
         placeholder="https://www.pixiv.net/artworks/12345&#10;https://x.com/user/status/67890&#10;https://danbooru.donmai.us/posts/11111"
-        class="w-full px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] font-mono text-sm resize-y"
+        class="w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-color)] font-mono text-sm resize-y"
       ></textarea>
       <div class="flex items-center justify-between mt-3">
         <span id="url-count" class="text-xs text-[var(--text-muted)]">0 个有效链接</span>
         <button
           id="import-btn"
           type="button"
-          class="px-6 py-2 rounded-lg gradient-bg text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+          class="px-6 py-2 rounded-[var(--radius-md)] bg-[var(--accent-color)] text-[var(--bg-primary)] font-medium hover:bg-[var(--accent-hover)] active:scale-[0.97] transition-all duration-[var(--duration-fast)] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           开始导入
         </button>

@@ -10,10 +10,11 @@ const { posts, isAdmin = false } = Astro.props;
 ---
 
 <div class="columns-2 sm:columns-3 md:columns-4 lg:columns-5 xl:columns-6 2xl:columns-7 gap-3">
-  {posts.map((post) => (
+  {posts.map((post, index) => (
     <a
       href={`/posts/${post.id}`}
-      class="group block mb-3 rounded-xl overflow-hidden card break-inside-avoid"
+      class="masonry-item group block mb-3"
+      style={`animation: cardIn var(--duration-slow) var(--ease-out) both; animation-delay: ${index < 12 ? index * 40 : 0}ms;`}
     >
       <div class="relative overflow-hidden">
         <img
@@ -21,27 +22,31 @@ const { posts, isAdmin = false } = Astro.props;
           alt={post.title || `作品 ${post.id.slice(0, 8)}`}
           width={post.width}
           height={post.height}
-          class="w-full h-auto"
+          class="w-full h-auto skeleton"
           decoding="async"
           loading="lazy"
+          onload="this.classList.remove('skeleton')"
         />
         {/* Rating badge — only visible to admin */}
         {isAdmin && post.rating !== "safe" && (
-          <span class={`absolute top-1.5 left-1.5 px-1.5 py-0.5 text-xs font-bold rounded ${getRatingColorClass(post.rating)} border`}>
+          <span class={`absolute top-2 left-2 px-1.5 py-0.5 text-[0.625rem] font-bold rounded-[var(--radius-sm)] z-2 ${post.rating === "questionable" ? "rating-questionable" : "rating-explicit"}`} style="letter-spacing: 0.04em;">
             {post.rating === "questionable" ? "敏" : "限"}
           </span>
         )}
         {/* Hover overlay with tags */}
-        <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-2">
+        <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-[var(--duration-normal)] flex flex-col justify-end p-2.5">
           {post.tags && post.tags.length > 0 && (
             <div class="flex flex-wrap gap-1">
-              {post.tags.slice(0, 5).map((tag) => (
-                <span class="text-xs px-1.5 py-0.5 rounded bg-white/20 text-white backdrop-blur-sm truncate max-w-[100px]">
+              {post.tags.slice(0, 5).map((tag, tagIndex) => (
+                <span
+                  class="text-[0.6875rem] px-1.5 py-0.5 rounded-[var(--radius-sm)] bg-white/15 text-white backdrop-blur-sm truncate max-w-[100px]"
+                  style={`animation: tagSlideUp var(--duration-fast) var(--ease-out) both; animation-delay: ${tagIndex * 30}ms;`}
+                >
                   {tag.name}
                 </span>
               ))}
               {post.tags.length > 5 && (
-                <span class="text-xs px-1.5 py-0.5 rounded bg-white/20 text-white backdrop-blur-sm">
+                <span class="text-[0.6875rem] px-1.5 py-0.5 rounded-[var(--radius-sm)] bg-white/15 text-white/70 backdrop-blur-sm">
                   +{post.tags.length - 5}
                 </span>
               )}

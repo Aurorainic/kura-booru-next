@@ -18,15 +18,15 @@ export default defineConfig({
     checkOrigin: true,
     allowedDomains: (() => {
       const domains = [];
-      // Allow the production domain (e.g. https://kura-booru.lainns.xyz)
-      if (process.env.APP_URL) {
-        try {
-          domains.push(new URL(process.env.APP_URL).origin);
-        } catch {}
-      }
-      // Also allow an explicit APP_DOMAIN if set
+      // Allow the production domain as a RemotePattern object
+      // (Astro requires objects with {hostname, protocol?}, not plain strings)
       if (process.env.APP_DOMAIN) {
-        domains.push(process.env.APP_DOMAIN);
+        domains.push({ hostname: process.env.APP_DOMAIN });
+      } else if (process.env.APP_URL) {
+        try {
+          const url = new URL(process.env.APP_URL);
+          domains.push({ hostname: url.hostname, protocol: url.protocol.replace(":", "") });
+        } catch {}
       }
       return domains;
     })(),
