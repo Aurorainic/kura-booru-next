@@ -31,10 +31,9 @@ class AuthMiddleware(BaseMiddleware):
 
         if user_id is None or user_id not in settings.BOT_ADMIN_IDS:
             logger.warning(
-                "Unauthorized access attempt: user_id=%s, event_type=%s, admin_ids=%s",
+                "Unauthorized access attempt: user_id=%s, event_type=%s",
                 user_id,
                 type(event).__name__,
-                settings.BOT_ADMIN_IDS,
             )
             if isinstance(event, Message):
                 await event.answer(

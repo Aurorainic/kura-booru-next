@@ -23,8 +23,9 @@ def _parse_redis_url(url: str) -> RedisSettings:
     host = parsed.hostname or "redis"
     port = parsed.port or 6379
     database = int(parsed.path.lstrip("/") or "0")
+    password = parsed.password or None
 
-    return RedisSettings(host=host, port=port, database=database)
+    return RedisSettings(host=host, port=port, database=database, password=password)
 
 
 async def get_arq_pool() -> ArqRedis:

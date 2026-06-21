@@ -44,13 +44,17 @@ def build_search_keyboard(
             ]
         )
 
+    # Truncate query in callback data to avoid 64-byte limit
+    # Format: search:<query>:<page> — keep query ≤ 40 chars
+    safe_query = query[:40] if len(query) > 40 else query
+
     # Pagination row
     nav_buttons: list[InlineKeyboardButton] = []
     if page > 1:
         nav_buttons.append(
             InlineKeyboardButton(
                 text="◀ Prev",
-                callback_data=f"search:{query}:{page - 1}",
+                callback_data=f"search:{safe_query}:{page - 1}",
             )
         )
     nav_buttons.append(
@@ -63,7 +67,7 @@ def build_search_keyboard(
         nav_buttons.append(
             InlineKeyboardButton(
                 text="Next ▶",
-                callback_data=f"search:{query}:{page + 1}",
+                callback_data=f"search:{safe_query}:{page + 1}",
             )
         )
     buttons.append(nav_buttons)

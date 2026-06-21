@@ -64,7 +64,11 @@ def format_post_info(post: dict) -> str:
     if created_at:
         lines.append(f"**Added:** {created_at}")
 
-    return "\n".join(lines)
+    text = "\n".join(lines)
+    # Telegram message limit is 4096 chars; truncate to be safe
+    if len(text) > 4000:
+        text = text[:3990] + "\n..."
+    return text
 
 
 @router.message(Command("info"))

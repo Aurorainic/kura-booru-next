@@ -87,7 +87,7 @@ async def search_posts(
     session = await get_session()
     try:
         params = {"q": query, "page": str(page), "per_page": str(per_page)}
-        async with session.get("/api/search", params=params) as resp:
+        async with session.get("/api/search/", params=params) as resp:
             resp.raise_for_status()
             return await resp.json()
     except aiohttp.ClientError as exc:
@@ -117,3 +117,27 @@ async def create_process_task(
     except aiohttp.ClientError as exc:
         logger.error("Failed to create process task for %s: %s", source_url, exc)
         return None
+
+
+async def update_post_rating(post_id: str, rating: str) -> bool:
+    """Update a post's rating via PATCH /api/posts/{id}.
+
+    Returns True on success, False on failure.
+    The X-Api-Key header is automatically sent by the shared session.
+    """
+    session = await get_session()
+    try:
+        async with session.patch(
+            f"/api/posts/{post_id}",
+            json={"rating": rating},
+        ) as resp:
+            if resp.status == 200:
+                return True
+            logger.warning(
+                "Failed to update rating for post %s: HTTP %d",
+                post_id, resp.status,
+            )
+            return False
+    except aiohttp.ClientError as exc:
+        logger.error("Failed to update rating for post %s: %s", post_id, exc)
+        return False

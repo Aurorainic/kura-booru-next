@@ -5,8 +5,7 @@ import logging
 import re
 
 from aiogram import Router, F
-from aiogram.filters import and_f as AND_F
-from aiogram.types import Message
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 from app.config import settings
 from app.services.backend_api import create_process_task, get_post
@@ -21,6 +20,9 @@ URL_PATTERN = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
 
 # Limit URLs processed per message to avoid abuse
 URL_MESSAGE_LIMIT = 10
+
+# In-memory set of post IDs that have been confirmed via rating selection
+_confirmed_posts: set[str] = set()
 
 # Source site detection patterns mapped to (site_name, id_capture_group)
 SOURCE_PATTERNS: list[tuple[re.Pattern, str]] = [
@@ -86,8 +88,37 @@ def identify_source(url: str) -> tuple[str, str] | None:
         if match:
             return site_name, match.group(1)
 
-    # Unknown source — still processable
-    return "other", url
+    # Unknown source — not processable
+    return None
+
+
+async def _auto_confirm_safe(
+    processing_msg: Message,
+    post_id: str,
+    source_site: str,
+    source_id: str,
+) -> None:
+    """Background task: auto-confirm with safe rating after 5 min timeout."""
+    await asyncio.sleep(300)  # 5 minutes
+
+    # If user already selected a rating, skip
+    if post_id in _confirmed_posts:
+        return
+
+    _confirmed_posts.add(post_id)
+
+    post_url = f"{settings.FRONTEND_URL}/posts/{post_id}"
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🖼 查看作品 / View", url=post_url)]
+    ])
+    try:
+        await processing_msg.edit_text(
+            f"✅ 处理完成（默认公开）\n"
+            f"Source: {source_site} | ID: {source_id}",
+            reply_markup=keyboard,
+        )
+    except Exception:
+        pass  # Message deleted or too old
 
 
 async def _poll_and_notify(
@@ -101,72 +132,98 @@ async def _poll_and_notify(
     result = await poll_job_result(task_id, timeout=300, poll_delay=3)
 
     if result is None:
-        await processing_msg.edit_text(
-            "⏰ 处理超时 / Processing timed out\n"
-            f"Task: `{task_id}`",
-            parse_mode="Markdown",
-        )
+        try:
+            await processing_msg.edit_text(
+                f"⏰ 处理超时 / Processing timed out\n"
+                f"Task: `{task_id}`",
+                parse_mode="Markdown",
+            )
+        except Exception:
+            pass
         return
 
     status = result.get("status")
     if status == "success":
         post_id = result.get("post_id")
-        # Fetch the post to get the S3 URL
-        post = await get_post(post_id) if post_id else None
-        if post:
-            post_url = f"{settings.FRONTEND_URL}/posts/{post_id}"
-            await processing_msg.edit_text(
-                f"✅ 处理完成 / Processing complete\n"
-                f"Source: {source_site} | ID: {source_id}\n"
-                f"[查看作品 / View]({post_url})",
-                parse_mode="Markdown",
+        if post_id:
+            # Show rating selection menu instead of direct link
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="🟢 公开", callback_data=f"rate:{post_id}:safe"),
+                    InlineKeyboardButton(text="🟡 敏感", callback_data=f"rate:{post_id}:questionable"),
+                    InlineKeyboardButton(text="🔴 限制", callback_data=f"rate:{post_id}:explicit"),
+                ]
+            ])
+            try:
+                await processing_msg.edit_text(
+                    f"✅ 处理完成\n"
+                    f"Source: {source_site} | ID: {source_id}\n"
+                    f"请选择评级 / Select rating:",
+                    reply_markup=keyboard,
+                )
+            except Exception:
+                pass
+            # 5 min auto-confirm with safe
+            asyncio.create_task(
+                _auto_confirm_safe(processing_msg, post_id, source_site, source_id)
             )
         else:
-            await processing_msg.edit_text(
-                f"✅ 处理完成 / Processing complete\n"
-                f"Source: {source_site} | ID: {source_id}\n"
-                f"Post ID: `{post_id}`",
-                parse_mode="Markdown",
-            )
+            try:
+                await processing_msg.edit_text(
+                    f"✅ 处理完成 / Processing complete\n"
+                    f"Source: {source_site} | ID: {source_id}\n"
+                    f"Post ID: `{post_id}`",
+                    parse_mode="Markdown",
+                )
+            except Exception:
+                pass
     elif status == "error":
         error = result.get("error", "unknown")
         msg = result.get("message", "Unknown error")
-        if error == "image_too_large":
-            await processing_msg.edit_text(
-                f"⚠️ 图片过大 / Image too large\n"
-                f"{msg}\n"
-                f"Task: `{task_id}`",
-                parse_mode="Markdown",
-            )
-        elif error == "duplicate":
-            existing_id = result.get("existing_post_id")
-            post_url = f"{settings.FRONTEND_URL}/posts/{existing_id}" if existing_id else None
-            if post_url:
+        try:
+            if error == "image_too_large":
                 await processing_msg.edit_text(
-                    f"⚠️ 重复图片 / Duplicate image\n"
-                    f"[查看已有作品 / View existing]({post_url})",
-                    parse_mode="Markdown",
-                )
-            else:
-                await processing_msg.edit_text(
-                    f"⚠️ 重复图片 / Duplicate image\n"
+                    f"⚠️ 图片过大 / Image too large\n"
+                    f"{msg}\n"
                     f"Task: `{task_id}`",
                     parse_mode="Markdown",
                 )
-        else:
+            elif error == "duplicate":
+                existing_id = result.get("existing_post_id")
+                if existing_id:
+                    post_url = f"{settings.FRONTEND_URL}/posts/{existing_id}"
+                    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="🖼 查看已有作品", url=post_url)]
+                    ])
+                    await processing_msg.edit_text(
+                        f"⚠️ 重复图片 / Duplicate image",
+                        reply_markup=keyboard,
+                    )
+                else:
+                    await processing_msg.edit_text(
+                        f"⚠️ 重复图片 / Duplicate image\n"
+                        f"Task: `{task_id}`",
+                        parse_mode="Markdown",
+                    )
+            else:
+                await processing_msg.edit_text(
+                    f"❌ 处理失败 / Processing failed\n"
+                    f"Error: `{error}`\n"
+                    f"{msg}\n"
+                    f"Task: `{task_id}`",
+                    parse_mode="Markdown",
+                )
+        except Exception:
+            pass  # Message deleted or too old
+    else:
+        try:
             await processing_msg.edit_text(
-                f"❌ 处理失败 / Processing failed\n"
-                f"Error: `{error}`\n"
-                f"{msg}\n"
+                f"⚠️ 未知状态 / Unknown status: `{status}`\n"
                 f"Task: `{task_id}`",
                 parse_mode="Markdown",
             )
-    else:
-        await processing_msg.edit_text(
-            f"⚠️ 未知状态 / Unknown status: `{status}`\n"
-            f"Task: `{task_id}`",
-            parse_mode="Markdown",
-        )
+        except Exception:
+            pass
 
 
 async def process_url(message: Message, url: str) -> None:
@@ -190,21 +247,27 @@ async def process_url(message: Message, url: str) -> None:
     )
 
     if result is None:
-        await processing_msg.edit_text(
-            "❌ 下载失败 / Failed to create processing task.\n"
-            "Please try again later."
-        )
+        try:
+            await processing_msg.edit_text(
+                "❌ 下载失败 / Failed to create processing task.\n"
+                "Please try again later."
+            )
+        except Exception:
+            pass
         return
 
     # Start background polling
     task_id = result.get("task_id", "unknown")
-    await processing_msg.edit_text(
-        f"📥 已加入队列 / Queued for processing\n"
-        f"Source: {source_site} | ID: {source_id}\n"
-        f"Task: `{task_id}`\n"
-        f"⏳ 正在处理中...",
-        parse_mode="Markdown",
-    )
+    try:
+        await processing_msg.edit_text(
+            f"📥 已加入队列 / Queued for processing\n"
+            f"Source: {source_site} | ID: {source_id}\n"
+            f"Task: `{task_id}`\n"
+            f"⏳ 正在处理中...",
+            parse_mode="Markdown",
+        )
+    except Exception:
+        pass
 
     # Fire-and-forget background polling
     asyncio.create_task(
@@ -228,7 +291,10 @@ async def _process_urls_sequential(
 
         source_info = identify_source(url)
         if source_info is None:
-            await processing_msg.edit_text(f"⚠️ 跳过（无法识别）: {label}")
+            try:
+                await processing_msg.edit_text(f"⚠️ 跳过（无法识别）: {label}")
+            except Exception:
+                pass
             failed += 1
             continue
 
@@ -237,24 +303,33 @@ async def _process_urls_sequential(
             source_url=url, source_site=source_site, source_id=source_id,
         )
         if result is None:
-            await processing_msg.edit_text(f"❌ 队列失败: {label}")
+            try:
+                await processing_msg.edit_text(f"❌ 队列失败: {label}")
+            except Exception:
+                pass
             failed += 1
             continue
 
         task_id = result.get("task_id", "unknown")
-        await processing_msg.edit_text(
-            f"📥 已入队: {label}\nTask: `{task_id}`",
-            parse_mode="Markdown",
-        )
+        try:
+            await processing_msg.edit_text(
+                f"📥 已入队: {label}\nTask: `{task_id}`",
+                parse_mode="Markdown",
+            )
+        except Exception:
+            pass
 
         asyncio.create_task(
             _poll_and_notify(message, processing_msg, task_id, source_site, source_id)
         )
         succeeded += 1
 
-    await status_msg.edit_text(
-        f"✅ 处理完毕 / Done: 成功 {succeeded}, 失败 {failed}, 共 {len(urls)}"
-    )
+    try:
+        await status_msg.edit_text(
+            f"✅ 处理完毕 / Done: 成功 {succeeded}, 失败 {failed}, 共 {len(urls)}"
+        )
+    except Exception:
+        pass
 
 
 # ── Plain text filter (matches direct text messages + forwarded text-only) ──
@@ -314,16 +389,14 @@ async def _handle_urls_from_text(message: Message, text: str) -> None:
             seen.add(u)
             unique_urls.append(u)
 
-    # Cap at limit
-    if len(unique_urls) > URL_MESSAGE_LIMIT:
-        unique_urls = unique_urls[:URL_MESSAGE_LIMIT]
-
-    # Filter to recognized image sources only (skip non-image links)
+    # Filter to recognized image sources first, then cap at limit
     recognized: list[tuple[str, str, str]] = []  # (url, site, id)
     for url in unique_urls:
         info = identify_source(url)
-        if info and info[0] != "other":
+        if info:
             recognized.append((url, info[0], info[1]))
+        if len(recognized) >= URL_MESSAGE_LIMIT:
+            break
 
     if not recognized:
         # No recognized image source URLs — ignore silently

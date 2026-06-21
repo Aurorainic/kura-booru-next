@@ -14,16 +14,18 @@ S3 objects (original, thumb, preview), and decrements tag post_counts.
 
 from __future__ import annotations
 
+import hmac
 import logging
 import random
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.constants import ALLOWED_PER_PAGE
 from app.auth import get_current_admin, get_is_admin
+from app.config import settings
 from app.database import get_db
 from app.models.admin import Admin
 from app.models.post import Post, Rating, SourceSite
@@ -161,16 +163,25 @@ async def random_post(
 async def update_post_rating(
     post_id: uuid.UUID,
     body: PostRatingUpdate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     is_admin: bool = Depends(get_is_admin),
 ):
-    """Update a post's rating. Admin only.
+    """Update a post's rating. Admin session or API key required.
 
-    Used by the admin UI to flip a post between public (safe) and private
-    (questionable/explicit).
+    Accepts either a valid admin session cookie (from web UI) or a valid
+    X-Api-Key header (from the Telegram bot). If neither is present, returns 403.
     """
     if not is_admin:
-        raise HTTPException(status_code=403, detail="Admin privileges required")
+        # Check API key as alternative auth
+        x_api_key = request.headers.get("x-api-key")
+        expected = settings.BACKEND_API_KEY
+        if expected and x_api_key and hmac.compare_digest(x_api_key, expected):
+            pass  # API key valid
+        elif not expected:
+            pass  # Dev mode: BACKEND_API_KEY not set, allow
+        else:
+            raise HTTPException(status_code=403, detail="Admin privileges or API key required")
 
     stmt = select(Post).where(Post.id == post_id)
     result = await db.execute(stmt)
