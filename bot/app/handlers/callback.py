@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardBut
 
 from app.config import settings
 from app.handlers.info import format_post_info
-from app.handlers.url_handler import _confirmed_posts
+from app.handlers.url_handler import _confirmed_posts, _RATING_ORDER, _RATING_LABELS
 from app.services.backend_api import get_post, update_post_rating
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,12 @@ router = Router()
 
 @router.callback_query(F.data.startswith("rate:"))
 async def callback_rate_post(callback: CallbackQuery) -> None:
-    """Handle rating selection callback: rate:{post_id}:{rating}."""
+    """Handle rating selection callback: rate:{post_id}:{rating}.
+
+    The user's manual selection always takes final priority.
+    The backend auto-rating rules already set an initial rating, but the
+    user can override it (including choosing a less restrictive rating).
+    """
     data = callback.data
     if data is None:
         return
@@ -33,13 +38,12 @@ async def callback_rate_post(callback: CallbackQuery) -> None:
         await callback.answer("已确认 / Already confirmed", show_alert=True)
         return
 
-    # Update rating via backend API
+    # Update rating via backend API — user's choice overrides auto-rating
     success = await update_post_rating(post_id, rating)
 
     if success:
         _confirmed_posts.add(post_id)
-        rating_labels = {"safe": "🟢 公开", "questionable": "🟡 敏感", "explicit": "🔴 限制"}
-        rating_label = rating_labels.get(rating, rating)
+        rating_label = _RATING_LABELS.get(rating, rating)
         post_url = f"{settings.FRONTEND_URL}/posts/{post_id}"
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🖼 查看作品 / View", url=post_url)]
@@ -53,11 +57,9 @@ async def callback_rate_post(callback: CallbackQuery) -> None:
             )
         except Exception:
             pass
+        await callback.answer()
     else:
         await callback.answer("更新失败 / Update failed", show_alert=True)
-        return
-
-    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("post:"))

@@ -8,7 +8,7 @@ from aiogram import Router, F
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 from app.config import settings
-from app.services.backend_api import create_process_task, get_post
+from app.services.backend_api import create_process_task, get_post, update_post_rating
 from app.services.arq_client import poll_job_result
 
 logger = logging.getLogger(__name__)
@@ -23,6 +23,13 @@ URL_MESSAGE_LIMIT = 10
 
 # In-memory set of post IDs that have been confirmed via rating selection
 _confirmed_posts: set[str] = set()
+
+# Seconds to wait for manual rating before auto-confirming
+RATING_COUNTDOWN_SECONDS = 10
+
+# Rating priority: higher value = more restrictive
+_RATING_ORDER = {"safe": 0, "questionable": 1, "explicit": 2}
+_RATING_LABELS = {"safe": "🟢 公开", "questionable": "🟡 敏感", "explicit": "🔴 限制"}
 
 # Source site detection patterns mapped to (site_name, id_capture_group)
 SOURCE_PATTERNS: list[tuple[re.Pattern, str]] = [
@@ -92,28 +99,58 @@ def identify_source(url: str) -> tuple[str, str] | None:
     return None
 
 
-async def _auto_confirm_safe(
+async def _countdown_and_auto_confirm(
     processing_msg: Message,
     post_id: str,
     source_site: str,
     source_id: str,
+    auto_rating: str | None,
 ) -> None:
-    """Background task: auto-confirm with safe rating after 5 min timeout."""
-    await asyncio.sleep(300)  # 5 minutes
+    """10-second countdown: show timer, then auto-confirm if user hasn't selected.
 
-    # If user already selected a rating, skip
+    If auto_rating was set by backend rules (e.g. tag matched a rule), use that.
+    Otherwise default to safe.
+    """
+    final_rating = auto_rating or "safe"
+    final_label = _RATING_LABELS.get(final_rating, final_rating)
+    rule_hint = f"（自动规则）" if auto_rating else "（默认）"
+
+    # Countdown display
+    for remaining in range(RATING_COUNTDOWN_SECONDS, 0, -1):
+        if post_id in _confirmed_posts:
+            return  # User already selected
+        try:
+            await processing_msg.edit_text(
+                f"⏳ 等待评级 / Awaiting rating ({remaining}s)\n"
+                f"Source: {source_site} | ID: {source_id}\n"
+                f"请选择评级 / Select rating:",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [
+                        InlineKeyboardButton(text="🟢 公开", callback_data=f"rate:{post_id}:safe"),
+                        InlineKeyboardButton(text="🟡 敏感", callback_data=f"rate:{post_id}:questionable"),
+                        InlineKeyboardButton(text="🔴 限制", callback_data=f"rate:{post_id}:explicit"),
+                    ]
+                ]),
+            )
+        except Exception:
+            pass  # Message deleted or edit rate-limited
+        await asyncio.sleep(1)
+
+    # Countdown finished — auto-confirm
     if post_id in _confirmed_posts:
         return
 
     _confirmed_posts.add(post_id)
 
+    # If the auto-rating differs from the post's current rating, update it
     post_url = f"{settings.FRONTEND_URL}/posts/{post_id}"
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🖼 查看作品 / View", url=post_url)]
     ])
     try:
         await processing_msg.edit_text(
-            f"✅ 处理完成（默认公开）\n"
+            f"✅ 处理完成\n"
+            f"评级: {final_label} {rule_hint}\n"
             f"Source: {source_site} | ID: {source_id}",
             reply_markup=keyboard,
         )
@@ -145,8 +182,9 @@ async def _poll_and_notify(
     status = result.get("status")
     if status == "success":
         post_id = result.get("post_id")
+        auto_rating = result.get("auto_rating")  # Set by backend auto-rating rules
         if post_id:
-            # Show rating selection menu instead of direct link
+            # Show rating selection menu
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
                     InlineKeyboardButton(text="🟢 公开", callback_data=f"rate:{post_id}:safe"),
@@ -154,18 +192,35 @@ async def _poll_and_notify(
                     InlineKeyboardButton(text="🔴 限制", callback_data=f"rate:{post_id}:explicit"),
                 ]
             ])
+
+            # If auto-rating rule matched, hint the suggested rating
+            if auto_rating:
+                auto_label = _RATING_LABELS.get(auto_rating, auto_rating)
+                prompt_text = (
+                    f"⏳ 等待评级 / Awaiting rating\n"
+                    f"Source: {source_site} | ID: {source_id}\n"
+                    f"建议评级: {auto_label}（自动规则）\n"
+                    f"请选择评级 / Select rating:"
+                )
+            else:
+                prompt_text = (
+                    f"⏳ 等待评级 / Awaiting rating\n"
+                    f"Source: {source_site} | ID: {source_id}\n"
+                    f"请选择评级 / Select rating:"
+                )
+
             try:
                 await processing_msg.edit_text(
-                    f"✅ 处理完成\n"
-                    f"Source: {source_site} | ID: {source_id}\n"
-                    f"请选择评级 / Select rating:",
+                    prompt_text,
                     reply_markup=keyboard,
                 )
             except Exception:
                 pass
-            # 5 min auto-confirm with safe
+            # 10s countdown → auto-confirm
             asyncio.create_task(
-                _auto_confirm_safe(processing_msg, post_id, source_site, source_id)
+                _countdown_and_auto_confirm(
+                    processing_msg, post_id, source_site, source_id, auto_rating
+                )
             )
         else:
             try:

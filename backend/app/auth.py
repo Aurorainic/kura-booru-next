@@ -83,8 +83,18 @@ def set_session_cookie(response, token: str) -> None:
 
 
 def clear_session_cookie(response) -> None:
-    """Delete the session cookie."""
-    response.delete_cookie(SESSION_COOKIE_NAME, path="/")
+    """Delete the session cookie.
+
+    Must match the same Secure/SameSite attributes used when setting the cookie,
+    otherwise browsers will silently ignore the deletion directive.
+    """
+    response.delete_cookie(
+        SESSION_COOKIE_NAME,
+        path="/",
+        secure=bool(settings.APP_URL.startswith("https://")),
+        httponly=True,
+        samesite="lax",
+    )
 
 
 # ── Lightweight auth dependency (cookie-only, no DB lookup) ─────────────

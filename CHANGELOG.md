@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-06-21
+
+### Added
+- **Bot rating selection countdown** — 10-second countdown timer displayed in the rating prompt message (`⏳ 等待评级 (Ns)`). If the user doesn't select a rating within 10 seconds, the system auto-confirms:
+  - With auto-rating rules: uses the rule-suggested rating, labeled `（自动规则）`
+  - Without auto-rating rules: defaults to safe, labeled `（默认）`
+- **Auto-rating hint in Bot** — When auto-rating rules match a post's tags, the Bot shows `建议评级: 🟡 敏感（自动规则）` alongside the rating buttons, so the admin knows the system's suggestion before choosing.
+- **`auto_rating` field in task result** — ARQ `process_image` task now returns `auto_rating` (the rule-suggested rating or `null`) so the Bot can display the hint and use it for countdown auto-confirm.
+
+### Changed
+- **Rating prompt text** — Changed from `✅ 处理完成` to `⏳ 等待评级 / Awaiting rating` when showing the rating selection menu. `✅ 处理完成` now only appears after the user confirms a rating (or auto-confirm fires).
+- **Auto-confirm timeout** — Reduced from 5 minutes to 10 seconds. The original 5-minute timeout was too long for a simple 3-button choice.
+- **Manual rating overrides auto-rating** — When the user manually selects a rating, it always takes final priority, even if it's less restrictive than the auto-rating rule suggestion. The backend `PATCH /api/posts/{id}` applies the user's choice directly.
+- **Auto-confirm message format** — Now shows `评级: 🟢 公开（默认）` or `评级: 🟡 敏感（自动规则）` for consistency with manual confirmation format.
+
+### Fixed
+- **Logout not working on HTTPS** — `clear_session_cookie` was missing `secure` and `httponly` parameters, causing browsers to silently ignore the cookie deletion directive when the site uses HTTPS. The delete must match all attributes (`Secure`, `HttpOnly`, `SameSite`, `Path`) used when setting the cookie.
+
 ## [0.2.0] - 2026-06-20
 
 ### Added

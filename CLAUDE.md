@@ -262,9 +262,9 @@ All Dockerfiles have 3 stages: `dev` (hot-reload), `builder`, and production run
 
 ## Current Status
 
-**v0.2.0 released.** Full management panel + auto-rating + web import + visibility hardening on top of the v0.1.x foundation.
+**v0.2.2 released.** Bot rating countdown + logout fix + auto-rating UX refinement.
 
-### What's Done (v0.1.0 → v0.2.0)
+### What's Done (v0.1.0 → v0.2.2)
 - Full processing pipeline: Telegram bot → backend API → ARQ worker → gallery-dl → S3 storage
 - Frontend: Astro SSR with Tailwind v4, masonry grid, tag system, search, pagination
 - Bot: URL auto-detection, /save, /info, /search commands
@@ -283,6 +283,9 @@ All Dockerfiles have 3 stages: `dev` (hot-reload), `builder`, and production run
 - **Tag visibility hardening** (v0.2.0): Non-admin users cannot see tags that only belong to non-safe posts
 - **Logout redirect** (v0.2.0): Logout now redirects to homepage instead of showing raw JSON
 - **Fixed password icon** (v0.2.0): Lock-closed icon instead of wrong tag icon
+- **Bot rating selection menu** (v0.2.1): Post-processing shows 🟢/🟡/🔴 inline buttons instead of auto-linking
+- **Bot rating countdown** (v0.2.2): 10s countdown with auto-confirm; auto-rating hint shown; user choice overrides rules
+- **Logout cookie fix** (v0.2.2): `clear_session_cookie` now matches `secure`/`httponly`/`samesite` attributes
 
 ### Known Limitations
 - Tag `post_count` auto-sync (currently needs manual SQL)

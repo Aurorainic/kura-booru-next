@@ -222,6 +222,7 @@ async def process_image(ctx: dict[str, Any], source_url: str, source_site: str |
             tags = await _ensure_tags(db, result.tag_names, result.tag_categories)
 
             # Step 5b: Check auto-rating rules
+            auto_rating: Rating | None = None
             if tag_names:
                 rule_stmt = select(AutoRatingRule).where(
                     AutoRatingRule.tag_name.in_(
@@ -248,6 +249,7 @@ async def process_image(ctx: dict[str, Any], source_url: str, source_site: str |
                             most_restrictive.target_rating,
                             most_restrictive.tag_name,
                         )
+                        auto_rating = most_restrictive.target_rating
                         post_rating = most_restrictive.target_rating
             for tag in tags:
                 post_tag = PostTag(post_id=post.id, tag_id=tag.id)
@@ -262,6 +264,7 @@ async def process_image(ctx: dict[str, Any], source_url: str, source_site: str |
                 "post_id": str(post.id),
                 "source_site": source_site,
                 "source_id": source_id,
+                "auto_rating": auto_rating.value if auto_rating else None,
             }
 
         except Exception as exc:
