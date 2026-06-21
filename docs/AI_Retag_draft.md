@@ -1,28 +1,40 @@
 # AI Retag 方案草案 (v0.4.0)
 
-> 本草案由 Kimi 2.6 与用户共同讨论形成，作为 v0.4.0 开发阶段的交接材料。
+> 本草案由 Kimi 2.6 与用户共同讨论形成，经 Claude Code 调研修订。
 > 记录时间：2026/06/21
+> 修订时间：2026/06/21
 
 ---
 
 ## 背景与动机
 
-当前标签分类依赖 `recategorize_tags.py` 脚本，该脚本硬编码知识库极小（仅2个角色名、几个展会名），导致大量标签被错误归类为 `general`。为了接轨 Danbooru 标签标准、提升标签质量与可维护性，引入 DeepSeek AI（OpenAI 兼容 API）对标签进行二次处理。
+当前标签分类依赖 `recategorize_tags.py` 脚本，该脚本硬编码知识库极小（仅2个角色名、几个展会名），导致大量标签被错误归类为 `general`。为了接轨 Danbooru 标签标准、提升标签质量与可维护性，引入 AI 服务（OpenAI 兼容 API）对标签进行二次处理。
+
+### 调研结论摘要
+
+- **Danbooru 分类体系**：5 类（general=0, artist=1, copyright=3, character=4, meta=5），类别 2 保留未用。项目已对齐。
+- **Danbooru 大小写**：大小写敏感（`food` ≠ `Food`，issue #34）。项目已统一 `.lower()` 存储，无冲突。
+- **Danbooru API**：公开只读，约 10 req/s，100 条/页。v0.4.0 **暂不引入**，留作 v0.5.0 扩展。
+- **Danbooru tag implications**：3 万+ 条隐含关系，v0.4.0 不涉及。
+- **AI Provider**：采用 `AI_PROVIDER_*` 泛化命名，OpenAI 兼容 API 格式，不绑定特定厂商。推荐 DeepSeek（`deepseek-v4-flash` / `deepseek-v4-pro`）。
+- **项目现有 `tag_aliases` 表**：与 `tag_knowledge` 职责不同，保持分离。
 
 ---
 
 ## 核心设计决策
 
-### 1. 数据库标签三名称体系
+### 1. 数据库标签三名称体系 + 内部 ID
 
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| `name` | 原始标签名（入库时不变） | `初音ミク` |
-| `danbooru_name` | Danbooru 标准命名（AI 确认） | `hatsune_miku` |
-| `translation` | 中文翻译（AI 生成） | `初音未来` |
+| 字段 | 说明 | 示例 | 管理界面 |
+|------|------|------|----------|
+| `id` | UUID 内部标识（不可变锚点） | `a3f8c2...` | 灰色底，锁定不可编辑 |
+| `name` | 原始标签名（入库时不变） | `初音ミク` | 可编辑 |
+| `danbooru_name` | Danbooru 标准命名（AI 确认） | `hatsune_miku` | 可编辑 |
+| `translation` | 中文翻译（AI 生成） | `初音未来` | 可编辑 |
 
 **原则**：
-- 原 tag 为最终准，搜索和数据库关联以 `name` 为准
+- `id` 是所有关联关系（`post_tags`、`tag_aliases`、`auto_rating_rules`）的锚点，永不改变
+- 原 tag `name` 为最终准，搜索和数据库关联以 `name` 为准
 - `danbooru_name` 用于知识库关联和后续扩展
 - 中文翻译仅用于前端展示层
 
@@ -62,6 +74,32 @@
 - ✅ 搜索自动补全下拉
 - ✅ 搜索结果的标签列表
 - ❌ PhotoAlbum 悬停标签（保持简洁，只显示原 tag）
+
+### 5. 管理后台操作分层
+
+**帖子管理页面**（`admin/posts.astro`）：
+- 只做**关联操作**：给帖子添加/移除已有 tag
+- 不涉及 tag 本身属性的修改
+- 类似"贴标签/撕标签"
+
+**标签管理页面**（新增 `admin/tags.astro`）：
+- 修改 tag **实体本身**的属性
+- 编辑界面四列布局：
+
+```
+┌──────────────────┬──────────────┬────────────────┬──────────────┐
+│ 内部 ID (UUID)   │ 日文原文      │ Danbooru 名    │ 中文翻译      │
+│ 灰色底，锁定     │ name          │ danbooru_name  │ translation  │
+├──────────────────┼──────────────┼────────────────┼──────────────┤
+│ a3f8c2d1-...     │ 初音ミク       │ hatsune_miku   │ 初音未来      │
+│ b7e4a9f3-...     │ long_hair     │ long_hair      │ 长发          │
+│ c1d6e5f8-...     │ lack          │ lack           │              │
+└──────────────────┴──────────────┴────────────────┴──────────────┘
+```
+
+- UUID 始终灰色底锁定，不可修改
+- 其他三列均可手动编辑
+- 人工编辑后 `tag_knowledge.source` 标记为 `'manual'`
 
 ---
 
@@ -135,15 +173,17 @@ ALTER TABLE tags ADD COLUMN ai_processed_at TIMESTAMP;
 ```sql
 CREATE TABLE tag_knowledge (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR UNIQUE NOT NULL,           -- 原始标签名（小写）
+    name VARCHAR UNIQUE NOT NULL,           -- 原始标签名（小写，与 tags.name 对齐）
     danbooru_name VARCHAR,                  -- Danbooru 标准名
     type VARCHAR NOT NULL,                  -- artist|character|copyright|general|meta
     translation VARCHAR,                    -- 中文翻译
-    source VARCHAR DEFAULT 'ai',            -- 'ai' | 'manual' | 'danbooru_import'
+    source VARCHAR DEFAULT 'ai',            -- 'ai' | 'manual' | 'danbooru_import' | 'danbooru_api'（v0.5.0）
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
 ```
+
+> **注意**：`tag_knowledge` 与已有 `tag_aliases` 表职责分离——前者是 AI 处理的知识库缓存，后者是标签别名系统，不合并。
 
 ### Post 表扩展（处理状态跟踪）
 
@@ -168,7 +208,7 @@ ALTER TABLE posts ADD COLUMN ai_tag_status VARCHAR DEFAULT 'pending';  -- pendin
    - `POST /api/admin/tags/reprocess` - 触发批量重处理
 
 3. **AI 处理服务**
-   - 新增 `app/services/ai_tag.py` - DeepSeek API 调用封装
+   - 新增 `app/services/ai_tag.py` - OpenAI 兼容 API 调用封装（`AI_PROVIDER_*` 配置）
    - 新增 `app/services/tag_knowledge.py` - 知识库查询/写入
 
 4. **ARQ 任务扩展**
@@ -204,7 +244,7 @@ ALTER TABLE posts ADD COLUMN ai_tag_status VARCHAR DEFAULT 'pending';  -- pendin
       ├─ _ensure_tags (创建 Tag 记录，默认 general)
       ├─ 【新增】ai_tag_processor.process (AI 二次分类+翻译)
       │       ├─ 查 tag_knowledge 表，命中则复用
-      │       ├─ 未命中则调用 DeepSeek API
+      │       ├─ 未命中则调用 AI Provider API
       │       ├─ 写入 tag_knowledge 表
       │       └─ 更新 Tag 记录 (category, danbooru_name, translation)
       ├─ auto-rating rules check
@@ -228,14 +268,17 @@ ALTER TABLE posts ADD COLUMN ai_tag_status VARCHAR DEFAULT 'pending';  -- pendin
 ## 环境变量
 
 ```bash
-# DeepSeek API 配置（OpenAI 兼容）
-DEEPSEEK_API_KEY=sk-...
-DEEPSEEK_API_BASE=https://api.deepseek.com/v1  # 或用户自定义地址
-DEEPSEEK_MODEL=deepseek-chat
+# AI Provider 配置（OpenAI 兼容 API）
+AI_PROVIDER_API_KEY=                           # 必填，API 密钥
+AI_PROVIDER_ENDPOINT=                          # 必填，API 基础地址。例：https://api.deepseek.com/v1
+AI_PROVIDER_MODEL=                             # 必填，模型名称。例：deepseek-v4-flash / deepseek-v4-pro
 
 # AI 标签处理开关
 ENABLE_AI_TAG_PROCESSING=true
 ```
+
+> **说明**：三个 `AI_PROVIDER_*` 变量均为必填，不设默认值。采用 OpenAI 兼容 API 格式，可对接任何兼容服务商。
+> 推荐使用 DeepSeek（性价比高），但代码不绑定特定厂商。
 
 ---
 
@@ -259,12 +302,16 @@ ENABLE_AI_TAG_PROCESSING=true
 
 ---
 
-## 待决策事项（需下一个 agent 确认）
+## 待决策事项（已确认）
 
-1. **是否需要在 Alembic 中创建新的 migration？** 是的，需要 005_add_tag_fields_and_knowledge.sql
-2. **前端标签展示的颜色方案是否需要调整？** 当前已有 5 色方案，可直接沿用
-3. **是否引入 tag implications（标签继承）？** 本次不涉及，留作未来扩展
-4. **AI 批量调用优化**：是否将多张图的标签聚合后一次性调用？（当前设计为逐张图处理）
+1. **是否需要在 Alembic 中创建新的 migration？** ✅ 是的，需要 `005_add_tag_fields_and_knowledge.py`
+2. **前端标签展示的颜色方案是否需要调整？** ✅ 当前已有 5 色方案，可直接沿用
+3. **是否引入 tag implications（标签继承）？** ❌ 本次不涉及，留作 v0.5.0 扩展
+4. **AI 批量调用优化**：逐张图处理 + 缓存查库已够用，批量聚合复杂度不值得
+5. **是否引入 Danbooru API 作为 AI 之前的查询层？** ❌ v0.4.0 不引入，留作 v0.5.0 扩展（`tag_knowledge.source` 已预留 `'danbooru_api'` 值）
+6. **AI Provider 变量**：`AI_PROVIDER_*` 泛化命名，不绑定厂商，推荐 DeepSeek
+7. **`tag_knowledge.source` 字段**：保留并扩展，支持 `'ai' | 'manual' | 'danbooru_import' | 'danbooru_api'`
+8. **管理后台操作分层**：帖子管理只做关联操作（贴/撕标签），标签管理修改实体属性（四列：UUID 锁定 + name + danbooru_name + translation）
 
 ---
 
@@ -272,14 +319,23 @@ ENABLE_AI_TAG_PROCESSING=true
 
 | 文件 | 说明 |
 |------|------|
-| `backend/app/models/tag.py` | Tag 模型，需扩展字段 |
+| `backend/app/models/tag.py` | Tag 模型 + TagCategory enum，需扩展字段 |
+| `backend/app/models/tag_alias.py` | TagAlias 模型（已有，保持不变） |
+| `backend/app/models/post_tag.py` | PostTag 关联表（已有，保持不变） |
+| `backend/app/schemas/tag.py` | TagRead, TagListRead schemas，需扩展 |
+| `backend/app/api/tags.py` | Tag REST API，需扩展 admin 接口 |
 | `backend/app/tasks/process_image.py` | ARQ 任务，需插入 AI 处理步骤 |
-| `backend/app/api/tags.py` | Tag API，需扩展 admin 接口 |
+| `backend/app/services/ai_tag.py` | 【新增】AI Provider API 调用封装（OpenAI 兼容） |
+| `backend/app/services/tag_knowledge.py` | 【新增】知识库查询/写入 |
+| `backend/scripts/recategorize_tags.py` | 现有脚本，AI Retag 完成后降级为离线修复工具 |
+| `frontend/src/lib/api.ts` | 前端 Tag 类型定义，需扩展 |
 | `frontend/src/pages/tags/index.astro` | 标签云页面 |
+| `frontend/src/pages/tags/[name].astro` | 标签详情页 |
 | `frontend/src/pages/posts/[id].astro` | 详情页标签侧边栏 |
 | `frontend/src/components/PhotoAlbum.astro` | 悬停标签（不显示翻译） |
-| `frontend/src/lib/api.ts` | API 客户端类型定义 |
+| `frontend/src/components/SearchBar.tsx` | 搜索自动补全 |
+| `backend/alembic/versions/` | Alembic 迁移目录，需新增 005 |
 
 ---
 
-*本草案由 Kimi 2.6 生成，等待下一个 coding agent 接手实现。*
+*本草案由 Kimi 2.6 生成，经 Claude Code 调研修订，等待实现。*
