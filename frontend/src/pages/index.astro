@@ -34,24 +34,37 @@ function buildPageUrl(p: number, pp: number): string {
 ---
 
 <BaseLayout title={page > 1 ? `第 ${page} 页` : undefined} description={`浏览动漫插画 — 共 ${total} 张`}>
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+  <div class="max-w-[1400px] mx-auto px-6 lg:px-8 py-6">
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-end justify-between gap-6 mb-8 pt-2 flex-wrap">
       <div>
-        <h1 class="text-2xl font-bold text-[var(--text-primary)]">
-          <span class="gradient-text">画廊</span>
+        <h1 class="gradient-text" style="font-size: clamp(1.5rem, 2.5vw, 2rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.2;">
+          画廊
         </h1>
-        <p class="text-sm text-[var(--text-muted)] mt-1">{total} 张插画</p>
+        <p class="text-[0.8125rem] text-[var(--text-muted)] mt-1">{total} 张插画</p>
       </div>
-      {isAdmin && (
-        <div class="flex items-center gap-2 text-sm">
-          <span class="text-[var(--text-muted)]">评级筛选:</span>
-          <a href="/" class={`px-2 py-0.5 rounded ${!rating ? "gradient-bg text-white" : "text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] border border-[var(--border-color)]"}`}>全部</a>
-          <a href="/?rating=safe" class={`px-2 py-0.5 rounded rating-safe ${rating === "safe" ? "ring-2 ring-current" : "opacity-70 hover:opacity-100"}`}>公开</a>
-          <a href="/?rating=questionable" class={`px-2 py-0.5 rounded rating-questionable ${rating === "questionable" ? "ring-2 ring-current" : "opacity-70 hover:opacity-100"}`}>敏感</a>
-          <a href="/?rating=explicit" class={`px-2 py-0.5 rounded rating-explicit ${rating === "explicit" ? "ring-2 ring-current" : "opacity-70 hover:opacity-100"}`}>限制</a>
+      <div class="flex items-center gap-3 flex-wrap">
+        {isAdmin && (
+          <div class="flex items-center gap-2 flex-wrap">
+            <a href="/" class={`filter-chip ${!rating ? "active" : ""}`}>全部</a>
+            <a href="/?rating=safe" class={`filter-chip rating-safe ${rating === "safe" ? "active" : ""}`}>公开</a>
+            <a href="/?rating=questionable" class={`filter-chip ${rating === "questionable" ? "active" : ""}`} style={rating === "questionable" ? "background: var(--color-warning); border-color: var(--color-warning); color: oklch(20% 0.02 85);" : ""}>敏感</a>
+            <a href="/?rating=explicit" class={`filter-chip ${rating === "explicit" ? "active" : ""}`} style={rating === "explicit" ? "background: var(--color-danger); border-color: var(--color-danger); color: #fff;" : ""}>限制</a>
+          </div>
+        )}
+        <!-- Inline search -->
+        <div class="relative max-w-[280px]">
+          <svg xmlns="http://www.w3.org/2000/svg" class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+          </svg>
+          <input
+            type="text"
+            placeholder="快速搜索..."
+            class="w-full py-1.5 pl-8 pr-3 rounded-full border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] text-[0.8125rem] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-color)] focus:ring-[3px] focus:ring-[var(--accent-subtle)] transition-all"
+            id="inline-search"
+          />
         </div>
-      )}
+      </div>
     </div>
 
     <!-- Masonry grid -->
@@ -59,7 +72,10 @@ function buildPageUrl(p: number, pp: number): string {
       <PhotoAlbumGrid posts={posts} isAdmin={isAdmin} />
     ) : (
       <div class="flex flex-col items-center justify-center py-24 text-[var(--text-muted)]">
-        <p class="text-xl mb-2">暂无插画</p>
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 mb-4 text-[var(--border-color)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z" />
+        </svg>
+        <p class="text-lg font-semibold mb-1">暂无插画</p>
         <p class="text-sm">通过 Telegram 机器人发送图片来开始</p>
       </div>
     )}
@@ -75,4 +91,19 @@ function buildPageUrl(p: number, pp: number): string {
       />
     )}
   </div>
+
+  <script is:inline>
+    // Inline search: navigate to /search?q=... on Enter
+    var searchInput = document.getElementById('inline-search');
+    if (searchInput) {
+      searchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          var q = searchInput.value.trim();
+          if (q) {
+            window.location.href = '/search?q=' + encodeURIComponent(q);
+          }
+        }
+      });
+    }
+  </script>
 </BaseLayout>

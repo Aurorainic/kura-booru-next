@@ -61,9 +61,10 @@ export default function Pagination({ currentPage, totalPages, perPage, buildUrl 
           <a
             href={buildUrl(currentPage - 1, perPage)}
             className={cn(
-              "flex items-center justify-center w-9 h-9 rounded-lg",
+              "flex items-center justify-center w-9 h-9 rounded-[var(--radius-sm)]",
               "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-              "hover:bg-[var(--border-color)] transition-colors duration-150"
+              "hover:bg-[var(--accent-subtle)] transition-all duration-[var(--duration-fast)]",
+              "active:scale-[0.92]"
             )}
             aria-label="上一页"
           >
@@ -89,11 +90,11 @@ export default function Pagination({ currentPage, totalPages, perPage, buildUrl 
               key={page}
               href={buildUrl(page, perPage)}
               className={cn(
-                "flex items-center justify-center w-9 h-9 rounded-lg text-sm font-medium",
-                "transition-colors duration-150",
+                "flex items-center justify-center w-9 h-9 rounded-[var(--radius-sm)] text-sm font-medium",
+                "transition-all duration-[var(--duration-fast)]",
                 page === currentPage
-                  ? "gradient-bg text-[var(--color-dark-bg)] font-bold"
-                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]"
+                  ? "bg-[var(--accent-color)] text-[var(--bg-primary)] font-bold"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)]"
               )}
               aria-label={`第 ${page} 页`}
               aria-current={page === currentPage ? "page" : undefined}
@@ -108,9 +109,10 @@ export default function Pagination({ currentPage, totalPages, perPage, buildUrl 
           <a
             href={buildUrl(currentPage + 1, perPage)}
             className={cn(
-              "flex items-center justify-center w-9 h-9 rounded-lg",
+              "flex items-center justify-center w-9 h-9 rounded-[var(--radius-sm)]",
               "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-              "hover:bg-[var(--border-color)] transition-colors duration-150"
+              "hover:bg-[var(--accent-subtle)] transition-all duration-[var(--duration-fast)]",
+              "active:scale-[0.92]"
             )}
             aria-label="下一页"
           >
@@ -144,10 +146,10 @@ function PerPageSelector({
           key={option}
           href={buildUrl(1, option)}
           className={cn(
-            "px-2 py-1 rounded transition-colors duration-150",
+            "px-2 py-1 rounded-[var(--radius-sm)] transition-all duration-[var(--duration-fast)]",
             option === perPage
-              ? "gradient-bg text-[var(--color-dark-bg)] font-bold"
-              : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)]"
+              ? "bg-[var(--accent-color)] text-[var(--bg-primary)] font-bold"
+              : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)]"
           )}
         >
           {option}

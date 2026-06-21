@@ -129,11 +129,12 @@ export default function SearchBar({ initialQuery = "", onSearch, placeholder = "
           }}
           placeholder={placeholder}
           className={cn(
-            "w-full pl-10 pr-10 py-3 rounded-xl",
+            "w-full pl-10 pr-10 py-3 rounded-[14px]",
             "bg-[var(--bg-surface)] border border-[var(--border-color)]",
             "text-[var(--text-primary)] placeholder:text-[var(--text-muted)]",
-            "focus:outline-none focus:border-[var(--color-cyan-accent-start)] focus:ring-1 focus:ring-[var(--color-cyan-accent-start)]",
-            "transition-all duration-200"
+            "focus:outline-none focus:border-[var(--accent-color)]",
+            "focus:shadow-[0_0_0_3px_var(--accent-subtle),0_4px_16px_oklch(72%_0.12_175_/_0.08)]",
+            "transition-all duration-[var(--duration-normal)]"
           )}
           aria-label="搜索标签"
           aria-expanded={showSuggestions}
@@ -155,7 +156,8 @@ export default function SearchBar({ initialQuery = "", onSearch, placeholder = "
       {showSuggestions && suggestions.length > 0 && (
         <div
           ref={suggestionsRef}
-          className="absolute z-50 mt-1 w-full rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-lg overflow-hidden"
+          className="absolute z-50 mt-1 w-full rounded-[var(--radius-md)] bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-lg overflow-hidden"
+          style={{ animation: "suggestIn var(--duration-fast) var(--ease-out)" }}
           role="listbox"
         >
           {suggestions.map((tag, index) => (
@@ -164,16 +166,16 @@ export default function SearchBar({ initialQuery = "", onSearch, placeholder = "
               onClick={() => handleSelectSuggestion(tag)}
               className={cn(
                 "w-full px-4 py-2 text-left flex items-center justify-between gap-2",
-                "transition-colors duration-100",
+                "transition-colors duration-[var(--duration-fast)]",
                 index === selectedIndex
-                  ? "bg-[var(--border-color)] text-[var(--text-primary)]"
-                  : "text-[var(--text-primary)] hover:bg-[var(--border-color)]"
+                  ? "bg-[var(--accent-subtle)] text-[var(--text-primary)]"
+                  : "text-[var(--text-primary)] hover:bg-[var(--accent-subtle)]"
               )}
               role="option"
               aria-selected={index === selectedIndex}
             >
               <span className="truncate">{tag.name}</span>
-              <span className={cn("text-xs px-1.5 py-0.5 rounded", `tag-${tag.category}`)}>
+              <span className={cn("text-xs px-1.5 py-0.5 rounded-[var(--radius-sm)]", `tag-${tag.category}`)}>
                 {tag.category}
               </span>
             </button>

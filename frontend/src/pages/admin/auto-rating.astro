@@ -35,7 +35,7 @@ try {
 ---
 
 <BaseLayout title="自动评级规则">
-  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+  <div class="max-w-4xl mx-auto px-6 lg:px-8 py-6">
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
       <div>
@@ -48,7 +48,7 @@ try {
       </div>
       <a
         href="/admin/posts"
-        class="text-sm text-[var(--text-muted)] hover:text-[var(--color-cyan-accent-start)] transition-colors"
+        class="text-sm text-[var(--text-muted)] hover:text-[var(--accent-color)] transition-colors"
       >
         ← 返回管理
       </a>
@@ -67,9 +67,9 @@ try {
               placeholder="输入标签名…"
               autocomplete="off"
               required
-              class="w-full px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+              class="w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-color)]"
             />
-            <div id="tag-suggestions" class="absolute z-50 mt-1 w-full rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-lg overflow-hidden hidden max-h-48 overflow-y-auto"></div>
+            <div id="tag-suggestions" class="absolute z-50 mt-1 w-full rounded-[var(--radius-md)] bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-lg overflow-hidden hidden max-h-48 overflow-y-auto"></div>
           </div>
         </div>
         <div class="w-40">
@@ -85,7 +85,7 @@ try {
         <button
           type="submit"
           id="add-btn"
-          class="px-4 py-2 rounded-lg gradient-bg text-white font-medium hover:opacity-90 transition-opacity whitespace-nowrap"
+          class="px-4 py-2 rounded-[var(--radius-md)] bg-[var(--accent-color)] text-[var(--bg-primary)] font-medium hover:bg-[var(--accent-hover)] active:scale-[0.97] transition-all duration-[var(--duration-fast)] whitespace-nowrap"
         >
           添加
         </button>
@@ -169,7 +169,7 @@ try {
         return;
       }
       suggestionsDiv.innerHTML = matches.map(function(name) {
-        return '<button type="button" class="w-full px-3 py-2 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--border-color)] transition-colors tag-suggestion" data-tag="' + name + '">' + name + '</button>';
+        return '<button type="button" class="w-full px-3 py-2 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--accent-subtle)] transition-colors tag-suggestion" data-tag="' + name + '">' + name + '</button>';
       }).join('');
       suggestionsDiv.classList.remove('hidden');
     }, 200);

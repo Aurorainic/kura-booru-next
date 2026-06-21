@@ -31,14 +31,26 @@ for (const cat of TAG_CATEGORY_ORDER) {
   const tagsInCat = (post.tags || []).filter(t => t.category === cat);
   if (tagsInCat.length > 0) groupedTags[cat] = tagsInCat;
 }
+
+// Map tag category to CSS variable for inline color
+function getTagCategoryVar(cat: TagCategory): string {
+  const map: Record<string, string> = {
+    artist: "var(--color-tag-artist)",
+    character: "var(--color-tag-character)",
+    copyright: "var(--color-tag-copyright)",
+    general: "var(--color-tag-general)",
+    meta: "var(--color-tag-meta)",
+  };
+  return map[cat] || "var(--color-tag-general)";
+}
 ---
 
 <BaseLayout title={post.title || `作品 ${post.id.slice(0, 8)}`} description={stripHtml(post.description).slice(0, 160) || `来自 ${getSourceSiteLabel(post.source_site)} 的插画`}>
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+  <div class="max-w-[1400px] mx-auto px-6 lg:px-8 py-6">
     <!-- Back link -->
     <a
       href="/"
-      class="inline-flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--color-cyan-accent-start)] transition-colors mb-4"
+      class="inline-flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--accent-color)] transition-all duration-[var(--duration-fast)] mb-4 hover:translate-x-[-3px]"
     >
       ← 返回画廊
     </a>
@@ -46,22 +58,22 @@ for (const cat of TAG_CATEGORY_ORDER) {
     <div class="flex flex-col lg:flex-row gap-6">
       <!-- Left: Tag sidebar (Danbooru-style, desktop only) -->
       {Object.keys(groupedTags).length > 0 && (
-        <aside class="hidden lg:block w-56 flex-shrink-0">
-          <div class="card p-4 space-y-4 text-sm sticky top-20">
-            <h2 class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">标签</h2>
+        <aside class="hidden lg:block w-[220px] flex-shrink-0" style="animation: slideInLeft var(--duration-slow) var(--ease-out);">
+          <div class="card p-4 space-y-4 text-sm sticky top-[calc(56px+1.5rem)]" style="max-height: calc(100vh - 56px - 3rem); overflow-y: auto; overscroll-behavior: contain;">
+            <h2 class="text-[0.6875rem] font-bold text-[var(--text-muted)] uppercase tracking-[0.08em] mb-2">标签</h2>
             {TAG_CATEGORY_ORDER.map((cat) => groupedTags[cat] && (
               <div>
-                <h3 class="text-xs font-semibold mb-1.5 {getTagCategoryColor(cat)}">{getTagCategoryLabel(cat)} ({groupedTags[cat].length})</h3>
+                <h3 class="text-[0.6875rem] font-semibold mb-1.5" style={"color: " + getTagCategoryVar(cat)}>{getTagCategoryLabel(cat)} ({groupedTags[cat].length})</h3>
                 <ul class="space-y-0.5">
                   {groupedTags[cat].map((tag: Tag) => (
-                    <li>
+                    <li class="rounded-[var(--radius-sm)] px-1.5 py-0.5 -mx-1.5 hover:bg-[var(--accent-subtle)] transition-colors duration-[var(--duration-fast)]">
                       <a
                         href={`/tags/${encodeURIComponent(tag.name)}`}
-                        class="text-[var(--text-primary)] hover:text-[var(--color-cyan-accent-start)] transition-colors"
+                        class="flex items-center justify-between gap-2"
                       >
-                        {tag.name}
+                        <span class="text-[var(--text-primary)] hover:text-[var(--accent-color)] transition-colors duration-[var(--duration-fast)] truncate">{tag.name}</span>
+                        {tag.post_count > 0 && <span class="text-[0.6875rem] text-[var(--text-muted)] font-mono tabular-nums flex-shrink-0">{tag.post_count}</span>}
                       </a>
-                      {tag.post_count > 0 && <span class="text-[var(--text-muted)] text-xs ml-1">{tag.post_count}</span>}
                     </li>
                   ))}
                 </ul>
@@ -72,7 +84,7 @@ for (const cat of TAG_CATEGORY_ORDER) {
       )}
 
       <!-- Center: Main image -->
-      <div class="flex-1 min-w-0">
+      <div class="flex-1 min-w-0" style="animation: imageReveal var(--duration-slow) var(--ease-out);">
         <div class="card overflow-hidden">
           <!-- Progressive image loading container -->
           <div class="relative bg-[var(--bg-primary)]">
@@ -94,7 +106,6 @@ for (const cat of TAG_CATEGORY_ORDER) {
               height={post.height}
               loading="eager"
               style={`aspect-ratio: ${post.width} / ${post.height}`}
-              onclick="document.getElementById('full-image-modal').classList.remove('hidden')"
             />
           </div>
         </div>
@@ -104,12 +115,12 @@ for (const cat of TAG_CATEGORY_ORDER) {
           <div class="lg:hidden mt-4 space-y-3">
             {TAG_CATEGORY_ORDER.map((cat) => groupedTags[cat] && (
               <div>
-                <h3 class="text-xs font-semibold mb-1.5 {getTagCategoryColor(cat)}">{getTagCategoryLabel(cat)}</h3>
-                <div class="flex flex-wrap gap-1.5">
+                <h3 class="text-[0.6875rem] font-semibold mb-1.5" style={"color: " + getTagCategoryVar(cat)}>{getTagCategoryLabel(cat)}</h3>
+                <div class="flex flex-wrap gap-1">
                   {groupedTags[cat].map((tag: Tag) => (
                     <a
                       href={`/tags/${encodeURIComponent(tag.name)}`}
-                      class={`text-xs px-2 py-0.5 rounded-md border border-[var(--border-color)] hover:border-[var(--color-cyan-accent-start)] transition-colors ${getTagCategoryColor(tag.category)}`}
+                      class="text-[0.75rem] px-2 py-0.5 rounded-[var(--radius-sm)] border border-[var(--border-color)] hover:border-[var(--accent-color)] hover:text-[var(--accent-color)] transition-all duration-[var(--duration-fast)]"
                     >
                       {tag.name}
                     </a>
@@ -122,27 +133,36 @@ for (const cat of TAG_CATEGORY_ORDER) {
       </div>
 
       <!-- Right: Info sidebar -->
-      <aside class="w-full lg:w-72 flex-shrink-0">
-        <div class="card p-5 space-y-5">
+      <aside class="w-full lg:w-[280px] flex-shrink-0" style="animation: slideInRight var(--duration-slow) var(--ease-out);">
+        <div class="card p-5 space-y-5 lg:sticky lg:top-[calc(56px+1.5rem)]">
           {/* Title */}
           {post.title && (
             <div>
-              <h1 class="text-lg font-bold text-[var(--text-primary)] leading-snug">
+              <h1 class="text-lg font-bold text-[var(--text-primary)] leading-snug" style="letter-spacing: -0.01em;">
                 {post.title}
               </h1>
             </div>
           )}
 
-          {/* Rating badge */}
+          {/* Rating pill */}
           <div class="flex items-center gap-2">
-            <span class={`px-2.5 py-0.5 text-xs font-bold rounded border ${getRatingColorClass(post.rating)}`}>
+            <span class={`text-[0.6875rem] font-bold px-2.5 py-0.5 rounded-full ${
+              post.rating === "safe" ? "" :
+              post.rating === "questionable" ? "" : ""
+            }`} style={
+              post.rating === "safe"
+                ? "background: oklch(65% 0.18 145 / 0.15); color: var(--color-success);"
+                : post.rating === "questionable"
+                ? "background: oklch(75% 0.16 85 / 0.15); color: var(--color-warning);"
+                : "background: oklch(62% 0.2 25 / 0.15); color: var(--color-danger);"
+            }>
               {getRatingLabel(post.rating)}
             </span>
             {isAdmin && (
               <div id="rating-editor" class="inline-flex items-center gap-1.5">
                 <select
                   id="rating-select"
-                  class="text-xs px-2 py-1 rounded border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]"
+                  class="text-[0.75rem] px-2 py-1 rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-alt)] text-[var(--text-primary)]"
                 >
                   <option value="safe" selected={post.rating === "safe"}>公开</option>
                   <option value="questionable" selected={post.rating === "questionable"}>敏感</option>
@@ -150,55 +170,45 @@ for (const cat of TAG_CATEGORY_ORDER) {
                 </select>
                 <button
                   id="rating-save"
-                  class="text-xs px-2 py-1 rounded gradient-bg text-white font-medium hover:opacity-90 transition-opacity hidden"
+                  class="text-[0.75rem] px-2.5 py-1 rounded-[var(--radius-sm)] bg-[var(--accent-color)] text-[var(--bg-primary)] font-semibold hidden active:scale-[0.97] transition-transform"
                 >
                   保存
                 </button>
-                <span id="rating-msg" class="text-xs text-[var(--text-muted)] hidden"></span>
+                <span id="rating-msg" class="text-[0.75rem] text-[var(--text-muted)] hidden"></span>
               </div>
             )}
           </div>
 
-          {/* Description — rendered as safe HTML (links open in new tab) */}
+          {/* Description */}
           {post.description && (
             <div>
-              <div class="text-sm text-[var(--text-muted)] line-clamp-4 [&_a]:text-[var(--color-cyan-accent-start)] [&_a]:underline [&_a]:hover:opacity-80 [&_a]:transition-opacity" set:html={post.description} />
+              <div class="text-sm text-[var(--text-muted)] line-clamp-4 [&_a]:text-[var(--accent-color)] [&_a]:underline [&_a]:hover:opacity-80 [&_a]:transition-opacity" set:html={post.description} />
             </div>
           )}
 
-          {/* Metadata */}
-          <div class="space-y-3 text-sm">
-            <div class="flex items-center justify-between">
-              <span class="text-[var(--text-muted)]">来源</span>
-              <a
-                href={post.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="gradient-text font-medium hover:underline"
-              >
-                {getSourceSiteLabel(post.source_site)}
-              </a>
-            </div>
+          {/* Metadata grid */}
+          <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
+            <span class="text-[var(--text-muted)]">来源</span>
+            <a
+              href={post.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="gradient-text font-medium hover:underline text-right"
+            >
+              {getSourceSiteLabel(post.source_site)}
+            </a>
 
-            <div class="flex items-center justify-between">
-              <span class="text-[var(--text-muted)]">尺寸</span>
-              <span class="text-[var(--text-primary)]">{post.width} × {post.height}</span>
-            </div>
+            <span class="text-[var(--text-muted)]">尺寸</span>
+            <span class="text-[var(--text-primary)] text-right tabular-nums">{post.width} × {post.height}</span>
 
-            <div class="flex items-center justify-between">
-              <span class="text-[var(--text-muted)]">文件大小</span>
-              <span class="text-[var(--text-primary)]">{formatFileSize(post.file_size)}</span>
-            </div>
+            <span class="text-[var(--text-muted)]">文件大小</span>
+            <span class="text-[var(--text-primary)] text-right tabular-nums">{formatFileSize(post.file_size)}</span>
 
-            <div class="flex items-center justify-between">
-              <span class="text-[var(--text-muted)]">格式</span>
-              <span class="text-[var(--text-primary)]">{post.mime_type}</span>
-            </div>
+            <span class="text-[var(--text-muted)]">格式</span>
+            <span class="text-[var(--text-primary)] text-right">{post.mime_type}</span>
 
-            <div class="flex items-center justify-between">
-              <span class="text-[var(--text-muted)]">添加时间</span>
-              <span class="text-[var(--text-primary)]">{formatDate(post.created_at)}</span>
-            </div>
+            <span class="text-[var(--text-muted)]">添加时间</span>
+            <span class="text-[var(--text-primary)] text-right tabular-nums">{formatDate(post.created_at)}</span>
           </div>
 
           {/* Download link */}
@@ -206,7 +216,7 @@ for (const cat of TAG_CATEGORY_ORDER) {
             href={getOriginalUrl(post)}
             target="_blank"
             rel="noopener noreferrer"
-            class="block w-full text-center py-2 px-4 rounded-lg gradient-bg text-[var(--color-dark-bg)] font-medium text-sm hover:opacity-90 transition-opacity"
+            class="block w-full text-center py-2 px-4 rounded-[var(--radius-md)] bg-[var(--accent-color)] text-[var(--bg-primary)] font-medium text-sm hover:bg-[var(--accent-hover)] active:scale-[0.97] transition-all duration-[var(--duration-fast)]"
           >
             查看原图
           </a>
@@ -218,18 +228,21 @@ for (const cat of TAG_CATEGORY_ORDER) {
   <!-- Full image modal -->
   <div
     id="full-image-modal"
-    class="hidden fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 cursor-zoom-out"
-    onclick="this.classList.add('hidden')"
+    class="fixed inset-0 z-50 hidden"
+    style="background: oklch(0% 0 0 / 0.9);"
   >
-    <img
-      src={getOriginalUrl(post)}
-      alt={post.title || "原图"}
-      class="max-w-full max-h-full object-contain"
-      onclick="event.stopPropagation()"
-    />
+    <div class="flex items-center justify-center w-full h-full p-4 cursor-zoom-out" id="modal-backdrop">
+      <img
+        src={getOriginalUrl(post)}
+        alt={post.title || "原图"}
+        class="max-w-full max-h-full object-contain"
+        id="modal-image"
+        onclick="event.stopPropagation()"
+      />
+    </div>
     <button
-      class="absolute top-4 right-4 text-white text-2xl hover:text-[var(--color-cyan-accent-start)] transition-colors"
-      onclick="document.getElementById('full-image-modal').classList.add('hidden')"
+      class="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors duration-[var(--duration-fast)]"
+      id="modal-close-btn"
       aria-label="关闭"
     >
       ✕
@@ -238,12 +251,12 @@ for (const cat of TAG_CATEGORY_ORDER) {
 
   <script is:inline>
     // Progressive image loading: hide blur placeholder when preview loads
-    const previewImg = document.getElementById('preview-image');
-    const blurPlaceholder = document.getElementById('blur-placeholder');
+    var previewImg = document.getElementById('preview-image');
+    var blurPlaceholder = document.getElementById('blur-placeholder');
     if (previewImg && blurPlaceholder) {
-      const hideBlur = () => {
+      var hideBlur = function() {
         blurPlaceholder.classList.add('loaded');
-        setTimeout(() => { blurPlaceholder.style.display = 'none'; }, 400);
+        setTimeout(function() { blurPlaceholder.style.display = 'none'; }, 400);
       };
       if (previewImg.complete) {
         hideBlur();
@@ -251,42 +264,74 @@ for (const cat of TAG_CATEGORY_ORDER) {
         previewImg.addEventListener('load', hideBlur);
       }
     }
+
+    // Image modal with zoom animation — ES5 compatible
+    var previewImage = document.getElementById('preview-image');
+    var modal = document.getElementById('full-image-modal');
+    var modalBackdrop = document.getElementById('modal-backdrop');
+    var modalCloseBtn = document.getElementById('modal-close-btn');
+
+    function openModal() {
+      modal.classList.remove('hidden');
+      modal.style.animation = 'modalZoomIn var(--duration-normal) var(--ease-out)';
+    }
+
+    function closeModal() {
+      modal.style.animation = 'modalZoomOut var(--duration-normal) var(--ease-out)';
+      setTimeout(function() {
+        modal.classList.add('hidden');
+        modal.style.animation = '';
+      }, 200);
+    }
+
+    if (previewImage && modal) {
+      previewImage.addEventListener('click', openModal);
+    }
+    if (modalBackdrop) {
+      modalBackdrop.addEventListener('click', closeModal);
+    }
+    if (modalCloseBtn) {
+      modalCloseBtn.addEventListener('click', closeModal);
+    }
   </script>
 
   {/* Admin rating editor script */}
   {isAdmin && (
     <script is:inline>
-      const ratingSelect = document.getElementById('rating-select');
-      const ratingSave = document.getElementById('rating-save');
-      const ratingMsg = document.getElementById('rating-msg');
-      const originalValue = ratingSelect?.value;
+      var ratingSelect = document.getElementById('rating-select');
+      var ratingSave = document.getElementById('rating-save');
+      var ratingMsg = document.getElementById('rating-msg');
+      var originalValue = ratingSelect ? ratingSelect.value : '';
 
       if (ratingSelect && ratingSave && ratingMsg) {
-        ratingSelect.addEventListener('change', () => {
+        ratingSelect.addEventListener('change', function() {
           ratingSave.classList.remove('hidden');
           ratingMsg.classList.add('hidden');
         });
 
-        ratingSave.addEventListener('click', async () => {
-          const postId = window.location.pathname.split('/').pop();
-          const newRating = ratingSelect.value;
+        ratingSave.addEventListener('click', function() {
+          var postId = window.location.pathname.split('/').pop();
+          var newRating = ratingSelect.value;
           try {
             ratingMsg.textContent = '保存中…';
             ratingMsg.classList.remove('hidden');
-            const apiBase = '/api';
-            const resp = await fetch(`${apiBase}/posts/${postId}`, {
+            var apiBase = '/api';
+            fetch(apiBase + '/posts/' + postId, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ rating: newRating }),
+            }).then(function(resp) {
+              if (resp.ok) {
+                ratingMsg.textContent = '✓ 已保存';
+                ratingSave.classList.add('hidden');
+                setTimeout(function() { ratingMsg.classList.add('hidden'); }, 2000);
+              } else {
+                ratingMsg.textContent = '✗ 保存失败';
+              }
+            }).catch(function() {
+              ratingMsg.textContent = '✗ 网络错误';
             });
-            if (resp.ok) {
-              ratingMsg.textContent = '✓ 已保存';
-              ratingSave.classList.add('hidden');
-              setTimeout(() => ratingMsg.classList.add('hidden'), 2000);
-            } else {
-              ratingMsg.textContent = '✗ 保存失败';
-            }
-          } catch {
+          } catch (e) {
             ratingMsg.textContent = '✗ 网络错误';
           }
         });

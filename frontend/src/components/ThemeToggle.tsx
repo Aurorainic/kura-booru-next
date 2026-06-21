@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Sun, Moon, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +25,8 @@ const themeConfig: Record<ThemePreference, { icon: typeof Sun; label: string }> 
 
 export default function ThemeToggle() {
   const [preference, setPreference] = useState<ThemePreference>("auto");
+  const [spinning, setSpinning] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY) as ThemePreference | null;
@@ -48,25 +50,38 @@ export default function ThemeToggle() {
     setPreference(next);
     localStorage.setItem(STORAGE_KEY, next);
     applyTheme(next);
+
+    // Spin animation
+    setSpinning(true);
+    setTimeout(() => setSpinning(false), 300);
   }, [preference]);
 
   const { icon: Icon, label } = themeConfig[preference];
 
   return (
     <button
+      ref={buttonRef}
       onClick={cycle}
       className={cn(
         "relative flex items-center justify-center",
-        "w-10 h-10 rounded-lg",
-        "transition-all duration-200",
-        "hover:bg-[var(--border-color)]",
-        "focus-visible:ring-2 focus-visible:ring-[var(--color-cyan-accent-start)] focus-visible:ring-offset-2",
+        "w-9 h-9 rounded-[var(--radius-sm)]",
+        "transition-all duration-[var(--duration-fast)]",
+        "hover:bg-[var(--accent-subtle)]",
+        "focus-visible:ring-2 focus-visible:ring-[var(--accent-color)] focus-visible:ring-offset-2",
+        "active:scale-[0.85]",
         "group"
       )}
       aria-label={`切换主题（当前：${label}）`}
       title={`主题：${label}`}
     >
-      <Icon className="w-5 h-5 transition-transform duration-200 group-hover:scale-110" />
+      <Icon
+        className={cn(
+          "w-[18px] h-[18px] transition-all duration-[var(--duration-normal)]",
+          "text-[var(--text-muted)] group-hover:text-[var(--text-primary)] group-hover:scale-110",
+          spinning && "animate-spin"
+        )}
+        style={spinning ? { transitionTimingFunction: "cubic-bezier(0.34, 1.56, 0.64, 1)" } : undefined}
+      />
       <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
         {label}
       </span>
