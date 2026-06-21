@@ -29,3 +29,12 @@
 - **Huawei SWR**: Does not support Docker BuildKit attestation manifests. Use `--provenance=false --sbom=false`.
 - **Cookie deletion**: Must match all attributes (`Secure`, `HttpOnly`, `SameSite`, `Path`) used when setting the cookie, otherwise browsers silently ignore the deletion.
 - **Logout race condition**: Use server-side redirect (SSR endpoint `POST /logout`) instead of client-side `fetch()` + `window.location.href`, to ensure cookie is cleared before next page request.
+
+## Changelog
+
+### v0.3.0 (2026-06-16) — 已发布
+
+- [x] PG18 + Redis8 迁移（生产部署）
+- [x] Bot `_confirmed_posts` Redis SETEX 机制（存活重启，24h TTL）
+- [x] phash 去重基础实现
+- [x] 单用户场景优化（PG18 io_method + Redis8 activedefrag/HSETEX）

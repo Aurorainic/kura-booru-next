@@ -31,7 +31,7 @@ Internet
             │       │                              │
             │  ┌────▼────┐  ┌───────┐  ┌─────┐   │
             │  │ Bot     │  │ Redis │  │ PG  │   │
-            │  │ aiogram │  │ :6379  │  │16+  │   │
+            │  │ aiogram │  │ :6379  │  │ 18  │   │
             │  │ :8080   │  └───────┘  └─────┘   │
             │  └────┬────┘                         │
             │       │                              │
@@ -62,8 +62,8 @@ Internet
 | | React | 19.x | Interactive Island components |
 | | Tailwind CSS | v4 | Styling |
 | **Storage** | S3-compatible | — | Object storage (R2/MinIO/AWS S3) |
-| **Database** | PostgreSQL | 16+ | Primary data store |
-| **Cache/Queue** | Redis | 7.x | ARQ queue + Caddy cache backend |
+| **Database** | PostgreSQL | 18 | Primary data store |
+| **Cache/Queue** | Redis | 8.x | ARQ queue + Caddy cache backend |
 | **Proxy** | Caddy | 2.x | Host machine, HTTPS + cache + reverse proxy |
 | **Deploy** | Docker Compose | v2 | Orchestration |
 

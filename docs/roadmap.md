@@ -29,6 +29,5 @@
 - SSE/WebSocket 任务状态推送
 - Twitter 完整 extractor
 - 多管理员支持
-- PG18 + Redis8 迁移
 - SSR 缓存启用（需先解决 Vary: Cookie）
 - keyset pagination（深分页优化）
