@@ -13,7 +13,7 @@ from arq.connections import RedisSettings
 
 from app.config import get_settings
 from app.services.gallery_dl import setup_gallery_dl_config
-from app.tasks.process_image import process_image
+from app.tasks.process_image import process_image, reprocess_tags
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class WorkerSettings:
     redis_settings = _parse_redis_url(settings.REDIS_URL)
 
     # Register all task functions here
-    functions = [process_image]
+    functions = [process_image, reprocess_tags]
 
     # Worker startup hook
     @staticmethod

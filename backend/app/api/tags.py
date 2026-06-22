@@ -150,6 +150,8 @@ async def list_tags(
                 name=row[0].name,
                 category=row[0].category,
                 post_count=row[1],
+                danbooru_name=row[0].danbooru_name,
+                translation=row[0].translation,
             )
             for row in rows
         ]
@@ -258,4 +260,6 @@ async def get_tag(
             name=tag.name,
             category=tag.category,
             post_count=row[0],
+            danbooru_name=tag.danbooru_name,
+            translation=tag.translation,
         )

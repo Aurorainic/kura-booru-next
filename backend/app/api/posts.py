@@ -31,7 +31,7 @@ from app.models.admin import Admin
 from app.models.post import Post, Rating, SourceSite
 from app.models.post_tag import PostTag
 from app.models.tag import Tag
-from app.schemas.post import PostListRead, PostRead, PostRatingUpdate
+from app.schemas.post import PostListRead, PostRead, PostRatingUpdate, PostTagsUpdate
 from app.services.s3 import s3_service
 
 router = APIRouter()
@@ -190,6 +190,74 @@ async def update_post_rating(
         raise HTTPException(status_code=404, detail=f"Post {post_id} not found")
 
     post.rating = body.rating
+    await db.commit()
+    await db.refresh(post)
+    return post
+
+
+@router.put("/{post_id}/tags", response_model=PostRead)
+async def update_post_tags(
+    post_id: uuid.UUID,
+    body: PostTagsUpdate,
+    db: AsyncSession = Depends(get_db),
+    _admin: Admin = Depends(get_current_admin),
+):
+    """Add or remove tags from a post. Admin only.
+
+    - add_tags: list of tag names to add (created if they don't exist)
+    - remove_tag_ids: list of tag IDs to remove
+    """
+    from app.models.tag import TagCategory
+
+    stmt = select(Post).where(Post.id == post_id)
+    result = await db.execute(stmt)
+    post = result.scalar_one_or_none()
+    if post is None:
+        raise HTTPException(status_code=404, detail=f"Post {post_id} not found")
+
+    # Remove tags
+    for tag_id in body.remove_tag_ids:
+        pt_stmt = select(PostTag).where(
+            PostTag.post_id == post_id, PostTag.tag_id == tag_id
+        )
+        pt_result = await db.execute(pt_stmt)
+        pt = pt_result.scalar_one_or_none()
+        if pt:
+            await db.delete(pt)
+            # Decrement tag post_count
+            tag_stmt = select(Tag).where(Tag.id == tag_id)
+            tag_result = await db.execute(tag_stmt)
+            tag = tag_result.scalar_one_or_none()
+            if tag:
+                tag.post_count = max(tag.post_count - 1, 0)
+
+    # Add tags
+    for tag_name in body.add_tags:
+        name = tag_name.strip().lower()
+        if not name:
+            continue
+
+        # Check if already associated
+        existing_tag_stmt = select(Tag).where(Tag.name == name)
+        existing_result = await db.execute(existing_tag_stmt)
+        tag = existing_result.scalar_one_or_none()
+
+        if tag is None:
+            # Create the tag
+            tag = Tag(name=name, category=TagCategory.general, post_count=0)
+            db.add(tag)
+            await db.flush()
+
+        # Check if post already has this tag
+        existing_pt_stmt = select(PostTag).where(
+            PostTag.post_id == post_id, PostTag.tag_id == tag.id
+        )
+        existing_pt_result = await db.execute(existing_pt_stmt)
+        if existing_pt_result.scalar_one_or_none() is None:
+            pt = PostTag(post_id=post_id, tag_id=tag.id)
+            db.add(pt)
+            tag.post_count += 1
+
     await db.commit()
     await db.refresh(post)
     return post

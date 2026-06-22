@@ -30,6 +30,8 @@ export interface Tag {
   name: string;
   category: TagCategory;
   post_count: number;
+  danbooru_name?: string | null;
+  translation?: string | null;
 }
 
 export interface PaginatedResponse<T> {
@@ -273,6 +275,70 @@ export async function webImport(urls: string[]): Promise<{ results: ImportResult
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ urls }),
+  });
+}
+
+// === Admin Tag APIs ===
+
+export async function fetchAdminTags(
+  params?: {
+    category?: TagCategory;
+    ai_status?: string;
+    q?: string;
+    sort?: string;
+    page?: number;
+    per_page?: number;
+  },
+  ssrCookie?: string,
+): Promise<PaginatedResponse<Tag>> {
+  return fetchApi<PaginatedResponse<Tag>>("/admin/tags/", params as Record<string, string | number | undefined>, { ssrCookie });
+}
+
+export async function updateAdminTag(
+  tagId: string,
+  data: { category?: TagCategory; danbooru_name?: string; translation?: string },
+): Promise<Tag> {
+  return fetchApi<Tag>(`/admin/tags/${tagId}`, undefined, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updatePostTags(
+  postId: string,
+  data: { add_tags?: string[]; remove_tag_ids?: string[] },
+): Promise<Post> {
+  return fetchApi<Post>(`/posts/${postId}/tags`, undefined, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function mergeTags(sourceTagId: string, targetTagId: string): Promise<{
+  merged: boolean;
+  source_tag: string;
+  target_tag: string;
+  posts_moved: number;
+  posts_skipped: number;
+}> {
+  return fetchApi("/admin/tags/merge", undefined, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source_tag_id: sourceTagId, target_tag_id: targetTagId }),
+  });
+}
+
+export async function reprocessTags(force: boolean = false): Promise<{
+  enqueued: boolean;
+  job_id: string;
+  force: boolean;
+}> {
+  return fetchApi("/admin/tags/reprocess", undefined, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ force }),
   });
 }
 

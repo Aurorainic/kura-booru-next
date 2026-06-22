@@ -32,6 +32,18 @@
 
 ## Changelog
 
+### v0.4.0 (2026-06-22) — 已发布
+
+- [x] AI Retag：新图入库时自动调用 OpenAI 兼容 API 进行 5 类分类 + 中文翻译 + Danbooru 标准命名
+- [x] `tag_knowledge` 知识库缓存表，避免重复调用 AI API
+- [x] 管理后台标签管理页（列表/编辑/合并/AI 重处理）
+- [x] 详情页管理员可添加/移除标签
+- [x] Footer AI 胶囊（`ENABLE_AI_TAG_PROCESSING=true` 时显示紫色"AI ✦"徽章）
+- [x] 修复标签管理页 `per_page` 变量引用错误导致页面空白
+- [x] 修复详情页标签移除按钮定位错误（`<li>` 缺 `relative`）
+- [x] 修复 `admin/tags.astro` 误导入不存在的 `getTagCategoryColorClass`
+- [x] 横幅"安全"二字使用主题色（绿色）高亮
+
 ### v0.3.0 (2026-06-16) — 已发布
 
 - [x] PG18 + Redis8 迁移（生产部署）

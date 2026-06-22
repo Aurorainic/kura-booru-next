@@ -114,3 +114,10 @@ class PostRatingUpdate(BaseModel):
     """Request body for PATCH /api/posts/{id} — admin-only rating change."""
 
     rating: Rating
+
+
+class PostTagsUpdate(BaseModel):
+    """Request body for PUT /api/posts/{id}/tags — admin-only tag management."""
+
+    add_tags: list[str] = Field(default_factory=list, description="Tag names to add (will be created if needed)")
+    remove_tag_ids: list[uuid.UUID] = Field(default_factory=list, description="Tag IDs to remove")

@@ -16,8 +16,46 @@ class TagRead(BaseModel):
     name: str
     category: TagCategory
     post_count: int
+    danbooru_name: str | None = None
+    translation: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class TagUpdate(BaseModel):
+    """Schema for updating a tag (admin)."""
+
+    category: TagCategory | None = None
+    danbooru_name: str | None = None
+    translation: str | None = None
+
+
+class TagKnowledgeRead(BaseModel):
+    """Schema for reading a tag knowledge entry."""
+
+    id: uuid.UUID
+    name: str
+    danbooru_name: str | None = None
+    type: TagCategory
+    translation: str | None = None
+    source: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TagMergeRequest(BaseModel):
+    """Schema for merging tags (admin)."""
+
+    source_tag_id: uuid.UUID
+    target_tag_id: uuid.UUID
+
+
+class TagReprocessRequest(BaseModel):
+    """Schema for triggering tag reprocessing (admin)."""
+
+    force: bool = False  # If True, reprocess all tags; otherwise only pending/error
 
 
 class TagListRead(BaseModel):

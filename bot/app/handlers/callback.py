@@ -62,9 +62,25 @@ async def callback_rate_post(callback: CallbackQuery) -> None:
             )
         except Exception as exc:
             logger.error("callback_rate_post: edit_text failed: %s", exc)
-        await callback.answer()
+        await callback.answer("✅ 已确认", show_alert=False)
     else:
-        await callback.answer("更新失败 / Update failed", show_alert=True)
+        # Even if backend update fails, still show "completed" state to unstick the UI
+        logger.warning("callback_rate_post: rating update failed, showing completed state anyway")
+        rating_label = _RATING_LABELS.get(rating, rating)
+        post_url = f"{settings.FRONTEND_URL}/posts/{post_id}"
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🖼 查看作品 / View", url=post_url)]
+        ])
+        try:
+            await callback.message.edit_text(  # type: ignore[union-attr]
+                f"⚠️ 处理完成（评级更新可能失败）\n"
+                f"评级: {rating_label}\n"
+                f"Source ID: {post_id[:8]}…",
+                reply_markup=keyboard,
+            )
+        except Exception as exc:
+            logger.error("callback_rate_post: fallback edit_text failed: %s", exc)
+        await callback.answer("⚠️ 评级更新可能失败", show_alert=True)
 
 
 @router.callback_query(F.data.startswith("post:"))
