@@ -2,6 +2,8 @@
 
 ## 待做功能
 
+- [ ] 网页端批量导入队列实时更新（SSE/WebSocket，对齐 Bot 体验）
+- [ ] 详情页直接删除当前图片（管理员）
 - [ ] 更多 extractor（Twitter 完整支持、Danbooru 元数据）
 - [ ] 去重机制完善（phash 前缀桶数据库索引优化）
 - [ ] 性能优化（Redis 缓存热门查询）
@@ -23,7 +25,7 @@
 - No SSE/WebSocket for real-time import progress
 - Bot `_confirmed_posts` uses Redis SETEX (survives restart but has 24h TTL; old entries expire)
 
-## 长期愿景（v0.4+）
+## 长期愿景（v0.5+）
 
 - 数据库定期备份 cron
 - SSE/WebSocket 任务状态推送
@@ -31,3 +33,5 @@
 - 多管理员支持
 - SSR 缓存启用（需先解决 Vary: Cookie）
 - keyset pagination（深分页优化）
+- Danbooru API 作为 AI 之前的查询层（`tag_knowledge.source='danbooru_api'`）
+- Danbooru tag implications（3 万+ 条隐含关系）
