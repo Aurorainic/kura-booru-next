@@ -14,11 +14,13 @@ Handles:
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import async_session_factory
 from app.models.auto_rating_rule import AutoRatingRule
 from app.models.post import Post, Rating, SourceSite
@@ -167,6 +169,12 @@ async def process_image(ctx: dict[str, Any], source_url: str, source_site: str |
             # Step 5: Create/update Tags and associate with Post
             tags = await _ensure_tags(db, result.tag_names, result.tag_categories)
 
+            # Step 5a: AI tag processing (classify + translate)
+            try:
+                await _ai_process_tags(db, tags)
+            except Exception as exc:
+                logger.warning("AI tag processing failed (non-blocking): %s", exc)
+
             # Step 5b: Check auto-rating rules
             auto_rating: Rating | None = None
             if tag_names:
@@ -221,6 +229,181 @@ async def process_image(ctx: dict[str, Any], source_url: str, source_site: str |
                 "error": "unexpected",
                 "message": str(exc),
             }
+
+
+
+async def _ai_process_tags(db: AsyncSession, tags: list[Tag]) -> None:
+    """Run AI classification/translation on tags that haven't been processed yet.
+
+    Looks up tag_knowledge cache first; falls back to AI API for uncached tags.
+    Updates Tag records with category, danbooru_name, translation.
+    Non-blocking: errors are logged but don't fail the parent task.
+    """
+    if not settings.ENABLE_AI_TAG_PROCESSING:
+        return
+    if not settings.AI_PROVIDER_API_KEY or not settings.AI_PROVIDER_ENDPOINT:
+        return
+
+    # Separate already-processed tags from unprocessed
+    unprocessed = [t for t in tags if t.ai_processed_at is None]
+    if not unprocessed:
+        return
+
+    # Check knowledge base cache
+    from app.services.tag_knowledge import lookup_tags, batch_upsert_tag_knowledge
+
+    tag_names = [t.name for t in unprocessed]
+    cached = await lookup_tags(tag_names)
+
+    # Apply cached results
+    need_ai = []
+    for tag in unprocessed:
+        if tag.name in cached:
+            entry = cached[tag.name]
+            tag.category = TagCategory(entry.type)
+            tag.danbooru_name = entry.danbooru_name
+            tag.translation = entry.translation
+            tag.ai_processed_at = datetime.utcnow()
+        else:
+            need_ai.append(tag)
+
+    if not need_ai:
+        await db.flush()
+        return
+
+    # Call AI for uncached tags
+    from app.services.ai_tag import classify_tags
+
+    ai_tag_names = [t.name for t in need_ai]
+    try:
+        results = await classify_tags(ai_tag_names)
+    except Exception as exc:
+        logger.warning("AI classification call failed: %s", exc)
+        # Mark tags as attempted but failed
+        for tag in need_ai:
+            tag.ai_processed_at = None  # Leave unprocessed for retry
+        return
+
+    # Build lookup from AI results
+    ai_lookup = {r["name"]: r for r in results}
+
+    # Apply AI results to tags and write to knowledge base
+    knowledge_entries = []
+    for tag in need_ai:
+        result = ai_lookup.get(tag.name)
+        if result:
+            tag.category = TagCategory(result["type"])
+            tag.danbooru_name = result.get("danbooru_name")
+            tag.translation = result.get("translation")
+            tag.ai_processed_at = datetime.utcnow()
+
+            knowledge_entries.append(
+                {
+                    "name": tag.name,
+                    "type": result["type"],
+                    "danbooru_name": result.get("danbooru_name"),
+                    "translation": result.get("translation"),
+                }
+            )
+        else:
+            logger.warning("AI did not return result for tag '%s'", tag.name)
+
+    # Batch write to knowledge base
+    if knowledge_entries:
+        await batch_upsert_tag_knowledge(knowledge_entries, source="ai")
+
+    await db.flush()
+
+
+async def reprocess_tags(ctx: dict[str, Any], force: bool = False) -> dict[str, Any]:
+    """ARQ task: batch reprocess tags via AI.
+
+    If force=True, reprocesses all tags. Otherwise only processes
+    tags not yet in the knowledge base.
+
+    Args:
+        ctx: ARQ context dict.
+        force: Whether to force reprocess all tags.
+
+    Returns:
+        Dict with processing stats.
+    """
+    from app.services.ai_tag import classify_tags
+    from app.services.tag_knowledge import (
+        batch_upsert_tag_knowledge,
+        get_unprocessed_tag_names,
+    )
+
+    if not settings.ENABLE_AI_TAG_PROCESSING:
+        return {"status": "skipped", "reason": "AI tag processing disabled"}
+
+    if not settings.AI_PROVIDER_API_KEY or not settings.AI_PROVIDER_ENDPOINT:
+        return {"status": "skipped", "reason": "AI provider not configured"}
+
+    # Get tag names to process
+    if force:
+        async with async_session_factory() as db:
+            result = await db.execute(select(Tag.name))
+            tag_names = [row[0] for row in result.all()]
+    else:
+        tag_names = await get_unprocessed_tag_names()
+
+    if not tag_names:
+        return {"status": "success", "processed": 0, "reason": "no tags to process"}
+
+    # Process in batches of 50 (API rate limit consideration)
+    BATCH_SIZE = 50
+    total_processed = 0
+    total_errors = 0
+
+    for i in range(0, len(tag_names), BATCH_SIZE):
+        batch = tag_names[i : i + BATCH_SIZE]
+        try:
+            results = await classify_tags(batch)
+
+            # Write to knowledge base
+            knowledge_entries = [
+                {
+                    "name": r["name"],
+                    "type": r["type"],
+                    "danbooru_name": r.get("danbooru_name"),
+                    "translation": r.get("translation"),
+                }
+                for r in results
+            ]
+            await batch_upsert_tag_knowledge(knowledge_entries, source="ai")
+
+            # Update Tag records
+            async with async_session_factory() as db:
+                ai_lookup = {r["name"]: r for r in results}
+                for tag_name in batch:
+                    if tag_name in ai_lookup:
+                        r = ai_lookup[tag_name]
+                        stmt = (
+                            update(Tag)
+                            .where(Tag.name == tag_name)
+                            .values(
+                                category=TagCategory(r["type"]),
+                                danbooru_name=r.get("danbooru_name"),
+                                translation=r.get("translation"),
+                                ai_processed_at=datetime.utcnow(),
+                            )
+                        )
+                        await db.execute(stmt)
+                await db.commit()
+
+            total_processed += len(results)
+
+        except Exception as exc:
+            logger.exception("Batch reprocess failed for batch starting at %d: %s", i, exc)
+            total_errors += len(batch)
+
+    return {
+        "status": "success",
+        "total": len(tag_names),
+        "processed": total_processed,
+        "errors": total_errors,
+    }
 
 
 async def _ensure_tags(

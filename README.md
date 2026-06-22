@@ -12,6 +12,9 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/Docker_Compose-v2-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 
+![✨ AIGC生成](https://img.shields.io/badge/✨-AIGC生成-8B5CF6?style=flat-square)
+![🧪 实验性](https://img.shields.io/badge/🧪-实验性项目-2563EB?style=flat-square)
+
 </div>
 
 ---

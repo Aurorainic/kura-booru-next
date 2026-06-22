@@ -1,0 +1,34 @@
+---
+import { getTagCategoryColor, type Tag, type TagCategory } from "@/lib/api";
+
+interface Props {
+  tag: Tag;
+  /** Show translation alongside original name (default: true) */
+  showTranslation?: boolean;
+  /** Make the badge a clickable link to tag page */
+  link?: boolean;
+  /** Extra CSS classes */
+  class?: string;
+}
+
+const { tag, showTranslation = true, link = false, class: extraClass = "" } = Astro.props;
+const colorClass = getTagCategoryColor(tag.category);
+const hasTranslation = showTranslation && tag.translation;
+
+const TagContent = () => (
+  <span class:list={["tag-badge inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--radius-sm)] text-[0.75rem] leading-tight border", colorClass, extraClass]}>
+    <span class="tag-name">{tag.name}</span>
+    {hasTranslation && (
+      <span class="tag-translation text-[0.625rem] opacity-70">{tag.translation}</span>
+    )}
+  </span>
+);
+---
+
+{link ? (
+  <a href={`/tags/${encodeURIComponent(tag.name)}`} class="no-underline">
+    <TagContent />
+  </a>
+) : (
+  <TagContent />
+)}

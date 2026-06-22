@@ -17,7 +17,7 @@ services:
   # Backend — FastAPI REST API
   # ---------------------------------------------------------------------------
   backend:
-    image: kura-booru-next-backend:v0.2.3
+    image: kura-booru-next-backend:v0.4.0
     container_name: kura-backend
     restart: unless-stopped
     ports:
@@ -42,7 +42,7 @@ services:
   # Worker — ARQ background task processor
   # ---------------------------------------------------------------------------
   worker:
-    image: kura-booru-next-backend:v0.2.3
+    image: kura-booru-next-backend:v0.4.0
     container_name: kura-worker
     restart: unless-stopped
     env_file:
@@ -66,7 +66,7 @@ services:
   # Bot — aiogram 3.x Telegram Bot (webhook mode)
   # ---------------------------------------------------------------------------
   bot:
-    image: kura-booru-next-bot:v0.3.0-pre
+    image: kura-booru-next-bot:v0.4.0
     container_name: kura-bot
     restart: unless-stopped
     ports:
@@ -85,7 +85,7 @@ services:
   # Frontend — Astro SSR
   # ---------------------------------------------------------------------------
   frontend:
-    image: kura-booru-next-frontend:v0.3.0-pre
+    image: kura-booru-next-frontend:v0.4.0
     container_name: kura-frontend
     restart: unless-stopped
     ports:
@@ -105,10 +105,10 @@ services:
       start_period: 15s
 
   # ---------------------------------------------------------------------------
-  # PostgreSQL 16 — Primary database
+  # PostgreSQL 18 — Primary database
   # ---------------------------------------------------------------------------
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     container_name: kura-postgres
     restart: unless-stopped
     environment:
@@ -116,7 +116,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-kura}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kura_password}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     networks:
       - kura-internal
     healthcheck:
@@ -130,7 +130,7 @@ services:
   # Redis 7 — Task queue (ARQ) + Cache
   # ---------------------------------------------------------------------------
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     container_name: kura-redis
     restart: unless-stopped
     command: >

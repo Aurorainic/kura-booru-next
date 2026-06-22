@@ -31,6 +31,11 @@ class Tag(Base):
         nullable=False,
     )
     post_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    danbooru_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    translation: Mapped[str | None] = mapped_column(String, nullable=True)
+    ai_processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Relationship: posts via PostTag association table
     posts: Mapped[list["Post"]] = relationship(

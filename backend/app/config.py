@@ -92,6 +92,12 @@ class Settings(BaseSettings):
     PIXIV_REFRESH_TOKEN: str = ""
     PIXIV_PHPSESSID: str = ""
 
+    # ── AI Tag Processing ─────────────────────────────────────────────
+    AI_PROVIDER_API_KEY: str = ""
+    AI_PROVIDER_ENDPOINT: str = ""  # e.g. https://api.deepseek.com/v1
+    AI_PROVIDER_MODEL: str = ""  # e.g. deepseek-v4-flash
+    ENABLE_AI_TAG_PROCESSING: bool = True
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 

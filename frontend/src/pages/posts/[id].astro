@@ -64,21 +64,51 @@ function getTagCategoryVar(cat: TagCategory): string {
             {TAG_CATEGORY_ORDER.map((cat) => groupedTags[cat] && (
               <div>
                 <h3 class="text-[0.6875rem] font-semibold mb-1.5" style={"color: " + getTagCategoryVar(cat)}>{getTagCategoryLabel(cat)} ({groupedTags[cat].length})</h3>
-                <ul class="space-y-0.5">
+                <ul class="space-y-0.5" data-category={cat}>
                   {groupedTags[cat].map((tag: Tag) => (
-                    <li class="rounded-[var(--radius-sm)] px-1.5 py-0.5 -mx-1.5 hover:bg-[var(--accent-subtle)] transition-colors duration-[var(--duration-fast)]">
+                    <li class="relative rounded-[var(--radius-sm)] px-1.5 py-0.5 -mx-1.5 hover:bg-[var(--accent-subtle)] transition-colors duration-[var(--duration-fast)] group/tag">
                       <a
                         href={`/tags/${encodeURIComponent(tag.name)}`}
                         class="flex items-center justify-between gap-2"
                       >
-                        <span class="text-[var(--text-primary)] hover:text-[var(--accent-color)] transition-colors duration-[var(--duration-fast)] truncate">{tag.name}</span>
+                        <span class="truncate">
+                          <span class="text-[var(--text-primary)] hover:text-[var(--accent-color)] transition-colors duration-[var(--duration-fast)]">{tag.name}</span>
+                          {tag.translation && (
+                            <span class="text-[0.625rem] text-[var(--text-muted)] ml-1.5">{tag.translation}</span>
+                          )}
+                        </span>
                         {tag.post_count > 0 && <span class="text-[0.6875rem] text-[var(--text-muted)] font-mono tabular-nums flex-shrink-0">{tag.post_count}</span>}
                       </a>
+                      {isAdmin && (
+                        <button
+                          class="remove-tag-btn absolute right-1 top-1/2 -translate-y-1/2 text-[0.625rem] text-red-400 opacity-0 group-hover/tag:opacity-100 transition-opacity"
+                          data-post-id={post.id}
+                          data-tag-id={tag.id}
+                          data-tag-name={tag.name}
+                          title="移除此标签"
+                        >✕</button>
+                      )}
                     </li>
                   ))}
                 </ul>
               </div>
             ))}
+            {isAdmin && (
+              <div class="mt-3 pt-3 border-t border-[var(--border-color)]">
+                <div class="flex gap-1">
+                  <input
+                    type="text"
+                    id="add-tag-input"
+                    placeholder="添加标签…"
+                    class="flex-1 text-xs px-2 py-1 rounded border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]"
+                  />
+                  <button
+                    id="add-tag-btn"
+                    class="text-xs px-2 py-1 rounded bg-[var(--accent-color)] text-[var(--bg-primary)] font-medium hover:bg-[var(--accent-hover)] transition-colors"
+                  >添加</button>
+                </div>
+              </div>
+            )}
           </div>
         </aside>
       )}
@@ -123,6 +153,9 @@ function getTagCategoryVar(cat: TagCategory): string {
                       class="text-[0.75rem] px-2 py-0.5 rounded-[var(--radius-sm)] border border-[var(--border-color)] hover:border-[var(--accent-color)] hover:text-[var(--accent-color)] transition-all duration-[var(--duration-fast)]"
                     >
                       {tag.name}
+                      {tag.translation && (
+                        <span class="text-[0.625rem] text-[var(--text-muted)] ml-1">{tag.translation}</span>
+                      )}
                     </a>
                   ))}
                 </div>
@@ -294,6 +327,64 @@ function getTagCategoryVar(cat: TagCategory): string {
       modalCloseBtn.addEventListener('click', closeModal);
     }
   </script>
+
+  {/* Admin tag management script */}
+  {isAdmin && (
+    <script is:inline>
+      // Remove tag from post
+      document.querySelectorAll('.remove-tag-btn').forEach(function(btn) {
+        btn.addEventListener('click', async function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var postId = btn.dataset.postId;
+          var tagId = btn.dataset.tagId;
+          var tagName = btn.dataset.tagName;
+          if (!confirm('移除标签: ' + tagName + '？')) return;
+          try {
+            var resp = await fetch('/api/posts/' + postId + '/tags', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ remove_tag_ids: [tagId] }),
+            });
+            if (resp.ok) {
+              var li = btn.closest('li');
+              if (li) li.remove();
+            } else {
+              alert('移除失败');
+            }
+          } catch (err) {
+            alert('网络错误');
+          }
+        });
+      });
+
+      // Add tag to post
+      var addTagInput = document.getElementById('add-tag-input');
+      var addTagBtn = document.getElementById('add-tag-btn');
+      if (addTagInput && addTagBtn) {
+        function doAddTag() {
+          var tagName = addTagInput.value.trim().toLowerCase();
+          if (!tagName) return;
+          var postId = window.location.pathname.split('/').pop();
+          fetch('/api/posts/' + postId + '/tags', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ add_tags: [tagName] }),
+          }).then(function(resp) {
+            if (resp.ok) {
+              window.location.reload();
+            } else {
+              resp.text().then(function(t) { alert('添加失败: ' + t); });
+            }
+          }).catch(function() { alert('网络错误'); });
+        }
+        addTagBtn.addEventListener('click', doAddTag);
+        addTagInput.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') { e.preventDefault(); doAddTag(); }
+        });
+      }
+    </script>
+  )}
 
   {/* Admin rating editor script */}
   {isAdmin && (

@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-06-22
+
+### Added
+- **AI Retag** — 新图入库时自动调用 OpenAI 兼容 API（DeepSeek 等）对标签进行 5 类分类（artist / character / copyright / general / meta）+ 中文翻译 + Danbooru 标准命名。结果缓存到 `tag_knowledge` 表，避免重复调用。由 `ENABLE_AI_TAG_PROCESSING` + `AI_PROVIDER_*` 环境变量控制。
+- **`tag_knowledge` 知识库表** — 作为 AI 结果的 truth source，`Tag` 表的分类/翻译字段成为冗余副本。支持 `ai` / `manual` / `danbooru_import` / `danbooru_api` 四种 source。
+- **管理后台标签管理页** (`/admin/tags`) — 列表/筛选/搜索、行内编辑分类与翻译、标签合并、触发 AI 重处理（仅未处理 / 全部强制重处理）。
+- **详情页管理员标签编辑** — 左侧标签栏每行 hover 显示红色 ✕ 移除按钮，底部输入框可添加新标签。
+- **Footer AI 胶囊** — 当 `ENABLE_AI_TAG_PROCESSING=true` 时，左下角版本号胶囊旁额外显示紫色白字"AI ✦"胶囊。Footer 改为 `flex-wrap`，移动端拥挤时右下角"个人动漫插画收藏"自动换行。
+- **横幅"安全"二字高亮** — 非管理员横幅中"安全"使用站点主题色（`var(--accent-color)`，绿色）显示。
+
+### Fixed
+- **标签管理页空白** — `admin/tags.astro` frontmatter 中 `fetchAdminTags` 调用误用 `per_page`（下划线变量名不存在），实际变量是 `perPage`（驼峰）。`ReferenceError` 被静默 `try/catch` 吞掉，页面渲染"共 0 个标签"。改为 `per_page: perPage`。
+- **详情页标签移除按钮定位错误** — `<li>` 缺少 `relative`，导致 `absolute` 按钮相对外层 `.card`（sticky 算 positioned）定位，所有 ✕ 都叠在标签卡片右上角同一位置，只对应最后一条标签。给 `<li>` 加 `relative`，按钮改为 `top-1/2 -translate-y-1/2` 垂直居中。
+- **`admin/tags.astro` 误导入不存在的 `getTagCategoryColorClass`** — `api.ts` 只导出 `getTagCategoryColor`。删除未使用的导入。
+
+### Changed
+- **数据库迁移 005** — `tags` 表新增 `danbooru_name` / `translation` / `ai_processed_at` 三列；`posts` 表新增 `ai_tag_processed_at` / `ai_tag_status` 两列（当前为死字段，预留）；新建 `tag_knowledge` 表。
+- **Docker 镜像标签** — 从 `v0.4.0-dev` 升级为 `v0.4.0`。
+- **Footer 布局** — `flex` 改为 `flex-wrap` + `gap-y-2`，左侧胶囊组改为 `inline-flex items-center gap-2`。
+
 ## [0.2.3] - 2026-06-21
 
 ### Fixed

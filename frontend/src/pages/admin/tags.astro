@@ -1,0 +1,359 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import {
+  fetchAdminTags,
+  getTagCategoryLabel,
+  type Tag,
+  type TagCategory,
+} from "@/lib/api";
+
+const isAdmin = Astro.locals.isAdmin ?? false;
+const ssrCookie = Astro.locals.ssrCookie;
+
+if (!isAdmin) {
+  return Astro.redirect("/login");
+}
+
+// Parse query params
+const url = new URL(Astro.request.url);
+const page = parseInt(url.searchParams.get("page") || "1");
+const perPage = parseInt(url.searchParams.get("per_page") || "40");
+const category = url.searchParams.get("category") || undefined;
+const aiStatus = url.searchParams.get("ai_status") || undefined;
+const q = url.searchParams.get("q") || undefined;
+const sort = url.searchParams.get("sort") || "count";
+
+let tagsData = { items: [] as Tag[], total: 0, page: 1, per_page: 40, total_pages: 0 };
+try {
+  tagsData = await fetchAdminTags(
+    { category: category as TagCategory | undefined, ai_status: aiStatus, q, sort, page, per_page: perPage },
+    ssrCookie,
+  );
+} catch {
+  // Fetch failed
+}
+---
+
+<BaseLayout title="标签管理">
+  <div class="max-w-6xl mx-auto px-6 lg:px-8 py-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-[var(--text-primary)]">
+          <span class="gradient-text">标签管理</span>
+        </h1>
+        <p class="text-sm text-[var(--text-muted)] mt-1">
+          编辑标签分类、翻译、Danbooru 名称；合并标签；触发 AI 重处理
+        </p>
+      </div>
+      <div class="flex gap-2">
+        <button
+          id="reprocess-btn"
+          class="px-3 py-1.5 rounded-[var(--radius-md)] bg-[var(--accent-color)] text-[var(--bg-primary)] text-sm font-medium hover:bg-[var(--accent-hover)] active:scale-[0.97] transition-all"
+        >
+          处理未处理标签
+        </button>
+        <button
+          id="reprocess-force-btn"
+          class="px-3 py-1.5 rounded-[var(--radius-md)] border border-[var(--border-color)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-primary)] transition-all"
+        >
+          全部重处理
+        </button>
+        <a
+          href="/admin/posts"
+          class="text-sm text-[var(--text-muted)] hover:text-[var(--accent-color)] transition-colors self-center"
+        >
+          ← 返回管理
+        </a>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card p-4 mb-4">
+      <form id="filter-form" class="flex flex-wrap items-end gap-3">
+        <div>
+          <label class="block text-xs font-medium text-[var(--text-muted)] mb-1">分类</label>
+          <select name="category" class="px-2 py-1.5 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm">
+            <option value="">全部</option>
+            <option value="artist" selected={category === "artist"}>画师</option>
+            <option value="character" selected={category === "character"}>角色</option>
+            <option value="copyright" selected={category === "copyright"}>作品</option>
+            <option value="general" selected={category === "general"}>通用</option>
+            <option value="meta" selected={category === "meta"}>元信息</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-[var(--text-muted)] mb-1">AI 状态</label>
+          <select name="ai_status" class="px-2 py-1.5 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm">
+            <option value="">全部</option>
+            <option value="processed" selected={aiStatus === "processed"}>已处理</option>
+            <option value="unprocessed" selected={aiStatus === "unprocessed"}>未处理</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-[var(--text-muted)] mb-1">搜索</label>
+          <input
+            type="text"
+            name="q"
+            value={q || ""}
+            placeholder="标签名前缀…"
+            class="px-2 py-1.5 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm w-48"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-[var(--text-muted)] mb-1">排序</label>
+          <select name="sort" class="px-2 py-1.5 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm">
+            <option value="count" selected={sort === "count"}>按数量</option>
+            <option value="name" selected={sort === "name"}>按名称</option>
+          </select>
+        </div>
+        <button type="submit" class="px-3 py-1.5 rounded-[var(--radius-md)] bg-[var(--accent-subtle)] text-[var(--accent-color)] text-sm font-medium hover:bg-[var(--accent-hover)] hover:text-[var(--bg-primary)] transition-all">
+          筛选
+        </button>
+      </form>
+    </div>
+
+    <!-- Tags table -->
+    <div class="card overflow-hidden">
+      <div class="px-4 py-3 border-b border-[var(--border-color)] flex items-center justify-between">
+        <span class="text-sm font-medium text-[var(--text-muted)]">
+          共 {tagsData.total} 个标签
+        </span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full" id="tags-table">
+          <thead>
+            <tr class="border-b border-[var(--border-color)]">
+              <th class="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)] w-32">内部 ID</th>
+              <th class="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)]">原始名称</th>
+              <th class="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)]">分类</th>
+              <th class="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)]">Danbooru 名</th>
+              <th class="text-left px-4 py-3 text-xs font-medium text-[var(--text-muted)]">中文翻译</th>
+              <th class="text-right px-4 py-3 text-xs font-medium text-[var(--text-muted)]">帖子数</th>
+              <th class="text-right px-4 py-3 text-xs font-medium text-[var(--text-muted)]">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tagsData.items.map((tag) => (
+              <tr class="border-b border-[var(--border-color)] hover:bg-[var(--bg-primary)] transition-colors" data-tag-id={tag.id}>
+                <td class="px-4 py-2">
+                  <span class="text-[0.625rem] font-mono text-[var(--text-muted)] bg-[var(--bg-primary)] px-1 py-0.5 rounded" title={tag.id}>
+                    {tag.id.slice(0, 8)}…
+                  </span>
+                </td>
+                <td class="px-4 py-2">
+                  <span class="text-[var(--text-primary)] font-medium tag-name-cell">{tag.name}</span>
+                </td>
+                <td class="px-4 py-2">
+                  <select
+                    class="tag-category-select px-1 py-0.5 rounded text-xs border border-[var(--border-color)] bg-[var(--bg-primary)]"
+                    data-tag-id={tag.id}
+                    data-field="category"
+                  >
+                    <option value="artist" selected={tag.category === "artist"}>画师</option>
+                    <option value="character" selected={tag.category === "character"}>角色</option>
+                    <option value="copyright" selected={tag.category === "copyright"}>作品</option>
+                    <option value="general" selected={tag.category === "general"}>通用</option>
+                    <option value="meta" selected={tag.category === "meta"}>元信息</option>
+                  </select>
+                </td>
+                <td class="px-4 py-2">
+                  <input
+                    type="text"
+                    class="tag-danbooru-input px-1 py-0.5 rounded text-xs border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] w-32"
+                    value={tag.danbooru_name || ""}
+                    placeholder="—"
+                    data-tag-id={tag.id}
+                    data-field="danbooru_name"
+                  />
+                </td>
+                <td class="px-4 py-2">
+                  <input
+                    type="text"
+                    class="tag-translation-input px-1 py-0.5 rounded text-xs border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] w-24"
+                    value={tag.translation || ""}
+                    placeholder="—"
+                    data-tag-id={tag.id}
+                    data-field="translation"
+                  />
+                </td>
+                <td class="px-4 py-2 text-right">
+                  <span class="text-sm text-[var(--text-muted)]">{tag.post_count}</span>
+                </td>
+                <td class="px-4 py-2 text-right">
+                  <button
+                    class="save-tag-btn px-2 py-1 rounded text-xs bg-[var(--accent-subtle)] text-[var(--accent-color)] hover:bg-[var(--accent-hover)] hover:text-[var(--bg-primary)] transition-all"
+                    data-tag-id={tag.id}
+                  >
+                    保存
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      {tagsData.total_pages > 1 && (
+        <div class="px-4 py-3 border-t border-[var(--border-color)] flex items-center justify-center gap-2">
+          {Array.from({ length: tagsData.total_pages }, (_, i) => i + 1).map((p) => (
+            <a
+              href={`?page=${p}&per_page=${perPage}&category=${category || ""}&ai_status=${aiStatus || ""}&q=${q || ""}&sort=${sort}`}
+              class:list={[
+                "px-3 py-1 rounded text-sm transition-colors",
+                p === tagsData.page
+                  ? "bg-[var(--accent-color)] text-[var(--bg-primary)] font-medium"
+                  : "text-[var(--text-muted)] hover:bg-[var(--bg-primary)]",
+              ]}
+            >
+              {p}
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+
+    <!-- Merge section -->
+    <div class="card p-6 mt-6">
+      <h2 class="text-sm font-medium text-[var(--text-muted)] mb-4">合并标签</h2>
+      <form id="merge-form" class="flex items-end gap-3">
+        <div class="flex-1">
+          <label class="block text-xs font-medium text-[var(--text-muted)] mb-1">源标签 ID</label>
+          <input
+            type="text"
+            id="merge-source-id"
+            placeholder="a3f8c2d1-…"
+            required
+            class="w-full px-2 py-1.5 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm font-mono"
+          />
+        </div>
+        <div class="flex-1">
+          <label class="block text-xs font-medium text-[var(--text-muted)] mb-1">目标标签 ID</label>
+          <input
+            type="text"
+            id="merge-target-id"
+            placeholder="b7e4a9f3-…"
+            required
+            class="w-full px-2 py-1.5 rounded-[var(--radius-md)] border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm font-mono"
+          />
+        </div>
+        <button
+          type="submit"
+          class="px-4 py-1.5 rounded-[var(--radius-md)] bg-[var(--accent-color)] text-[var(--bg-primary)] text-sm font-medium hover:bg-[var(--accent-hover)] active:scale-[0.97] transition-all"
+        >
+          合并
+        </button>
+      </form>
+      <div id="merge-error" class="text-sm text-red-400 mt-2 hidden"></div>
+    </div>
+  </div>
+</BaseLayout>
+
+<script is:inline>
+  // Save tag edits
+  document.querySelectorAll('.save-tag-btn').forEach(function(btn) {
+    btn.addEventListener('click', async function() {
+      var tagId = btn.dataset.tagId;
+      var row = btn.closest('tr');
+      var category = row.querySelector('.tag-category-select').value;
+      var danbooruName = row.querySelector('.tag-danbooru-input').value;
+      var translation = row.querySelector('.tag-translation-input').value;
+
+      btn.disabled = true;
+      btn.textContent = '…';
+      try {
+        var resp = await fetch('/api/admin/tags/' + tagId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            category: category,
+            danbooru_name: danbooruName || null,
+            translation: translation || null,
+          }),
+        });
+        if (resp.ok) {
+          btn.textContent = '✓';
+          setTimeout(function() { btn.textContent = '保存'; }, 1500);
+        } else {
+          btn.textContent = '✗';
+          var data = await resp.json().catch(function() { return {}; });
+          alert(data.detail || '保存失败');
+          btn.textContent = '保存';
+        }
+      } catch (err) {
+        btn.textContent = '✗';
+        alert('网络错误');
+        btn.textContent = '保存';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
+  // Reprocess buttons
+  document.getElementById('reprocess-btn').addEventListener('click', async function() {
+    if (!confirm('处理所有未处理的标签？')) return;
+    try {
+      var resp = await fetch('/api/admin/tags/reprocess', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: false }),
+      });
+      if (resp.ok) {
+        var data = await resp.json();
+        alert('已加入队列，Job ID: ' + data.job_id);
+      } else {
+        alert('触发失败');
+      }
+    } catch (err) {
+      alert('网络错误');
+    }
+  });
+
+  document.getElementById('reprocess-force-btn').addEventListener('click', async function() {
+    if (!confirm('⚠️ 确定重新处理所有标签？此操作将覆盖现有分类和翻译。')) return;
+    try {
+      var resp = await fetch('/api/admin/tags/reprocess', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: true }),
+      });
+      if (resp.ok) {
+        var data = await resp.json();
+        alert('已加入队列，Job ID: ' + data.job_id);
+      } else {
+        alert('触发失败');
+      }
+    } catch (err) {
+      alert('网络错误');
+    }
+  });
+
+  // Merge form
+  document.getElementById('merge-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var sourceId = document.getElementById('merge-source-id').value.trim();
+    var targetId = document.getElementById('merge-target-id').value.trim();
+    if (!sourceId || !targetId) return;
+    if (!confirm('确定将源标签合并到目标标签？此操作不可撤销。')) return;
+
+    try {
+      var resp = await fetch('/api/admin/tags/merge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_tag_id: sourceId, target_tag_id: targetId }),
+      });
+      if (resp.ok) {
+        var data = await resp.json();
+        alert('合并完成：移动 ' + data.posts_moved + ' 个帖子，跳过 ' + data.posts_skipped + ' 个');
+        window.location.reload();
+      } else {
+        var err = await resp.json().catch(function() { return {}; });
+        alert(err.detail || '合并失败');
+      }
+    } catch (err) {
+      alert('网络错误');
+    }
+  });
+</script>

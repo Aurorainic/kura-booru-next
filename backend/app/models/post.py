@@ -66,6 +66,12 @@ class Post(Base):
         server_default=func.now(),
         nullable=False,
     )
+    ai_tag_processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ai_tag_status: Mapped[str] = mapped_column(
+        String, nullable=False, server_default="pending"
+    )
 
     # Relationship: tags via PostTag association table
     tags: Mapped[list["Tag"]] = relationship(

@@ -174,7 +174,12 @@ export default function SearchBar({ initialQuery = "", onSearch, placeholder = "
               role="option"
               aria-selected={index === selectedIndex}
             >
-              <span className="truncate">{tag.name}</span>
+              <span className="truncate">
+                {tag.name}
+                {tag.translation && (
+                  <span className="text-[0.625rem] text-[var(--text-muted)] ml-1.5">{tag.translation}</span>
+                )}
+              </span>
               <span className={cn("text-xs px-1.5 py-0.5 rounded-[var(--radius-sm)]", `tag-${tag.category}`)}>
                 {tag.category}
               </span>

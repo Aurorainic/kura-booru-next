@@ -15,7 +15,7 @@ export default defineConfig({
   integrations: [react()],
   site: process.env.APP_URL || undefined,
   security: {
-    checkOrigin: true,
+    checkOrigin: false,
     allowedDomains: (() => {
       const domains = [];
       // Allow the production domain as a RemotePattern object

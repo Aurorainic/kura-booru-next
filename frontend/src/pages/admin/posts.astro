@@ -77,10 +77,9 @@ const ratingOptions: { value: string; label: string }[] = [
             <tr class="border-b border-[var(--border-color)] text-left text-[var(--text-muted)]">
               <th class="py-3 px-2 w-16">预览</th>
               <th class="py-3 px-2">标题 / ID</th>
+              <th class="py-3 px-2">标签</th>
               <th class="py-3 px-2">来源</th>
               <th class="py-3 px-2">评级</th>
-              <th class="py-3 px-2">大小</th>
-              <th class="py-3 px-2">时间</th>
               <th class="py-3 px-2">操作</th>
             </tr>
           </thead>
@@ -102,6 +101,18 @@ const ratingOptions: { value: string; label: string }[] = [
                     {post.title || post.id.slice(0, 8)}
                   </a>
                 </td>
+                <td class="py-2 px-2">
+                  <div class="flex flex-wrap gap-0.5 max-w-[200px]">
+                    {(post.tags || []).slice(0, 5).map((tag: any) => (
+                      <span class={`tag-${tag.category} text-[0.625rem] px-1 py-0.5 rounded`}>
+                        {tag.translation || tag.name}
+                      </span>
+                    ))}
+                    {(post.tags || []).length > 5 && (
+                      <span class="text-[0.625rem] text-[var(--text-muted)]">+{(post.tags || []).length - 5}</span>
+                    )}
+                  </div>
+                </td>
                 <td class="py-2 px-2 text-[var(--text-muted)]">
                   {getSourceSiteLabel(post.source_site)}
                 </td>
@@ -109,12 +120,6 @@ const ratingOptions: { value: string; label: string }[] = [
                   <span class={`px-2 py-0.5 text-xs font-bold rounded border ${getRatingColorClass(post.rating)}`}>
                     {getRatingLabel(post.rating)}
                   </span>
-                </td>
-                <td class="py-2 px-2 text-[var(--text-muted)]">
-                  {formatFileSize(post.file_size)}
-                </td>
-                <td class="py-2 px-2 text-[var(--text-muted)]">
-                  {formatDate(post.created_at)}
                 </td>
                 <td class="py-2 px-2">
                   <div class="flex items-center gap-2">
