@@ -17,6 +17,7 @@ from __future__ import annotations
 import hmac
 import logging
 import random
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -129,6 +130,12 @@ async def get_post_by_source(
     return post
 
 
+# In-process count cache for random_post — avoids COUNT(*) on every request.
+# ponytail: per-worker in-process cache, 5min TTL; good enough for random.
+_random_post_count_cache: dict[bool, tuple[int, float]] = {}
+_COUNT_CACHE_TTL = 300  # seconds
+
+
 @router.get("/random", response_model=PostRead)
 async def random_post(
     db: AsyncSession = Depends(get_db),
@@ -140,9 +147,18 @@ async def random_post(
     """
     base = _apply_rating_filter(select(Post), is_admin)
 
-    count_stmt = select(func.count()).select_from(base.subquery())
-    count_result = await db.execute(count_stmt)
-    total = count_result.scalar() or 0
+    # Use cached count if fresh
+    now = time.monotonic()
+    total = 0
+    cached = _random_post_count_cache.get(is_admin)
+    if cached and now - cached[1] < _COUNT_CACHE_TTL:
+        total = cached[0]
+
+    if total == 0:
+        count_stmt = select(func.count()).select_from(base.subquery())
+        count_result = await db.execute(count_stmt)
+        total = count_result.scalar() or 0
+        _random_post_count_cache[is_admin] = (total, now)
 
     if total == 0:
         raise HTTPException(status_code=404, detail="No posts found")

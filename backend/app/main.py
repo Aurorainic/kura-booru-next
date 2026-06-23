@@ -2,6 +2,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 
 from app.config import settings
 from app.database import create_tables
@@ -22,7 +24,30 @@ async def lifespan(app: FastAPI):
     async with async_session_factory() as db:
         await ensure_default_admin(db)
     yield
-    # Shutdown — nothing to clean up currently
+    # Shutdown
+    from app.services.s3 import s3_service
+    await s3_service.close()
+
+
+async def _cache_control_dispatch(request: Request, call_next):
+    """Set Cache-Control headers on API responses.
+
+    - Anonymous: public, s-maxage=60 (cacheable by shared caches for 60s)
+    - Admin: private, no-store (never cache)
+    - Preserves existing Cache-Control (e.g. SSE endpoint sets its own)
+    """
+    from app.auth import SESSION_COOKIE_NAME, verify_session
+
+    response = await call_next(request)
+
+    if request.url.path.startswith("/api/") and not response.headers.get("cache-control"):
+        token = request.cookies.get(SESSION_COOKIE_NAME)
+        if verify_session(token) is not None:
+            response.headers["Cache-Control"] = "private, no-store"
+        else:
+            response.headers["Cache-Control"] = "public, s-maxage=60, max-age=30"
+
+    return response
 
 
 app = FastAPI(
@@ -38,6 +63,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(BaseHTTPMiddleware, dispatch=_cache_control_dispatch)
 
 
 @app.get("/health")

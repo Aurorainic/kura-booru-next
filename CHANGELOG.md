@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-06-23
+
+### Changed
+- **`_ensure_tags` batch query** — Replace N+1 loop (2-3 SELECTs per tag) with 3 batch queries (alias + tag + canonical lookup). 30 tags: 60→3 queries.
+- **S3 client reuse** — Lazy-cached S3 client replaces per-operation client creation. Single client reused across uploads/verifications. Registered shutdown cleanup in lifespan.
+- **`random_post` count cache** — In-process 5-min TTL cache skips COUNT(*) on repeated random requests.
+
+### Added
+- **Tag `post_count` auto-sync** — ARQ cron job (hourly + run_at_startup) recalculates `post_count` from `post_tags`, fixing drift from +=1/-=1 accumulation.
+- **Cache-Control headers** — API middleware: anonymous responses `public, s-maxage=60`, admin responses `private, no-store`. SSE endpoints preserve their own `no-cache`. SSR HTML always `private, no-store`.
+
 ## [0.4.1] - 2026-06-23
 
 ### Added

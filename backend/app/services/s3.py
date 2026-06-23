@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import io
 import logging
-from typing import AsyncGenerator
 
 import aiobotocore.session
 from aiobotocore.session import AioSession
@@ -60,7 +59,11 @@ def preview_key(source_site: str, source_id: str, ext: str) -> str:
 
 
 class S3Service:
-    """Async S3 storage service using aiobotocore."""
+    """Async S3 storage service using aiobotocore.
+
+    The S3 client is lazily created once and reused for all operations,
+    avoiding per-operation client setup overhead.
+    """
 
     def __init__(self) -> None:
         self._session: AioSession = aiobotocore.session.get_session()
@@ -68,6 +71,7 @@ class S3Service:
         self._external_url = settings.S3_EXTERNAL_URL.rstrip("/")
         self._bucket = settings.S3_BUCKET_NAME
         self._region = settings.S3_REGION
+        self._client = None  # Lazy-cached S3 client
 
     def _client_config(self) -> BotoConfig:
         return BotoConfig(
@@ -76,32 +80,34 @@ class S3Service:
             retries={"max_attempts": 3, "mode": "standard"},
         )
 
-    async def _get_client(self) -> AsyncGenerator:
-        """Context-managed S3 client — always use via ``async with``."""
-        async with self._session.create_client(
-            "s3",
-            endpoint_url=self._endpoint_url,
-            aws_access_key_id=settings.S3_ACCESS_KEY,
-            aws_secret_access_key=settings.S3_SECRET_KEY,
-            config=self._client_config(),
-        ) as client:
-            yield client
+    async def get_client(self):
+        """Get or lazily create the cached S3 client."""
+        if self._client is None:
+            cm = self._session.create_client(
+                "s3",
+                endpoint_url=self._endpoint_url,
+                aws_access_key_id=settings.S3_ACCESS_KEY,
+                aws_secret_access_key=settings.S3_SECRET_KEY,
+                config=self._client_config(),
+            )
+            self._client = await cm.__aenter__()
+        return self._client
+
+    async def close(self) -> None:
+        """Close the cached S3 client. Call on shutdown."""
+        if self._client is not None:
+            await self._client.__aexit__(None, None, None)
+            self._client = None
 
     async def ensure_bucket(self) -> None:
         """Create the bucket if it does not exist (dev convenience)."""
-        async with self._session.create_client(
-            "s3",
-            endpoint_url=self._endpoint_url,
-            aws_access_key_id=settings.S3_ACCESS_KEY,
-            aws_secret_access_key=settings.S3_SECRET_KEY,
-            config=self._client_config(),
-        ) as client:
-            try:
-                await client.head_bucket(Bucket=self._bucket)
-                logger.info("Bucket %s exists", self._bucket)
-            except client.exceptions.NoSuchBucket:  # type: ignore[attr-defined]
-                await client.create_bucket(Bucket=self._bucket)
-                logger.info("Created bucket %s", self._bucket)
+        client = await self.get_client()
+        try:
+            await client.head_bucket(Bucket=self._bucket)
+            logger.info("Bucket %s exists", self._bucket)
+        except client.exceptions.NoSuchBucket:  # type: ignore[attr-defined]
+            await client.create_bucket(Bucket=self._bucket)
+            logger.info("Created bucket %s", self._bucket)
 
     async def upload_bytes(
         self,
@@ -111,20 +117,13 @@ class S3Service:
     ) -> str:
         """Upload raw bytes to S3. Returns the normalized key."""
         key = _normalize_key(key)
-        async with self._session.create_client(
-            "s3",
-            endpoint_url=self._endpoint_url,
-            aws_access_key_id=settings.S3_ACCESS_KEY,
-            aws_secret_access_key=settings.S3_SECRET_KEY,
-            config=self._client_config(),
-        ) as client:
-            await client.put_object(
-                Bucket=self._bucket,
-                Key=key,
-                Body=data,
-                ContentType=content_type,
-            )
-        # Post-upload URL verification
+        client = await self.get_client()
+        await client.put_object(
+            Bucket=self._bucket,
+            Key=key,
+            Body=data,
+            ContentType=content_type,
+        )
         url = self.public_url(key)
         logger.debug("Uploaded s3://%s/%s → %s", self._bucket, key, url)
         return key
@@ -140,19 +139,13 @@ class S3Service:
         v1 lesson: large file uploads caused OOM — always use streaming.
         """
         key = _normalize_key(key)
-        async with self._session.create_client(
-            "s3",
-            endpoint_url=self._endpoint_url,
-            aws_access_key_id=settings.S3_ACCESS_KEY,
-            aws_secret_access_key=settings.S3_SECRET_KEY,
-            config=self._client_config(),
-        ) as client:
-            await client.put_object(
-                Bucket=self._bucket,
-                Key=key,
-                Body=file_obj,
-                ContentType=content_type,
-            )
+        client = await self.get_client()
+        await client.put_object(
+            Bucket=self._bucket,
+            Key=key,
+            Body=file_obj,
+            ContentType=content_type,
+        )
         url = self.public_url(key)
         logger.debug("Stream-uploaded s3://%s/%s → %s", self._bucket, key, url)
         return key
@@ -160,14 +153,8 @@ class S3Service:
     async def delete(self, key: str) -> None:
         """Delete an object from S3."""
         key = _normalize_key(key)
-        async with self._session.create_client(
-            "s3",
-            endpoint_url=self._endpoint_url,
-            aws_access_key_id=settings.S3_ACCESS_KEY,
-            aws_secret_access_key=settings.S3_SECRET_KEY,
-            config=self._client_config(),
-        ) as client:
-            await client.delete_object(Bucket=self._bucket, Key=key)
+        client = await self.get_client()
+        await client.delete_object(Bucket=self._bucket, Key=key)
         logger.debug("Deleted s3://%s/%s", self._bucket, key)
 
     def public_url(self, key: str) -> str:
@@ -182,18 +169,12 @@ class S3Service:
     async def get_presigned_url(self, key: str, expires_in: int = 3600) -> str:
         """Generate a presigned GET URL for private buckets."""
         key = _normalize_key(key)
-        async with self._session.create_client(
-            "s3",
-            endpoint_url=self._endpoint_url,
-            aws_access_key_id=settings.S3_ACCESS_KEY,
-            aws_secret_access_key=settings.S3_SECRET_KEY,
-            config=self._client_config(),
-        ) as client:
-            url: str = await client.generate_presigned_url(
-                "get_object",
-                Params={"Bucket": self._bucket, "Key": key},
-                ExpiresIn=expires_in,
-            )
+        client = await self.get_client()
+        url: str = await client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": self._bucket, "Key": key},
+            ExpiresIn=expires_in,
+        )
         return url
 
     async def verify_upload(self, key: str) -> bool:
@@ -205,24 +186,18 @@ class S3Service:
         """
         key = _normalize_key(key)
         try:
-            async with self._session.create_client(
-                "s3",
-                endpoint_url=self._endpoint_url,
-                aws_access_key_id=settings.S3_ACCESS_KEY,
-                aws_secret_access_key=settings.S3_SECRET_KEY,
-                config=self._client_config(),
-            ) as client:
-                response = await client.head_object(
-                    Bucket=self._bucket, Key=key
-                )
-                size = response.get("ContentLength", -1)
-                logger.debug(
-                    "Verified s3://%s/%s (ContentLength=%s)",
-                    self._bucket,
-                    key,
-                    size,
-                )
-                return size >= 0
+            client = await self.get_client()
+            response = await client.head_object(
+                Bucket=self._bucket, Key=key
+            )
+            size = response.get("ContentLength", -1)
+            logger.debug(
+                "Verified s3://%s/%s (ContentLength=%s)",
+                self._bucket,
+                key,
+                size,
+            )
+            return size >= 0
         except Exception as exc:
             logger.error("Upload verification failed for %s: %s", key, exc)
             return False

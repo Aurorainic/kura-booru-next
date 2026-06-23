@@ -411,57 +411,74 @@ async def _ensure_tags(
 ) -> list[Tag]:
     """Ensure tags exist in the database, creating them if needed.
 
-    Also resolves tag aliases and assigns categories from source metadata.
-
-    Args:
-        db: Async database session.
-        tag_names: List of tag name strings to ensure exist.
-        tag_categories: Dict mapping tag name → source category name
-            (e.g. {"artist_name": "artist", "character_name": "character"}).
-
-    Returns:
-        List of Tag model instances.
+    Batch-resolves aliases and existing tags to avoid N+1 queries.
+    For N tags, issues at most 3 SELECTs + M INSERTs (M = new tags),
+    instead of the previous N*2-3 SELECTs.
     """
-    tags = []
-
+    # Normalize and deduplicate
+    normalized: list[str] = []
+    seen: set[str] = set()
     for name in tag_names:
         name = name.strip().lower()
-        if not name:
-            continue
+        if name and name not in seen:
+            normalized.append(name)
+            seen.add(name)
 
-        # Resolve source category to our TagCategory
+    if not normalized:
+        return []
+
+    # Step 1: Batch query all aliases WHERE alias_name IN (names)
+    alias_stmt = select(TagAlias).where(TagAlias.alias_name.in_(normalized))
+    alias_result = await db.execute(alias_stmt)
+    aliases = alias_result.scalars().all()
+    alias_map: dict[str, TagAlias] = {a.alias_name: a for a in aliases}
+
+    # Names that are NOT aliases need direct tag lookup
+    non_alias_names = [n for n in normalized if n not in alias_map]
+
+    # Step 2: Batch query Tags WHERE name IN (non-alias names)
+    tag_map: dict[str, Tag] = {}
+    if non_alias_names:
+        tag_stmt = select(Tag).where(Tag.name.in_(non_alias_names))
+        tag_result = await db.execute(tag_stmt)
+        for tag in tag_result.scalars().all():
+            tag_map[tag.name] = tag
+
+    # Step 3: Batch query canonical tags for aliases
+    canonical_ids = list({a.tag_id for a in aliases})
+    canonical_map: dict = {}
+    if canonical_ids:
+        canon_stmt = select(Tag).where(Tag.id.in_(canonical_ids))
+        canon_result = await db.execute(canon_stmt)
+        for tag in canon_result.scalars().all():
+            canonical_map[tag.id] = tag
+
+    # Step 4: Build result list, creating missing tags
+    tags: list[Tag] = []
+    for name in normalized:
         source_cat = tag_categories.get(name, "")
         category = _resolve_tag_category(source_cat)
 
-        # Check if this name is an alias for another tag
-        alias_stmt = select(TagAlias).where(TagAlias.alias_name == name)
-        alias_result = await db.execute(alias_stmt)
-        alias = alias_result.scalar_one_or_none()
-
-        if alias:
-            # Use the canonical tag
-            tag_stmt = select(Tag).where(Tag.id == alias.tag_id)
-            tag_result = await db.execute(tag_stmt)
-            tag = tag_result.scalar_one_or_none()
-            if tag:
-                tags.append(tag)
+        if name in alias_map:
+            # Alias → resolve to canonical tag
+            canonical = canonical_map.get(alias_map[name].tag_id)
+            if canonical:
+                tags.append(canonical)
                 continue
 
-        # Look up or create the tag
-        tag_stmt = select(Tag).where(Tag.name == name)
-        tag_result = await db.execute(tag_stmt)
-        tag = tag_result.scalar_one_or_none()
-
-        if tag is None:
+        if name in tag_map:
+            tag = tag_map[name]
+            # Upgrade category if more specific
+            if tag.category == TagCategory.general and category != TagCategory.general:
+                tag.category = category
+            tags.append(tag)
+        else:
+            # New tag — insert
             tag = Tag(name=name, category=category, post_count=0)
             db.add(tag)
-            # Flush to get the ID
             await db.flush()
-        elif tag.category == TagCategory.general and category != TagCategory.general:
-            # Upgrade existing 'general' tag to more specific category
-            tag.category = category
-
-        tags.append(tag)
+            tag_map[name] = tag
+            tags.append(tag)
 
     # Update post_count for all tags
     for tag in tags:

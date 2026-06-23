@@ -52,5 +52,10 @@ export const onRequest: MiddlewareResponseHandler = async (context, next) => {
 
   context.locals.isAdmin = isAdmin;
 
-  return next();
+  const response = await next();
+
+  // Never cache SSR HTML at CDN/proxy level — admin content must not leak
+  response.headers.set("Cache-Control", "private, no-store");
+
+  return response;
 };

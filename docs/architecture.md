@@ -409,9 +409,15 @@ kura-booru-next/
 - Rules only escalate ratings (explicit > questionable > safe); never de-escalate
 - Multiple matching rules: most restrictive wins
 
-### ⚠️ SSR Cache Constraint
+### Cache-Control Policy
 
-Do NOT enable Souin/HTTP cache for SSR pages without `Vary: Cookie` + cookie-in-cache-key. Otherwise, an admin's logged-in HTML (showing non-safe posts) could be served to anonymous visitors. The current Caddyfile has no SSR cache block, so this is not an issue yet.
+- **API responses (anonymous)**: `Cache-Control: public, s-maxage=60, max-age=30` — cacheable by shared caches for 60s, browsers for 30s
+- **API responses (admin)**: `Cache-Control: private, no-store` — never cached
+- **SSR HTML**: `Cache-Control: private, no-store` — never cached at CDN/proxy level (admin content embedded in HTML)
+- **SSE streams**: `Cache-Control: no-cache` — set by endpoint, preserved by middleware
+- **Hashed static assets**: `Cache-Control: public, max-age=31536000, immutable` — content-hashed, safe to cache forever
+
+Do NOT enable Souin/HTTP cache for SSR pages without `Vary: Cookie` + cookie-in-cache-key. Otherwise, an admin's logged-in HTML (showing non-safe posts) could be served to anonymous visitors.
 
 ---
 

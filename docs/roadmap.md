@@ -3,19 +3,21 @@
 ## 待做功能
 
 - [ ] 更多 extractor（Twitter 完整支持、Danbooru 元数据）
-- [ ] 去重机制完善（phash 前缀桶数据库索引优化）
-- [ ] 性能优化（Redis 缓存热门查询）
 - [ ] 端到端测试
 - [ ] SSR 缓存启用（需先解决 Vary: Cookie + 缓存 key 问题）
 - [ ] 数据库定期备份 cron
 - [ ] Admin 密码修改后旧 session 失效机制
-- [ ] Tag `post_count` 自动同步（当前需要手动 SQL）
-- [ ] `random_post` 查询优化（大表慢，考虑 TABLESAMPLE 或随机 UUID）
-- [ ] `_ensure_tags` 批量查询（当前循环逐个 select，N+1 问题）
-- [ ] S3 client 连接池复用（当前每次操作新建 client）
+- [ ] `random_post` 深分页优化（TABLESAMPLE 或随机 UUID，当前方案在 100K+ 行时会慢）
+- [ ] `_ensure_tags` 并发安全（多个 worker 同时创建同名 tag 可能冲突）
+- [ ] S3 client 连接错误重连（当前懒缓存 client 如遇断连不会自动重建）
 
 ## 已完成功能
 
+- [x] S3 client 连接池复用（懒缓存单例）— v0.4.2
+- [x] `random_post` 计数缓存（in-process TTL）— v0.4.2
+- [x] `_ensure_tags` 批量查询（N+1 → 3 queries）— v0.4.2
+- [x] Tag `post_count` 定时同步（ARQ cron）— v0.4.2
+- [x] Cache-Control 策略（API + HTML）— v0.4.2
 - [x] 网页端批量导入队列实时更新（SSE，对齐 Bot 体验）— v0.4.1
 - [x] 详情页直接删除当前图片（管理员）— v0.4.1
 - [x] Pixiv 多图帖子只抓第一张 — v0.4.1

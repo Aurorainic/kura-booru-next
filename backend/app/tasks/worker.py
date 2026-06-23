@@ -7,9 +7,11 @@ The worker is started via ``arq app.tasks.worker.WorkerSettings``.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
-from arq import create_pool
+from arq import cron, create_pool
 from arq.connections import RedisSettings
+from sqlalchemy import text
 
 from app.config import get_settings
 from app.services.gallery_dl import setup_gallery_dl_config
@@ -49,6 +51,9 @@ class WorkerSettings:
     # Register all task functions here
     functions = [process_image, reprocess_tags]
 
+    # Periodic maintenance: recalculate tag post_count from post_tags truth
+    cron_jobs = [cron(sync_tag_post_counts, minute=7, run_at_startup=True)]
+
     # Worker startup hook
     @staticmethod
     async def on_startup(ctx):
@@ -58,6 +63,25 @@ class WorkerSettings:
     job_timeout = 300  # 5 minutes per job
     keep_result = 3600  # Keep results for 1 hour
     max_tries = 3  # Retry failed jobs up to 3 times
+
+
+async def sync_tag_post_counts(ctx: dict) -> dict[str, Any]:
+    """Recalculate tag post_count from post_tags (single-source-of-truth sync).
+
+    Runs as an ARQ cron job. Corrects drift from +=1 / -=1 in _ensure_tags
+    and delete_post that can accumulate on errors or retries.
+    """
+    from app.database import async_session_factory
+
+    async with async_session_factory() as db:
+        result = await db.execute(text(
+            "UPDATE tags SET post_count = ("
+            "  SELECT COUNT(*) FROM post_tags WHERE post_tags.tag_id = tags.id"
+            ")"
+        ))
+        await db.commit()
+        logger.info("sync_tag_post_counts: updated %d tags", result.rowcount)
+        return {"rows_updated": result.rowcount}
 
 
 async def enqueue_process_image(source_url: str, source_site: str | None = None, source_id: str | None = None) -> str:

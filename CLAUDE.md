@@ -12,6 +12,7 @@
 - **gallery-dl**: Use as Python library (`DownloadJob` API in `ThreadPoolExecutor`), NOT as subprocess. Config is global singleton — set once at startup from env vars, never modify concurrently.
 - **S3 storage**: Generic abstraction layer. No provider-specific code. Switch providers via env vars only.
 - **SSR cache**: Do NOT enable Souin/HTTP cache for SSR pages without `Vary: Cookie` + cookie-in-cache-key. Otherwise, admin HTML could leak to anonymous users.
+- **Cache-Control**: API responses set headers via middleware — anon gets `public, s-maxage=60`, admin gets `private, no-store`. SSR HTML always `private, no-store`. SSE endpoints set their own `no-cache` which middleware preserves.
 - **phash**: Never expose perceptual hash values in API responses (security).
 - **Pagination**: Use traditional pagination, not infinite scroll. Per-page selector with 20/40/100 options.
 - **Image size**: `MAX_IMAGE_SIZE` env var controls limit (0 = unlimited).
@@ -31,6 +32,14 @@
 - **Logout race condition**: Use server-side redirect (SSR endpoint `POST /logout`) instead of client-side `fetch()` + `window.location.href`, to ensure cookie is cleared before next page request.
 
 ## Changelog
+
+### v0.4.2 (2026-06-23) — 开发中
+
+- [x] Tag `post_count` 定时同步（ARQ cron，每小时 + 启动时修正漂移）
+- [x] `_ensure_tags` 批量查询（N+1 → 3 queries + inserts）
+- [x] S3 client 连接池复用（懒缓存 + lifespan shutdown）
+- [x] `random_post` 计数缓存（in-process 5min TTL，跳过 COUNT(*)）
+- [x] Cache-Control 策略（API: anon=public s-maxage=60, admin=private no-store; HTML: private no-store）
 
 ### v0.4.0 (2026-06-22) — 已发布
 
