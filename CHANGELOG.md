@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-06-23
+
+### Added
+- **Pixiv 多图帖子只抓第一张** — gallery-dl `image-range` 配置 `"1-1"`，仅下载 Pixiv 多图帖的第一张图。防御性加固：`_download_sync` 文件读取改为排序取首，双重保险。
+- **详情页管理员删除按钮** — 右侧 info sidebar 添加红色「删除作品」按钮（仅管理员可见），删除后跳转画廊首页 `/`。
+- **网页端批量导入队列实时更新（SSE）** — `GET /api/tasks/web-import/stream` 端点，复用 ARQ 轮询模型，实时推送每个 job 的完成状态（success / duplicate / too_large / failed）+ 最终汇总。前端 `import.astro` 使用 `EventSource` 实时更新每行状态。
+- **Caddy `flush_interval -1`** — `/api/*` reverse_proxy 块新增 `flush_interval -1`，确保 SSE 流不被 Caddy 缓冲。
+
+### Changed
+- **import.astro 实时视图** — 从「已入队 ✓ / 失败 ✗」静态显示改为 SSE 实时进度：⏳ 处理中 → ✅/⚠️/❌ 完成状态，done 事件显示汇总。
+- **roadmap.md** — 合并重复的 SSE/WebSocket 条目，标记已完成功能。
+
 ## [0.4.0] - 2026-06-22
 
 ### Added
@@ -205,7 +217,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - HTML descriptions sanitized server-side with `bleach` to prevent XSS
 - External links marked with `rel="noopener noreferrer"`
 
-## [0.1.1] - 2025-06-19
+## [0.1.1] - 2026-06-19
 
 ### Added
 - `infra/scripts/build.sh` — unified Docker image build script that injects version tag into frontend footer.
@@ -222,7 +234,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `schemas/__init__.py` stale import crash documented.
 - Caddy `/i/*` S3 proxy configuration notes added.
 
-## [0.1.0] - 2025-06-18
+## [0.1.0] - 2026-06-18
 
 ### Added
 - Full processing pipeline: Telegram bot → backend API → ARQ worker → gallery-dl → S3 storage.

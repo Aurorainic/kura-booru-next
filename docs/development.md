@@ -76,15 +76,17 @@ All Dockerfiles have 3 stages:
 ## Testing & Verification
 
 1. **Bot flow**: Send a Pixiv link → receive "downloading" → receive "saved" → visible on frontend immediately
-2. **Web import**: Paste URLs → click import → each URL shows "queued" → visible after ARQ processes
+2. **Web import**: Paste URLs → click import → each URL shows real-time SSE progress (⏳→✅/⚠️/❌) → done summary
 3. **Delete flow**: Admin panel click delete → confirm → DB record gone + S3 files deleted + tag count decremented
 4. **Auto-rating**: Add rule "nsfw → explicit" → import image with that tag → auto-marked as explicit
-5. **Tag visibility**: Anonymous visitors can't see tags that only belong to non-safe posts; admin sees all
-6. **Frontend performance**: Caddy cache hit TTFB < 10ms, list page zero-JS first paint
-7. **Pagination**: Switching pages and per-page count works, URLs are shareable
-8. **S3 direct**: Images load directly from S3/CDN, not via backend
-9. **Size limit**: Oversized images rejected, Bot replies with reason
-10. **Dedup**: Sending the same image again shows "already exists"
-11. **Theme toggle**: 3-state toggle works, system preference auto-matched
-12. **Rating visibility**: Anonymous sees only safe; non-safe returns 404; admin sees all
-13. **Admin login/logout**: `/login` → homepage shows "admin mode" → click logout → back to normal
+5. **AI tag processing**: Set `ENABLE_AI_TAG_PROCESSING=true` → import image → tags auto-classified + translated → visible in tag knowledge cache
+6. **Tag visibility**: Anonymous visitors can't see tags that only belong to non-safe posts; admin sees all
+7. **Frontend performance**: Caddy cache hit TTFB < 10ms, list page zero-JS first paint
+8. **Pagination**: Switching pages and per-page count works, URLs are shareable
+9. **S3 direct**: Images load directly from S3/CDN, not via backend
+10. **Size limit**: Oversized images rejected, Bot replies with reason
+11. **Dedup**: Sending the same image again shows "already exists"
+12. **Theme toggle**: 3-state toggle works, system preference auto-matched
+13. **Rating visibility**: Anonymous sees only safe; non-safe returns 404; admin sees all
+14. **Admin login/logout**: `/login` → homepage shows "admin mode" → click logout → back to normal
+15. **Pixiv multi-image**: Multi-image Pixiv post → only first image downloaded and stored

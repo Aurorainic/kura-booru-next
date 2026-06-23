@@ -10,6 +10,8 @@
 - 📄 **分页浏览** — safebooru 风格，URL 可分享，每页 20/40/100 可选
 - 🔞 **内容评级** — safe/questionable/explicit 三级评级，访客只看 safe
 - 🤖 **自动评级** — 配置标签→评级映射规则，含特定标签的插画自动升级评级
+- ✨ **AI 标签分类** — 新图入库自动调用 AI 进行 5 类分类 + 中文翻译 + Danbooru 标准命名
+- 📡 **导入实时反馈** — 网页端批量导入 SSE 实时推送处理进度
 - 🔐 **管理后台** — 单管理员登录解锁 NSFW 可见性
 - 🎨 **三态主题** — dark / light / auto 跟随系统
 - 📦 **S3 通用存储** — Cloudflare R2 / MinIO / AWS S3，改 env 即切换
@@ -31,4 +33,5 @@
 | [development.md](development.md) | 本地开发：dev compose、迁移、调试、测试验证 |
 | [operations.md](operations.md) | 运维：Docker 镜像管理、构建脚本、China build notes |
 | [roadmap.md](roadmap.md) | 待做功能路线图 |
+| [AI_Retag_internals.md](AI_Retag_internals.md) | AI 标签分类：内部架构、已知问题、调试指南 |
 | [../CHANGELOG.md](../CHANGELOG.md) | 版本变更历史 |

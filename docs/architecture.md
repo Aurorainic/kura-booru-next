@@ -57,6 +57,7 @@ Internet
 | | Pillow | latest | Thumbnail generation |
 | | imagehash | latest | Perceptual hash dedup |
 | | gallery-dl | latest | Unified image download engine (Python API) |
+| | openai | latest | OpenAI-compatible API client (AI tag classification) |
 | | aiobotocore | latest | Async S3 client |
 | **Frontend** | Astro | 5.x | **SSR mode** (not SSG) |
 | | React | 19.x | Interactive Island components |
@@ -107,10 +108,11 @@ kura-booru-next/
 │   │   ├── database.py           # SQLAlchemy async engine + session
 │   │   ├── api/                  # REST routes
 │   │   │   ├── auth.py            #   POST /api/auth/login|logout|change-password, GET /api/auth/status
-│   │   │   ├── posts.py          #   GET/PATCH/DELETE /api/posts
+│   │   │   ├── posts.py          #   GET/PATCH/DELETE /api/posts, PUT /api/posts/{id}/tags
 │   │   │   ├── tags.py           #   GET /api/tags (safe-only counts for non-admin)
+│   │   │   ├── admin_tags.py     #   GET/PATCH/POST /api/admin/tags (tag management + AI reprocess)
 │   │   │   ├── search.py         #   GET /api/search?q=tag1+tag2+rating:safe
-│   │   │   ├── tasks.py          #   POST /api/tasks/ (X-Api-Key), POST /api/tasks/web-import (admin session)
+│   │   │   ├── tasks.py          #   POST /api/tasks/ (X-Api-Key), POST /api/tasks/web-import (admin session), GET /api/tasks/web-import/stream (SSE)
 │   │   │   ├── auto_rating_rules.py # GET/POST/DELETE /api/auto-rating-rules (admin only)
 │   │   │   ├── constants.py      #   Shared API constants (ALLOWED_PER_PAGE, clamp_per_page)
 │   │   │   └── webhook.py         #   POST /api/rebuild/ (X-Api-Key required)
@@ -119,16 +121,19 @@ kura-booru-next/
 │   │   │   ├── admin.py           #   Admin model (username, password_hash)
 │   │   │   ├── auto_rating_rule.py #  AutoRatingRule model (tag_name → target_rating)
 │   │   │   ├── post.py            #   Post model (with Rating enum)
-│   │   │   ├── tag.py            #   Tag model (TagCategory enum)
+│   │   │   ├── tag.py            #   Tag model (TagCategory enum, danbooru_name, translation, ai_processed_at)
+│   │   │   ├── tag_knowledge.py  #   TagKnowledge model (AI tag knowledge cache)
 │   │   │   ├── post_tag.py       #   PostTag association
 │   │   │   └── tag_alias.py      #   TagAlias model
 │   │   ├── schemas/              # Pydantic schemas
 │   │   │   ├── post.py           #   PostRead, PostListRead, PostRatingUpdate
-│   │   │   └── tag.py            #   TagRead, TagListRead
+│   │   │   └── tag.py            #   TagRead, TagListRead, TagKnowledgeRead
 │   │   ├── services/             # Business logic
 │   │   │   ├── s3.py             #   S3 storage (upload, delete, presigned URL, verify)
 │   │   │   ├── pipeline.py       #   Image processing pipeline (HEAD check → download → phash → thumb → S3)
 │   │   │   ├── phash.py          #   Perceptual hash with prefix-bucket indexing
+│   │   │   ├── ai_tag.py         #   AI tag processing (OpenAI-compatible API, 5-category classification)
+│   │   │   ├── tag_knowledge.py  #   Tag knowledge cache (avoid repeated AI API calls)
 │   │   │   ├── url_patterns.py   #   Centralized URL regex patterns + source identification
 │   │   │   └── gallery_dl.py    #   gallery-dl Python API integration (ThreadPoolExecutor)
 │   │   ├── source_extractors/    # Per-site metadata extractors
@@ -141,7 +146,7 @@ kura-booru-next/
 │   │       ├── worker.py          #   Worker settings + enqueue helper
 │   │       └── process_image.py   #   Main task: resolve → extract → pipeline → DB
 │   ├── alembic/                  # Database migrations
-│   │   └── versions/             #   001_initial, 002_add_rating, 003_add_admin, 004_add_auto_rating_rules
+│   │   └── versions/             #   001_initial, 002_add_rating, 003_add_admin, 004_add_auto_rating_rules, 005_ai_tag
 │   ├── requirements.txt
 │   └── Dockerfile                # Multi-stage (dev + builder + runner)
 ├── bot/              # aiogram 3 Telegram bot
@@ -166,6 +171,7 @@ kura-booru-next/
 │   │   │   ├── ThemeToggle.tsx  # 3-state dark/light/auto toggle
 │   │   │   ├── Pagination.tsx  # Page nav + per-page selector (20/40/100)
 │   │   │   ├── PhotoAlbum.astro# Masonry grid (rating badges for admin)
+│   │   │   ├── TagBadge.astro  # Tag with category-colored dot
 │   │   │   └── SearchBar.tsx   # Tag autocomplete search
 │   │   ├── layouts/
 │   │   │   └── BaseLayout.astro # Nav + auth controls + theme + footer
@@ -181,6 +187,7 @@ kura-booru-next/
 │   │   │   ├── search.astro     # Search results (+ rating:safe syntax)
 │   │   │   └── admin/
 │   │   │       ├── posts.astro      # Admin post management
+│   │   │       ├── tags.astro       # Admin tag management (list/edit/merge/AI reprocess)
 │   │   │       ├── auto-rating.astro # Auto-rating rules
 │   │   │       ├── import.astro      # Batch URL import
 │   │   │       └── password.astro    # Change password
@@ -234,8 +241,11 @@ kura-booru-next/
 |---|---|---|
 | id | UUID | Primary key |
 | name | String | Tag name (unique) |
+| danbooru_name | String? | Danbooru canonical name |
+| translation | String? | Chinese translation |
 | category | Enum | artist / character / copyright / general / meta |
 | post_count | Integer | Denormalized count |
+| ai_processed_at | DateTime? | Last AI classification timestamp |
 
 ### PostTag (many-to-many)
 
@@ -243,6 +253,18 @@ kura-booru-next/
 |---|---|
 | post_id | UUID (FK, ON DELETE CASCADE) |
 | tag_id | UUID (FK, ON DELETE CASCADE) |
+
+### TagKnowledge
+
+| Field | Type | Description |
+|---|---|---|
+| id | UUID | Primary key |
+| tag_name | String | Tag name (unique) |
+| danbooru_name | String? | Danbooru canonical name |
+| translation | String? | Chinese translation |
+| category | String | AI-classified category |
+| source | String | Knowledge source (ai / manual / danbooru_api) |
+| created_at | DateTime | Creation time |
 
 ### TagAlias
 
@@ -282,12 +304,19 @@ kura-booru-next/
 | GET | `/api/posts/by-source?source_site=pixiv&source_id=123` | Lookup by source |
 | PATCH | `/api/posts/{id}` | Update post rating (admin only) |
 | DELETE | `/api/posts/{id}` | Delete post (admin only; deletes S3 objects + decrements tag counts) |
+| PUT | `/api/posts/{id}/tags` | Update post tags (admin only; add/remove tags) |
 | GET | `/api/tags?category=artist&sort=count` | Tag list with filtering (non-admin: safe-only counts, hidden if 0) |
 | GET | `/api/tags/{name}` | Tag detail (404 for non-admin if 0 safe posts) |
 | GET | `/api/tags/autocomplete?q=prefix` | Tag name autocomplete (non-admin: safe-only counts) |
 | GET | `/api/search?q=tag1+tag2&rating=safe` | Tag search (supports `-` exclusion, `rating:` syntax for admin) |
 | POST | `/api/tasks/` | Create image processing task (requires X-Api-Key) |
 | POST | `/api/tasks/web-import` | Batch import images (requires admin session) |
+| GET | `/api/tasks/web-import/stream?task_ids=...` | SSE progress stream for import jobs (admin session) |
+| GET | `/api/admin/tags` | List all tags with pagination (admin only) |
+| PATCH | `/api/admin/tags/{id}` | Update tag (name, category, translation) (admin only) |
+| POST | `/api/admin/tags/merge` | Merge tags (admin only) |
+| POST | `/api/admin/tags/reprocess` | Re-run AI classification on tags (admin only) |
+| GET | `/api/admin/tags/knowledge` | List tag knowledge cache (admin only) |
 | GET | `/api/auto-rating-rules` | List auto-rating rules (admin only) |
 | POST | `/api/auto-rating-rules` | Create auto-rating rule (admin only) |
 | DELETE | `/api/auto-rating-rules/{id}` | Delete auto-rating rule (admin only) |
@@ -328,6 +357,7 @@ kura-booru-next/
       │       ├─ _generate_thumbnail (Pillow WebP)
       │       └─ s3_service.upload_bytes × 3 (orig, thumb, preview)
       ├─ _ensure_tags (alias resolve + category upgrade + post_count++)
+      ├─ ai_tag.process_tags (if ENABLE_AI_TAG_PROCESSING — 5-category classify + translation + danbooru_name)
       ├─ auto-rating rules check (escalate only)
       └─ db.commit (Post + Tags + PostTag)
       ▼
@@ -404,8 +434,9 @@ Supports Pixiv, Twitter/X, Danbooru links. Unknown URLs fall back to generic dow
 | Page | Path | Features |
 |---|---|---|
 | Post management | `/admin/posts` | All posts (including Q/E), rating filter, inline rating change, delete |
+| Tag management | `/admin/tags` | Tag list, edit, merge, AI reprocess, knowledge cache |
 | Auto-rating rules | `/admin/auto-rating` | Rule list, add rule (with tag autocomplete), delete rule |
-| Import images | `/admin/import` | Textarea for URLs (one per line), per-URL status display |
+| Import images | `/admin/import` | Textarea for URLs (one per line), real-time SSE progress display |
 | Change password | `/admin/password` | Current + new + confirm |
 
 ---

@@ -7,33 +7,33 @@
 Uses **latest + versioned** dual tags:
 
 - **`latest`** — Always points to the current stable version
-- **`v0.2.3`, ...** — Versioned tags for rollback and audit
+- **`v0.4.1`, ...** — Versioned tags for rollback and audit
 
 Tag lifecycle:
 1. **Build**: Each release tags both `latest` and `v0.2.x`
 2. **Push**: Both tags pushed to registry
 3. **Deploy**: Production uses `latest` tag
-4. **Rollback**: Specify a versioned tag (e.g., `v0.2.3`)
+4. **Rollback**: Specify a versioned tag (e.g., `v0.4.1`)
 
 ### Building Images
 
 Using the unified build script:
 
 ```bash
-./infra/scripts/build.sh v0.2.3
+./infra/scripts/build.sh v0.4.1
 ```
 
 Or manually per service:
 
 ```bash
 # Backend (API + Worker share this image)
-docker build --provenance=false --sbom=false -t kura-booru-next-backend:v0.2.3 -t kura-booru-next-backend:latest ./backend
+docker build --provenance=false --sbom=false -t kura-booru-next-backend:v0.4.1 -t kura-booru-next-backend:latest ./backend
 
 # Bot (aiogram 3, webhook mode)
-docker build --provenance=false --sbom=false -t kura-booru-next-bot:v0.2.3 -t kura-booru-next-bot:latest ./bot
+docker build --provenance=false --sbom=false -t kura-booru-next-bot:v0.4.1 -t kura-booru-next-bot:latest ./bot
 
 # Frontend (Astro SSR, Node.js runtime)
-docker build --provenance=false --sbom=false -t kura-booru-next-frontend:v0.2.3 -t kura-booru-next-frontend:latest ./frontend
+docker build --provenance=false --sbom=false -t kura-booru-next-frontend:v0.4.1 -t kura-booru-next-frontend:latest ./frontend
 ```
 
 > **Note**: `--provenance=false --sbom=false` is required for Huawei SWR, which does not support Docker BuildKit attestation manifests.
@@ -45,7 +45,7 @@ docker login swr.cn-east-3.myhuaweicloud.com
 ```
 
 ```bash
-VERSION=v0.2.3
+VERSION=v0.4.1
 REGISTRY="swr.cn-east-3.myhuaweicloud.com/lainsaka"
 
 # Backend
@@ -70,10 +70,10 @@ docker push ${REGISTRY}/kura-booru-next-frontend:latest
 ### Local Test Run
 
 ```bash
-docker run -p 8000:8000 --env-file .env kura-booru-next-backend:v0.2.3
-docker run --env-file .env kura-booru-next-backend:v0.2.3 arq app.tasks.worker.WorkerSettings
-docker run -p 8080:8080 --env-file .env kura-booru-next-bot:v0.2.3
-docker run -p 4321:4321 --env-file .env kura-booru-next-frontend:v0.2.3
+docker run -p 8000:8000 --env-file .env kura-booru-next-backend:v0.4.1
+docker run --env-file .env kura-booru-next-backend:v0.4.1 arq app.tasks.worker.WorkerSettings
+docker run -p 8080:8080 --env-file .env kura-booru-next-bot:v0.4.1
+docker run -p 4321:4321 --env-file .env kura-booru-next-frontend:v0.4.1
 ```
 
 ### Production Deployment
@@ -89,7 +89,7 @@ docker compose up -d
 
 ```bash
 # Edit docker-compose.yml to pin a specific version
-# e.g., image: kura-booru-next-backend:v0.2.2
+# e.g., image: kura-booru-next-backend:v0.4.0
 docker compose up -d
 ```
 
@@ -100,10 +100,10 @@ docker compose up -d
 docker images | grep kura-booru
 
 # Delete specific old versions
-docker rmi kura-booru-next-backend:v0.2.2
+docker rmi kura-booru-next-backend:v0.4.0
 
 # Batch delete (keep latest and current)
-CURRENT_VERSION="v0.2.3"
+CURRENT_VERSION="v0.4.1"
 docker images --format "{{.Repository}}:{{.Tag}}" | grep kura-booru | grep -v latest | grep -v ${CURRENT_VERSION} | xargs docker rmi -f
 ```
 
@@ -114,7 +114,7 @@ docker images --format "{{.Repository}}:{{.Tag}}" | grep kura-booru | grep -v la
 ### build.sh
 
 ```bash
-./infra/scripts/build.sh v0.2.3
+./infra/scripts/build.sh v0.4.1
 ```
 
 Unified Docker image build script. Injects `PUBLIC_GIT_TAG` build arg into the frontend for version display in the footer. Builds all three images with both `latest` and versioned tags.
@@ -189,3 +189,9 @@ Docker builds in China require mirror overrides due to network restrictions:
 - Frontend renders `/i/originals/...`, `/i/thumbs/...`, `/i/previews/...` paths
 - Caddy MUST have a `handle /i/*` block with `uri strip_prefix /i` + `reverse_proxy` to S3/CDN
 - R2 API endpoint (`*.r2.cloudflarestorage.com`) requires S3 auth headers — use the public CDN domain (e.g., `images.your-domain.com`) as upstream instead
+
+### Caddy SSE (Server-Sent Events)
+
+- The web import page uses SSE for real-time progress updates
+- Caddy **must** have `flush_interval -1` in the `/api/*` reverse_proxy block, otherwise SSE responses are buffered and the browser never receives events
+- This is already set in the provided Caddyfile template — do not remove it

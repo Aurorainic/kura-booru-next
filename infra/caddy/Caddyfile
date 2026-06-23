@@ -29,6 +29,7 @@
 		reverse_proxy 127.0.0.1:8000 {
 			fail_duration 30s
 			max_fails 3
+			flush_interval -1
 		}
 		request_body {
 			max_size 50MB

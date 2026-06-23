@@ -56,7 +56,7 @@ if (!isAdmin) {
       <div class="card overflow-hidden">
         <div class="px-4 py-3 border-b border-[var(--border-color)] flex items-center justify-between">
           <h2 class="text-sm font-medium text-[var(--text-muted)]">
-            导入结果
+            实时处理结果
           </h2>
           <span id="results-summary" class="text-xs text-[var(--text-muted)]"></span>
         </div>
@@ -88,6 +88,34 @@ if (!isAdmin) {
       .filter(function(line) { return line.length > 0; });
   }
 
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(text));
+    return div.innerHTML;
+  }
+
+  function setStatusIcon(status) {
+    if (status === 'success') return '<span class="text-green-400">✅</span>';
+    if (status === 'duplicate') return '<span class="text-yellow-400">⚠️</span>';
+    if (status === 'too_large') return '<span class="text-yellow-400">⚠️</span>';
+    if (status === 'failed') return '<span class="text-red-400">❌</span>';
+    return '<span class="text-[var(--text-muted)]">⏳</span>';
+  }
+
+  function updateRow(index, status, detail, extra) {
+    var row = document.getElementById('import-row-' + index);
+    if (!row) return;
+    var iconEl = row.querySelector('.row-icon');
+    var detailEl = row.querySelector('.row-detail');
+    if (iconEl) iconEl.innerHTML = setStatusIcon(status);
+    if (detailEl) detailEl.textContent = detail || '';
+    // Store extra data (post_id etc.) as data attributes
+    if (extra) {
+      if (extra.post_id) row.setAttribute('data-post-id', extra.post_id);
+      if (extra.existing_post_id) row.setAttribute('data-existing-post-id', extra.existing_post_id);
+    }
+  }
+
   // Import button click
   importBtn.addEventListener('click', async function() {
     var urls = getValidUrls();
@@ -100,6 +128,7 @@ if (!isAdmin) {
     importBtn.textContent = '导入中…';
     resultsList.innerHTML = '';
     resultsArea.classList.remove('hidden');
+    resultsSummary.textContent = '处理中…';
 
     try {
       var resp = await fetch('/api/tasks/web-import', {
@@ -116,43 +145,77 @@ if (!isAdmin) {
 
       var data = await resp.json();
       var results = data.results || [];
-      var queued = 0;
-      var errors = 0;
+      var taskIds = [];
+      var enqueueErrors = 0;
 
+      // Render initial rows — ⏳ for queued, ✗ for errors
       results.forEach(function(result, index) {
         var url = urls[index] || '未知链接';
         var div = document.createElement('div');
+        div.id = 'import-row-' + index;
         div.className = 'px-4 py-2 flex items-center gap-2 text-sm';
 
         if (result.status === 'queued' && result.task_id) {
-          queued++;
+          taskIds.push(result.task_id);
           div.innerHTML =
-            '<span class="text-green-400">✓</span>' +
+            '<span class="row-icon">' + setStatusIcon('pending') + '</span>' +
             '<span class="text-[var(--text-primary)] truncate flex-1">' + escapeHtml(url) + '</span>' +
-            '<span class="text-xs text-[var(--text-muted)]">已入队</span>';
+            '<span class="row-detail text-xs text-[var(--text-muted)]">处理中</span>';
         } else {
-          errors++;
+          enqueueErrors++;
           div.innerHTML =
-            '<span class="text-red-400">✗</span>' +
+            '<span class="row-icon">' + setStatusIcon('failed') + '</span>' +
             '<span class="text-[var(--text-primary)] truncate flex-1">' + escapeHtml(url) + '</span>' +
-            '<span class="text-xs text-red-400">失败</span>';
+            '<span class="row-detail text-xs text-red-400">入队失败</span>';
         }
 
         resultsList.appendChild(div);
       });
 
-      resultsSummary.textContent = queued + ' 已入队' + (errors > 0 ? '，' + errors + ' 失败' : '');
+      // If there are queued tasks, open SSE stream
+      if (taskIds.length > 0) {
+        connectSSE(taskIds, enqueueErrors);
+      } else {
+        resultsSummary.textContent = enqueueErrors + ' 全部失败';
+      }
     } catch (err) {
       alert('网络错误: ' + err.message);
+      resultsSummary.textContent = '';
     } finally {
       importBtn.disabled = false;
       importBtn.textContent = '开始导入';
     }
   });
 
-  function escapeHtml(text) {
-    var div = document.createElement('div');
-    div.appendChild(document.createTextNode(text));
-    return div.innerHTML;
+  function connectSSE(taskIds, enqueueErrors) {
+    var es = new EventSource('/api/tasks/web-import/stream?task_ids=' + taskIds.join(','));
+    var succeeded = enqueueErrors > 0 ? 0 : 0;
+    var failed = enqueueErrors;
+    var total = taskIds.length + enqueueErrors;
+
+    es.addEventListener('progress', function(e) {
+      var data = JSON.parse(e.data);
+      var extra = {};
+      if (data.post_id) extra.post_id = data.post_id;
+      if (data.existing_post_id) extra.existing_post_id = data.existing_post_id;
+      updateRow(data.url_index, data.status, data.detail, extra);
+    });
+
+    es.addEventListener('done', function(e) {
+      var data = JSON.parse(e.data);
+      var parts = [];
+      if (data.succeeded > 0) parts.push(data.succeeded + ' 成功');
+      if (data.failed > 0) parts.push(data.failed + ' 失败');
+      if (data.timed_out > 0) parts.push(data.timed_out + ' 超时');
+      resultsSummary.textContent = parts.join('，') || '完成';
+      es.close();
+    });
+
+    es.addEventListener('error', function() {
+      // EventSource auto-reconnects once; if still failing, show error
+      if (es.readyState === EventSource.CLOSED) {
+        resultsSummary.textContent = '连接中断，部分结果可能未更新';
+      }
+    });
   }
 </script>

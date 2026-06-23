@@ -36,17 +36,18 @@ For the complete list of all variables with descriptions and defaults, see [`inf
 
 | Category | Key Variables |
 |---|---|
-| Application | `APP_URL`, `APP_DOMAIN` |
+| Application | `APP_URL`, `APP_DOMAIN` (Caddy/Astro only, not read by backend) |
 | Secret | `SECRET_KEY` |
 | Admin Auth | `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_SESSION_MAX_AGE`, `BACKEND_API_KEY` |
 | S3 Storage | `S3_ENDPOINT`, `S3_EXTERNAL_URL`, `PUBLIC_S3_EXTERNAL_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET_NAME`, `S3_REGION` |
 | Database | `DATABASE_URL`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` |
-| Redis | `REDIS_URL`, `REDIS_PASSWORD` |
+| Redis | `REDIS_URL` (password included in URL if needed; `REDIS_PASSWORD` alone is unused by code) |
+| AI Tag Processing | `ENABLE_AI_TAG_PROCESSING`, `AI_PROVIDER_API_KEY`, `AI_PROVIDER_ENDPOINT`, `AI_PROVIDER_MODEL` |
 | Bot | `BOT_TOKEN`, `BOT_WEBHOOK_URL`, `BOT_WEBHOOK_SECRET`, `BOT_ADMIN_IDS`, `BOT_PORT`, `FRONTEND_URL` |
 | Image Processing | `MAX_IMAGE_SIZE`, `THUMB_SIZE`, `PREVIEW_SIZE` |
 | gallery-dl Auth | `PIXIV_REFRESH_TOKEN`, `PIXIV_PHPSESSID` |
 | Frontend | `PUBLIC_GIT_TAG`, `PUBLIC_API_URL`, `PUBLIC_S3_EXTERNAL_URL`, `INTERNAL_API_URL` |
-| Caddy (host-side) | `BACKEND_HOST`, `BACKEND_PORT`, `BOT_HOST`, `BOT_PORT`, `FRONTEND_HOST`, `FRONTEND_PORT` |
+| Caddy (host-side) | `BACKEND_HOST`, `BACKEND_PORT`, `BOT_HOST`, `BOT_PORT`, `FRONTEND_HOST`, `FRONTEND_PORT`, `S3_PROXY_UPSTREAM` |
 | Migration | `DEV_PG_CONTAINER`, `PROD_DATABASE_URL` |
 
 ### Validate Environment
@@ -147,3 +148,28 @@ The Caddyfile includes a `handle /i/*` block that proxies image requests to S3-c
 - **AWS S3**: Use `https://<bucket>.s3.<region>.amazonaws.com`
 
 This proxy is only needed when `PUBLIC_S3_EXTERNAL_URL` is set to `/i` (Caddy proxy mode). When using direct S3/CDN URLs (recommended), images bypass Caddy entirely.
+
+---
+
+## AI Tag Processing
+
+When `ENABLE_AI_TAG_PROCESSING=true`, newly imported images are automatically classified by an OpenAI-compatible API:
+
+- Tags are classified into 5 categories (artist/character/copyright/general/meta)
+- Chinese translations are generated
+- Danbooru canonical names are assigned
+- Results are cached in `tag_knowledge` table to avoid repeated API calls
+
+### Required Variables
+
+| Variable | Description |
+|---|---|
+| `AI_PROVIDER_API_KEY` | API key for the OpenAI-compatible provider |
+| `AI_PROVIDER_ENDPOINT` | Base URL (e.g., `https://api.openai.com/v1`) |
+| `AI_PROVIDER_MODEL` | Model name (e.g., `gpt-4o-mini`) |
+
+All three are required when `ENABLE_AI_TAG_PROCESSING=true`. When disabled (default), these variables are ignored.
+
+### Caddy SSE Note
+
+The web import page uses SSE (`GET /api/tasks/web-import/stream`) for real-time progress. Caddy must have `flush_interval -1` in the `/api/*` reverse_proxy block, otherwise SSE responses are buffered and the browser never receives updates. This is already set in the provided Caddyfile template.

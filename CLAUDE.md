@@ -44,6 +44,14 @@
 - [x] 修复 `admin/tags.astro` 误导入不存在的 `getTagCategoryColorClass`
 - [x] 横幅"安全"二字使用主题色（绿色）高亮
 
+### v0.4.1 (2026-06-23) — 已发布
+
+- [x] Pixiv 多图帖子只抓第一张（`image-range` + 防御性排序取首）
+- [x] 详情页管理员删除按钮（跳转画廊首页）
+- [x] 网页端批量导入队列实时更新（SSE `GET /api/tasks/web-import/stream`）
+- [x] Caddy `flush_interval -1` 避免 SSE 缓冲
+- [x] roadmap 合并重复 SSE 条目，标记已完成功能
+
 ### v0.3.0 (2026-06-16) — 已发布
 
 - [x] PG18 + Redis8 迁移（生产部署）
