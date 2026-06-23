@@ -60,6 +60,12 @@ def setup_gallery_dl_config() -> None:
             ("extractor", "pixiv"), "cookies", {"PHPSESSID": settings.PIXIV_PHPSESSID}
         )
 
+    # Multi-image Pixiv posts: only grab the first image.
+    # One source link → one stored image (matches the rest of the pipeline,
+    # which keys S3 objects and DB rows by the illustration/source_id, not per
+    # page). image-range "1-1" tells gallery-dl to download only image #1.
+    gallery_dl.config.set(("extractor", "pixiv"), "image-range", "1-1")
+
     # Rate limiting to avoid IP bans
     gallery_dl.config.set(("extractor",), "sleep-request", [0.5, 1.5])
     gallery_dl.config.set(("extractor",), "parallel", 1)
@@ -203,16 +209,21 @@ def _download_sync(url: str) -> dict[str, Any]:
             dl_job = gallery_dl.job.DownloadJob(url)
             dl_job.run()
 
-            # Find downloaded files (skip .json metadata files)
+            # Pick the FIRST downloaded image file (skip .json metadata).
+            # gallery-dl names multi-image files with a page index suffix
+            # (e.g. `12345_p0.png`, `12345_p1.png`), so sorting by path yields
+            # image #1 first. Combined with the pixiv image-range=1-1 config
+            # this guarantees we store the first image and the metadata
+            # (title/tags) for that same image — never an arbitrary page.
             downloaded_path = None
-            for root, dirs, files in os.walk(tmpdir):
-                for fname in files:
-                    if fname.endswith(".json"):
-                        continue
-                    downloaded_path = os.path.join(root, fname)
-                    break
-                if downloaded_path:
-                    break
+            candidates = sorted(
+                os.path.join(root, fname)
+                for root, _dirs, files in os.walk(tmpdir)
+                for fname in files
+                if not fname.endswith(".json")
+            )
+            if candidates:
+                downloaded_path = candidates[0]
 
             # Read file bytes while temp dir still exists
             if downloaded_path:

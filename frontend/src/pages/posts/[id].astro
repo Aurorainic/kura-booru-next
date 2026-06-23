@@ -253,6 +253,18 @@ function getTagCategoryVar(cat: TagCategory): string {
           >
             查看原图
           </a>
+
+          {/* Admin: delete post */}
+          {isAdmin && (
+            <button
+              id="delete-post-btn"
+              type="button"
+              data-post-id={post.id}
+              class="block w-full text-center py-2 px-4 rounded-[var(--radius-md)] border border-red-500/40 text-red-400 hover:bg-red-500/10 font-medium text-sm active:scale-[0.97] transition-all duration-[var(--duration-fast)]"
+            >
+              删除作品
+            </button>
+          )}
         </div>
       </aside>
     </div>
@@ -424,6 +436,37 @@ function getTagCategoryVar(cat: TagCategory): string {
             });
           } catch (e) {
             ratingMsg.textContent = '✗ 网络错误';
+          }
+        });
+      }
+    </script>
+  )}
+
+  {/* Admin delete post script */}
+  {isAdmin && (
+    <script is:inline>
+      var deleteBtn = document.getElementById('delete-post-btn');
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', async function() {
+          var postId = deleteBtn.dataset.postId;
+          if (!confirm('确定要删除这张插画吗？此操作不可恢复，将同时删除存储文件。')) return;
+          deleteBtn.disabled = true;
+          deleteBtn.textContent = '删除中…';
+          try {
+            var resp = await fetch('/api/posts/' + postId, {
+              method: 'DELETE',
+            });
+            if (resp.ok) {
+              window.location.href = '/';
+            } else {
+              deleteBtn.disabled = false;
+              deleteBtn.textContent = '删除作品';
+              alert('删除失败 (HTTP ' + resp.status + ')');
+            }
+          } catch (err) {
+            deleteBtn.disabled = false;
+            deleteBtn.textContent = '删除作品';
+            alert('网络错误');
           }
         });
       }
