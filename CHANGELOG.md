@@ -1,35 +1,54 @@
-# Changelog
+# 变更日志
 
-All notable changes to this project will be documented in this file.
+本文件记录项目的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.5.0] - 2026-06-24 — 已发布
 
-## [0.4.2] - 2026-06-23
+### 新增
+- **密码修改后 Session 失效** — `password_changed_at` 列记录最后改密时间，`get_is_admin` / `get_current_admin` 比较 cookie `iat` 与 epoch（Redis 60s 缓存），旧 session 自动拒绝。Redis 故障时 fail-open。改密后清 cookie + 跳转登录页。
+- **Chromium 浏览器扩展** — Manifest V3，Pixiv 作品页浮动"Import to Kura"按钮，API key 认证，`POST /api/tasks/` 入队 + `GET /api/tasks/{task_id}` 轮询结果。Popup 设置服务器 URL + API key。
+- **`GET /api/tasks/{task_id}` 端点** — 任务状态轮询（X-Api-Key 鉴权），供扩展和外部集成使用。
+- **项目 Logo** — `logo.svg` 三卡扇形图标，首页 header 改为 logo + "Kura Booru" 文字，favicon 同步更新。
+- **扩展打包 workflow** — `.github/workflows/build-extension.yml`，推送 `extension/` 时自动 rasterize SVG → PNG + 打包 zip artifact。
 
-### Changed
-- **`_ensure_tags` batch query** — Replace N+1 loop (2-3 SELECTs per tag) with 3 batch queries (alias + tag + canonical lookup). 30 tags: 60→3 queries.
-- **S3 client reuse** — Lazy-cached S3 client replaces per-operation client creation. Single client reused across uploads/verifications. Registered shutdown cleanup in lifespan.
-- **`random_post` count cache** — In-process 5-min TTL cache skips COUNT(*) on repeated random requests.
+### 变更
+- **Docker 镜像标签** — 升级为 `v0.5.0`。
+- **`get_is_admin` 不再纯 cookie 验证** — 现在额外检查 Redis 缓存的 `password_changed_at` epoch，cookie `iat` 早于 epoch 则拒绝。
+- **改密端点返回 cookie-clearing 响应** — `POST /api/auth/change-password` 现在清 session cookie，前端改密成功后跳转 `/login`。
+- **README** — 顶部 emoji 标题改为居中 logo.svg + 文字。
 
-### Added
-- **Tag `post_count` auto-sync** — ARQ cron job (hourly + run_at_startup) recalculates `post_count` from `post_tags`, fixing drift from +=1/-=1 accumulation.
-- **Cache-Control headers** — API middleware: anonymous responses `public, s-maxage=60`, admin responses `private, no-store`. SSE endpoints preserve their own `no-cache`. SSR HTML always `private, no-store`.
+### 修复
+- **`_ensure_tags` 并发 UniqueViolation** — 多 worker 同时插入同名 tag 时 `IntegrityError`，改为 catch + rollback + 重新查询已存在行。
 
-## [0.4.1] - 2026-06-23
+### 安全
+- 密码修改后所有旧 session 立即失效（Redis epoch 比较），不再依赖 7 天自然过期。
 
-### Added
+## [0.4.2] - 2026-06-23 — 已发布
+
+### 变更
+- **`_ensure_tags` 批量查询** — N+1 循环（每 tag 2-3 次 SELECT）改为 3 次批量查询（alias + tag + canonical）。30 个标签：60→3 次查询。
+- **S3 客户端复用** — 懒缓存 S3 客户端替代每次操作新建。单一客户端跨上传/验证复用，lifespan 中注册关闭清理。
+- **`random_post` 计数缓存** — 进程内 5 分钟 TTL 缓存，跳过重复随机请求的 COUNT(*)。
+
+### 新增
+- **Tag `post_count` 自动同步** — ARQ 定时任务（每小时 + 启动时）从 `post_tags` 重算 `post_count`，修复 +=1/-=1 累积漂移。
+- **Cache-Control 响应头** — API 中间件：匿名响应 `public, s-maxage=60`，管理员响应 `private, no-store`。SSE 端点保留自有 `no-cache`。SSR HTML 始终 `private, no-store`。
+
+## [0.4.1] - 2026-06-23 — 已发布
+
+### 新增
 - **Pixiv 多图帖子只抓第一张** — gallery-dl `image-range` 配置 `"1-1"`，仅下载 Pixiv 多图帖的第一张图。防御性加固：`_download_sync` 文件读取改为排序取首，双重保险。
 - **详情页管理员删除按钮** — 右侧 info sidebar 添加红色「删除作品」按钮（仅管理员可见），删除后跳转画廊首页 `/`。
 - **网页端批量导入队列实时更新（SSE）** — `GET /api/tasks/web-import/stream` 端点，复用 ARQ 轮询模型，实时推送每个 job 的完成状态（success / duplicate / too_large / failed）+ 最终汇总。前端 `import.astro` 使用 `EventSource` 实时更新每行状态。
 - **Caddy `flush_interval -1`** — `/api/*` reverse_proxy 块新增 `flush_interval -1`，确保 SSE 流不被 Caddy 缓冲。
 
-### Changed
+### 变更
 - **import.astro 实时视图** — 从「已入队 ✓ / 失败 ✗」静态显示改为 SSE 实时进度：⏳ 处理中 → ✅/⚠️/❌ 完成状态，done 事件显示汇总。
 - **roadmap.md** — 合并重复的 SSE/WebSocket 条目，标记已完成功能。
 
-## [0.4.0] - 2026-06-22
+## [0.4.0] - 2026-06-22 — 已发布
 
-### Added
+### 新增
 - **AI Retag** — 新图入库时自动调用 OpenAI 兼容 API（DeepSeek 等）对标签进行 5 类分类（artist / character / copyright / general / meta）+ 中文翻译 + Danbooru 标准命名。结果缓存到 `tag_knowledge` 表，避免重复调用。由 `ENABLE_AI_TAG_PROCESSING` + `AI_PROVIDER_*` 环境变量控制。
 - **`tag_knowledge` 知识库表** — 作为 AI 结果的 truth source，`Tag` 表的分类/翻译字段成为冗余副本。支持 `ai` / `manual` / `danbooru_import` / `danbooru_api` 四种 source。
 - **管理后台标签管理页** (`/admin/tags`) — 列表/筛选/搜索、行内编辑分类与翻译、标签合并、触发 AI 重处理（仅未处理 / 全部强制重处理）。
@@ -37,242 +56,235 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Footer AI 胶囊** — 当 `ENABLE_AI_TAG_PROCESSING=true` 时，左下角版本号胶囊旁额外显示紫色白字"AI ✦"胶囊。Footer 改为 `flex-wrap`，移动端拥挤时右下角"个人动漫插画收藏"自动换行。
 - **横幅"安全"二字高亮** — 非管理员横幅中"安全"使用站点主题色（`var(--accent-color)`，绿色）显示。
 
-### Fixed
+### 修复
 - **标签管理页空白** — `admin/tags.astro` frontmatter 中 `fetchAdminTags` 调用误用 `per_page`（下划线变量名不存在），实际变量是 `perPage`（驼峰）。`ReferenceError` 被静默 `try/catch` 吞掉，页面渲染"共 0 个标签"。改为 `per_page: perPage`。
-- **详情页标签移除按钮定位错误** — `<li>` 缺少 `relative`，导致 `absolute` 按钮相对外层 `.card`（sticky 算 positioned）定位，所有 ✕ 都叠在标签卡片右上角同一位置，只对应最后一条标签。给 `<li>` 加 `relative`，按钮改为 `top-1/2 -translate-y-1/2` 垂直居中。
+- **详情页标签移除按钮定位错误** — `<li>` 缺少 `relative`，导致 `absolute` 按钮相对外层 `.card` 定位，所有 ✕ 叠在同一位置。给 `<li>` 加 `relative`，按钮改为垂直居中。
 - **`admin/tags.astro` 误导入不存在的 `getTagCategoryColorClass`** — `api.ts` 只导出 `getTagCategoryColor`。删除未使用的导入。
 
-### Changed
-- **数据库迁移 005** — `tags` 表新增 `danbooru_name` / `translation` / `ai_processed_at` 三列；`posts` 表新增 `ai_tag_processed_at` / `ai_tag_status` 两列（当前为死字段，预留）；新建 `tag_knowledge` 表。
+### 变更
+- **数据库迁移 005** — `tags` 表新增 `danbooru_name` / `translation` / `ai_processed_at`；`posts` 表新增 `ai_tag_processed_at` / `ai_tag_status`；新建 `tag_knowledge` 表。
 - **Docker 镜像标签** — 从 `v0.4.0-dev` 升级为 `v0.4.0`。
 - **Footer 布局** — `flex` 改为 `flex-wrap` + `gap-y-2`，左侧胶囊组改为 `inline-flex items-center gap-2`。
 
-## [0.2.3] - 2026-06-21
+## [0.3.0] - 2026-06-16 — 已发布
 
-### Fixed
-- **Logout not actually clearing session** — Replaced client-side `fetch()` logout with a server-side Astro endpoint (`POST /logout`). The previous approach had a race condition: the browser navigated to `/` before the `Set-Cookie` header from the logout response was applied, leaving the old session cookie alive. The new SSR endpoint forwards the cookie to the backend, injects the `Set-Cookie` deletion into a 302 redirect, and the browser processes it as a native navigation — guaranteeing the cookie is cleared before the next page request.
-- **Admin posts page thumbnails broken with direct S3/CDN** — `admin/posts.astro` was using hardcoded `/i/{thumb_key}` paths instead of the `getThumbUrl()` helper. When `PUBLIC_S3_EXTERNAL_URL` points to R2/CDN directly (not via Caddy `/i/*` proxy), all admin list thumbnails returned 404.
-- **Duplicate `<script define:vars>` block in auto-rating page** — Removed the second identical `TAG_NAMES` injection block (copy-paste leftover).
-- **Dead `meta[name="api-base"]` query in post detail** — The rating editor script queried a `<meta>` tag that doesn't exist in the template. Replaced with a direct `'/api'` constant.
-- **`image_urls` not deduplicated in process_image** — gallery-dl's infojson branch could append duplicate URLs, causing unnecessary download retries. Added `list(dict.fromkeys(...))` dedup.
+### 新增
+- **PG18 + Redis8 迁移** — 生产环境从 PG16 + Redis7 升级到 PG18 + Redis8，启用新版本性能特性。
+- **Bot `_confirmed_posts` Redis SETEX 机制** — Bot 重启后已确认帖子不重复推送，24h TTL 自动过期。
+- **phash 去重基础实现** — 感知哈希（perceptual hash）去重，前缀桶索引加速查找，新图入库时自动检测重复。
 
-### Changed
-- **Logout button is now a form POST** — The "退出登录" button changed from a JS `fetch()` + `window.location.href` to a native `<form action="/logout" method="post">`, eliminating the cookie/navigation race condition entirely.
-- **Frontend version** bumped to `0.2.3`.
+### 变更
+- **单用户场景优化** — PG18 `io_method` + Redis8 `activedefrag` / `HSETEX`，针对单管理员使用模式调优。
 
-## [0.2.2] - 2026-06-21
+## [0.2.3] - 2026-06-21 — 已发布
 
-### Added
-- **Bot rating selection countdown** — 10-second countdown timer displayed in the rating prompt message (`⏳ 等待评级 (Ns)`). If the user doesn't select a rating within 10 seconds, the system auto-confirms:
-  - With auto-rating rules: uses the rule-suggested rating, labeled `（自动规则）`
-  - Without auto-rating rules: defaults to safe, labeled `（默认）`
-- **Auto-rating hint in Bot** — When auto-rating rules match a post's tags, the Bot shows `建议评级: 🟡 敏感（自动规则）` alongside the rating buttons, so the admin knows the system's suggestion before choosing.
-- **`auto_rating` field in task result** — ARQ `process_image` task now returns `auto_rating` (the rule-suggested rating or `null`) so the Bot can display the hint and use it for countdown auto-confirm.
+### 修复
+- **Logout 未真正清除 session** — 用服务端 Astro 端点（`POST /logout`）替代客户端 `fetch()` 登出。之前存在竞态条件：浏览器在 `Set-Cookie` 生效前就跳转到 `/`，旧 session cookie 仍然存活。新 SSR 端点转发 cookie 到后端，在 302 重向中注入 `Set-Cookie` 删除指令，确保 cookie 在下次请求前被清除。
+- **管理后台缩略图在使用直连 S3/CDN 时 404** — `admin/posts.astro` 使用硬编码 `/i/{thumb_key}` 路径而非 `getThumbUrl()` 辅助函数。当 `PUBLIC_S3_EXTERNAL_URL` 直指 R2/CDN 时（不经 Caddy `/i/*` 代理），所有缩略图返回 404。
+- **自动评级页重复 `<script define:vars>` 块** — 删除复制的第二个相同 `TAG_NAMES` 注入块。
+- **详情页死代码 `meta[name="api-base"]` 查询** — 评级编辑脚本查询了模板中不存在的 `<meta>` 标签。改为直接使用 `'/api'` 常量。
+- **`image_urls` 未去重** — gallery-dl 的 infojson 分支可能追加重复 URL，导致不必要的下载重试。添加 `list(dict.fromkeys(...))` 去重。
 
-### Changed
-- **Rating prompt text** — Changed from `✅ 处理完成` to `⏳ 等待评级 / Awaiting rating` when showing the rating selection menu. `✅ 处理完成` now only appears after the user confirms a rating (or auto-confirm fires).
-- **Auto-confirm timeout** — Reduced from 5 minutes to 10 seconds. The original 5-minute timeout was too long for a simple 3-button choice.
-- **Manual rating overrides auto-rating** — When the user manually selects a rating, it always takes final priority, even if it's less restrictive than the auto-rating rule suggestion. The backend `PATCH /api/posts/{id}` applies the user's choice directly.
-- **Auto-confirm message format** — Now shows `评级: 🟢 公开（默认）` or `评级: 🟡 敏感（自动规则）` for consistency with manual confirmation format.
+### 变更
+- **登出按钮改为表单 POST** — "退出登录"按钮从 JS `fetch()` + `window.location.href` 改为原生 `<form action="/logout" method="post">`，彻底消除 cookie/导航竞态条件。
+- **前端版本号** — 升级到 `0.2.3`。
 
-### Fixed
-- **Logout not working on HTTPS** — `clear_session_cookie` was missing `secure` and `httponly` parameters, causing browsers to silently ignore the cookie deletion directive when the site uses HTTPS. The delete must match all attributes (`Secure`, `HttpOnly`, `SameSite`, `Path`) used when setting the cookie.
+## [0.2.2] - 2026-06-21 — 已发布
 
-## [0.2.1] - 2026-06-21
+### 新增
+- **Bot 评级选择倒计时** — 评级提示消息显示 10 秒倒计时（`⏳ 等待评级 (Ns)`）。用户未在 10 秒内选择时自动确认：有自动评级规则则使用规则建议的评级（标注`（自动规则）`），无规则则默认 safe（标注`（默认）`）。
+- **Bot 自动评级提示** — 自动评级规则匹配帖子标签时，Bot 在评级按钮旁显示 `建议评级: 🟡 敏感（自动规则）`。
+- **任务结果 `auto_rating` 字段** — ARQ `process_image` 任务返回 `auto_rating`（规则建议评级或 `null`），供 Bot 显示提示和倒计时自动确认使用。
 
-### Added
-- **Bot rating selection menu** — After image processing completes, the Bot now shows inline keyboard buttons (🟢 公开 / 🟡 敏感 / 🔴 限制) for the admin to choose the post's rating, instead of auto-linking with the source-extracted rating. This gives admins direct control over content classification.
+### 变更
+- **评级提示文本** — 从 `✅ 处理完成` 改为 `⏳ 等待评级`。`✅ 处理完成` 仅在用户确认评级后显示。
+- **自动确认超时** — 从 5 分钟缩短为 10 秒。
+- **手动评级优先于自动评级** — 用户手动选择始终优先，即使比规则建议更宽松。
+- **自动确认消息格式** — 显示 `评级: 🟢 公开（默认）` 或 `评级: 🟡 敏感（自动规则）`。
 
-### Changed
-- **Rating label rename** — Rating display labels updated for consistency across the UI.
-- **Pixiv mapping removal** — Pixiv `x_restrict` field no longer auto-maps to rating (unreliable indicator); all Pixiv images now default to `safe` and must be manually escalated.
-- **Masonry layout** — Improved masonry grid rendering on the frontend.
-- **WebP thumbnails** — Thumbnails now generated in WebP format for smaller file sizes.
-- **Admin dropdown** — Admin navigation consolidated into a dropdown menu in the top bar.
-- **File limit removal** — `MAX_IMAGE_SIZE` default changed to 0 (unlimited).
-- **SSR cookie fix** — Frontend middleware correctly forwards admin session cookie on SSR requests.
+### 修复
+- **HTTPS 下登出失败** — `clear_session_cookie` 缺少 `secure` 和 `httponly` 参数，浏览器在 HTTPS 下静默忽略删除指令。删除 cookie 必须匹配设置时的所有属性。
 
-## [0.2.0] - 2026-06-20
+## [0.2.1] - 2026-06-21 — 已发布
 
-### Added
-- **Post deletion** — Admin can delete posts from the management page. Deletes the database record (cascade to post_tags), removes all S3 objects (original, thumb, preview), and decrements tag post_counts.
-  - `DELETE /api/posts/{id}` endpoint (admin only, requires full admin session)
-  - Trash icon button in `/admin/posts` table with confirmation dialog
-  - Tag `post_count` decremented atomically with `GREATEST(post_count - 1, 0)` to prevent negative counts
-- **Tag-based auto-rating rules** — Automatically escalate post ratings when specific tags are present.
-  - `AutoRatingRule` model — maps tag name → target rating (questionable/explicit)
-  - `GET / POST / DELETE /api/auto-rating-rules` — CRUD endpoints (admin only)
-  - `process_image` task checks rules after tag resolution; only escalates (never de-escalates) the source-extracted rating
-  - `/admin/auto-rating` — Admin page to manage rules with tag autocomplete and inline delete
-  - Alembic migration 004 — `auto_rating_rules` table (reuses existing `rating_enum`)
-- **Web-based image import** — Batch import images via admin UI (previously bot-only).
-  - `POST /api/tasks/web-import` — Admin session auth (not API key), enqueues each URL as ARQ task
-  - `/admin/import` — Textarea for URLs (one per line), per-URL status display (queued ✓ / error ✗)
-  - Nav bar "导入" icon link for admin users
-- **Admin nav expansion** — Navigation bar now shows icons for: 管理, 自动评级规则, 导入图片, 修改密码, 退出
+### 新增
+- **Bot 评级选择菜单** — 图片处理完成后，Bot 显示内联键盘按钮（🟢 公开 / 🟡 敏感 / 🔴 限制）供管理员选择帖子评级，不再自动使用源站评级。
 
-### Changed
-- **Logout redirects to homepage** — Logout button now uses JS `fetch()` instead of form POST, redirecting to `/` after clearing the session cookie. No more raw `{"ok":true}` JSON page.
-- **Password change icon** — Replaced incorrect "tag" SVG icon with HeroIcons "lock-closed" outline icon.
+### 变更
+- **评级标签重命名** — 评级显示标签统一。
+- **Pixiv 评级映射移除** — Pixiv `x_restrict` 不再自动映射为评级（不可靠指标），所有 Pixiv 图片默认 `safe`，需手动升级。
+- **瀑布流布局** — 改进前端瀑布流网格渲染。
+- **WebP 缩略图** — 缩略图改为 WebP 格式，减小文件体积。
+- **管理员下拉菜单** — 管理员导航合并到顶部栏下拉菜单。
+- **文件大小限制移除** — `MAX_IMAGE_SIZE` 默认改为 0（无限制）。
+- **SSR cookie 修复** — 前端中间件正确转发管理员 session cookie。
 
-### Fixed
-- **Tag visibility leak for non-safe posts** — Anonymous users could previously see tag names, categories, and `post_count` that included non-safe posts, allowing inference of hidden content. Now:
-  - Tag `post_count` for anonymous users is computed dynamically via subquery, counting only safe-rated posts
-  - Tags with zero safe posts are completely hidden from tag lists, tag cloud, and autocomplete
-  - Single tag detail returns 404 for anonymous users if the tag has zero safe posts
-  - Admin users see the full denormalized `post_count` as before
-  - Added `is_admin: bool = Depends(get_is_admin)` to all three tag endpoints
+## [0.2.0] - 2026-06-20 — 已发布
 
-### Security
-- Tag endpoints now respect admin/non-admin visibility boundary, consistent with post endpoints
-- Auto-rating rules only escalate ratings (never de-escalate), preventing accidental public exposure of NSFW content
+### 新增
+- **帖子删除** — 管理员可从管理页删除帖子。删除数据库记录（级联到 post_tags）、移除所有 S3 对象（原图/缩略图/预览）、递减 tag post_count。
+  - `DELETE /api/posts/{id}` 端点（管理员，需完整 session）
+  - `/admin/posts` 表格中垃圾桶图标按钮 + 确认对话框
+  - Tag `post_count` 原子递减，使用 `GREATEST(post_count - 1, 0)` 防止负数
+- **基于标签的自动评级规则** — 特定标签存在时自动升级帖子评级。
+  - `AutoRatingRule` 模型 — 标签名 → 目标评级（questionable/explicit）
+  - `GET / POST / DELETE /api/auto-rating-rules` — CRUD 端点（管理员）
+  - `process_image` 任务在标签解析后检查规则，只升级不降级
+  - `/admin/auto-rating` — 管理页，标签自动补全 + 行内删除
+  - Alembic 迁移 004 — `auto_rating_rules` 表
+- **网页端图片导入** — 通过管理界面批量导入图片（之前仅限 Bot）。
+  - `POST /api/tasks/web-import` — 管理员 session 认证（非 API key），每个 URL 作为 ARQ 任务入队
+  - `/admin/import` — URL 文本框（每行一个），每个 URL 显示状态
+  - 导航栏"导入"图标链接（管理员可见）
+- **管理员导航扩展** — 导航栏显示图标：管理、自动评级规则、导入图片、修改密码、退出
+
+### 变更
+- **登出跳转首页** — 登出按钮从 form POST 改为 JS `fetch()`，清除 cookie 后跳转 `/`。
+- **修改密码图标** — 替换错误的"tag"SVG 图标为 HeroIcons "lock-closed" 图标。
+
+### 修复
+- **非 safe 帖子标签可见性泄露** — 匿名用户之前能看到包含非 safe 帖子的标签名、分类和 `post_count`，可推断隐藏内容。现在：
+  - 匿名用户 tag `post_count` 通过子查询动态计算，仅统计 safe 帖子
+  - safe 帖子为 0 的标签在列表/标签云/自动补全中完全隐藏
+  - 单个标签详情对匿名用户返回 404（如果 safe 帖子为 0）
+  - 管理员照常看到完整 denormalized `post_count`
+
+### 安全
+- 标签端点现在遵守管理员/非管理员可见性边界
+- 自动评级规则只升级评级（永不降级），防止意外公开 NSFW 内容
 
 ## [0.1.3-pre2] - 2026-06-20
 
-### Added
-- **`ADMIN_PASSWORD` environment variable** — Configurable password for the initial admin account (created on first startup). If empty, falls back to random password printed in logs.
-- **`backend/scripts/reset_admin_password.py`** — Utility script to reset the admin password to the configured `ADMIN_PASSWORD` env var.
-- **Astro `allowedHosts` auto-detection** — `astro.config.mjs` now auto-extracts hostname from `APP_URL` when `APP_DOMAIN` is not set, in addition to the existing `APP_DOMAIN` explicit config.
+### 新增
+- **`ADMIN_PASSWORD` 环境变量** — 首次启动时创建管理员的可配置密码。为空时使用随机密码打印到日志。
+- **`backend/scripts/reset_admin_password.py`** — 重置管理员密码为配置的 `ADMIN_PASSWORD` 环境变量值。
+- **Astro `allowedHosts` 自动检测** — `astro.config.mjs` 在未设置 `APP_DOMAIN` 时自动从 `APP_URL` 提取主机名。
 
-### Changed
-- **Footer version label** — Removed redundant "Version" text: now displays just `{gitTag}` (e.g., `v0.1.3-pre2` instead of `Version v0.1.3-pre2`).
-- **`infra/.env.example`** — Updated `PUBLIC_S3_EXTERNAL_URL` documentation to clarify it should NOT include `/i/` path segment (images served directly from S3/CDN).
-- **`docker-compose.yml`** — Image tags bumped to `v0.1.3-pre2`.
+### 变更
+- **Footer 版本标签** — 移除冗余"Version"文本，仅显示 `{gitTag}`。
+- **`infra/.env.example`** — 更新 `PUBLIC_S3_EXTERNAL_URL` 文档，说明不应包含 `/i/` 路径段。
+- **`docker-compose.yml`** — 镜像标签升级到 `v0.1.3-pre2`。
 
-### Fixed
-- **Admin backend rating change not working** — `frontend/src/pages/admin/posts.astro` inline `<script is:inline>` contained TypeScript syntax (`as HTMLSelectElement`, arrow functions, template literals) which is NOT compiled by Astro's `is:inline` scripts. Converted to pure ES5 JavaScript. Also added instant visual feedback (rating badge updates immediately in the same row after successful change).
-- **`infra/scripts/build.sh`** — Fixed `PROJECT_ROOT` path from `../..` (was one level too shallow, pointing to `infra/`).
+### 修复
+- **管理后台评级修改不生效** — `admin/posts.astro` 内联 `<script is:inline>` 包含 TypeScript 语法（`as`、箭头函数、模板字面量），Astro 不编译 `is:inline` 脚本。转为纯 ES5 JavaScript。同时添加即时视觉反馈（评级徽章修改后立即更新）。
+- **`infra/scripts/build.sh`** — 修复 `PROJECT_ROOT` 路径从 `../..` 改为正确层级。
 
-### Security
-- Admin `PATCH /api/posts/{id}` endpoint returns 403 for unauthenticated requests (verified). Rating changes require valid admin session cookie.
+### 安全
+- 管理员 `PATCH /api/posts/{id}` 端点对未认证请求返回 403。评级修改需要有效的管理员 session cookie。
 
 ## [0.1.3-pre1] - 2026-06-20
 
-### Added
-- **Content rating system** — Posts now have a `safe`/`questionable`/`explicit` rating (aligned with Danbooru). Anonymous visitors only see safe posts; admin login unlocks all ratings.
-  - `Rating` enum and `rating` column on `Post` model (Alembic migration 002)
-  - Pixiv `x_restrict` and Danbooru `rating` metadata auto-mapped to our Rating enum
-  - All list/detail/search endpoints filter by rating for anonymous users
-  - `rating:safe`/`rating:q`/`rating:e` search syntax (admin only)
-- **Admin authentication** — Single-admin login with signed cookie session
-  - `POST /api/auth/login` / `POST /api/auth/logout` / `GET /api/auth/status` endpoints
-  - `POST /api/auth/change-password` — change password after first login
-  - `backend/app/auth.py` — itsdangerous signed cookie + bcrypt password verification
-  - Admin credentials stored in `admins` DB table (not env vars)
-  - First startup auto-creates a default admin with random password printed to logs
-  - `ADMIN_USERNAME` config var (default "admin") for the auto-created admin
-  - `ADMIN_SESSION_MAX_AGE` config var retained
-- **API key gating** — `POST /api/tasks/` and `POST /api/rebuild/` now require `X-Api-Key` header matching `BACKEND_API_KEY`
-  - Bot `backend_api.py` updated to send `X-Api-Key` header automatically
-  - `BACKEND_API_KEY` config var added to both backend and bot
-- **Danbooru-style tag sidebar** — Post detail page now groups tags by category (Copyright → Character → Artist → General → Meta) with counts, matching Danbooru's left-sidebar layout
-- **Rating badge and admin edit** — Posts display a colored rating badge (S/Q/E). Admin users see a dropdown to change rating directly on the detail page.
-- **Admin management page** — `/admin/posts` lists all posts (including non-safe) with inline rating change and filter
-- **Login page** — `/login` with username/password form
-- **Admin mode indicator** — Top banner "🔒 管理模式" visible when logged in
-- **Nav bar auth controls** — Login/Logout/Admin links in navigation
-- **404 page** — Proper 404 page (fixes redirect to non-existent `/404`)
-- **Middleware** — Astro middleware resolves admin session from cookie and injects `isAdmin`/`ssrCookie` into `Astro.locals`
-- **Admin `admins` DB table** — Alembic migration 003 adds the `admins` table for database-backed admin credentials
-- **Auto-generated admin password** — On first startup, if no admin exists, one is created with a random password printed to server logs (WARNING level). No more `ADMIN_PASSWORD_HASH` env var needed.
-- **Change password endpoint** — `POST /api/auth/change-password` for admins to update their password after first login
-- **Password change page** — `/admin/password` with current/new/confirm form
+### 新增
+- **内容评级系统** — 帖子新增 `safe`/`questionable`/`explicit` 评级（对齐 Danbooru）。匿名访客仅看 safe 帖子；管理员登录解锁全部评级。
+  - `Rating` 枚举和 `rating` 列（Alembic 迁移 002）
+  - Pixiv `x_restrict` 和 Danbooru `rating` 元数据自动映射
+  - 所有列表/详情/搜索端点按评级过滤匿名用户
+  - `rating:safe`/`rating:q`/`rating:e` 搜索语法（管理员）
+- **管理员认证** — 单管理员登录 + 签名 cookie session
+  - `POST /api/auth/login` / `POST /api/auth/logout` / `GET /api/auth/status` 端点
+  - `POST /api/auth/change-password` — 首次登录后修改密码
+  - `backend/app/auth.py` — itsdangerous 签名 cookie + bcrypt 密码验证
+  - 管理员凭据存储在 `admins` 数据库表中
+  - 首次启动自动创建管理员，随机密码打印到日志
+- **API key 鉴权** — `POST /api/tasks/` 和 `POST /api/rebuild/` 现在需要 `X-Api-Key` 头匹配 `BACKEND_API_KEY`
+- **Danbooru 风格标签侧栏** — 详情页按分类分组显示标签（Copyright → Character → Artist → General → Meta）
+- **评级徽章和管理员编辑** — 帖子显示彩色评级徽章（S/Q/E），管理员可在详情页直接修改评级
+- **管理后台** — `/admin/posts` 列出所有帖子（含非 safe），行内修改评级 + 筛选
+- **登录页** — `/login` 用户名/密码表单
+- **管理模式指示器** — 顶部横幅"🔒 管理模式"
+- **导航栏认证控件** — 登录/登出/管理链接
+- **404 页面** — 正确的 404 页面
+- **中间件** — Astro 中间件从 cookie 解析管理员 session，注入 `isAdmin`/`ssrCookie`
+- **`admins` 数据库表** — Alembic 迁移 003
 
-### Changed
-- **Frontend API client** — `fetchApi` now forwards SSR cookie header to backend for auth; all fetch functions accept `ssrCookie` param
-- **PhotoAlbum.astro** — Accepts `isAdmin` prop; shows Q/E rating badges on cards for admin users
-- **Post detail** — Redesigned to Danbooru three-column layout (tag sidebar + image + info sidebar) on desktop; mobile shows tags below image
-- **BaseLayout** — Reads `Astro.locals.isAdmin` to show admin/logout/login nav items and admin mode banner
-- **`.env.example`** — Added `ADMIN_USERNAME`, `ADMIN_SESSION_MAX_AGE`, `BACKEND_API_KEY` sections; removed `ADMIN_PASSWORD_HASH`
-- **`validate-env.sh`** — Added `BACKEND_API_KEY` and `ADMIN_SESSION_MAX_AGE` to production required vars; removed `ADMIN_PASSWORD_HASH`
+### 变更
+- **前端 API 客户端** — `fetchApi` 转发 SSR cookie 头到后端；所有 fetch 函数接受 `ssrCookie` 参数
+- **Post detail** — 重新设计为 Danbooru 三栏布局（标签侧栏 + 图片 + 信息侧栏）
+- **BaseLayout** — 读取 `Astro.locals.isAdmin` 显示管理员/登出/登录导航项
+- **`.env.example`** — 新增 `ADMIN_USERNAME`、`ADMIN_SESSION_MAX_AGE`、`BACKEND_API_KEY`；移除 `ADMIN_PASSWORD_HASH`
 
-### Removed
-- `ADMIN_PASSWORD_HASH` environment variable — admin credentials now stored in `admins` database table
-- `backend/scripts/generate_password_hash.py` — no longer needed; passwords are auto-generated on first startup
+### 移除
+- `ADMIN_PASSWORD_HASH` 环境变量 — 管理员凭据改存 `admins` 数据库表
+- `backend/scripts/generate_password_hash.py` — 不再需要
 
-### Security
-- `POST /api/tasks/` and `POST /api/rebuild/` are now gated by `X-Api-Key` (was previously unauthenticated)
-- Non-safe posts return 404 to anonymous users (existence hidden, not just 403)
-- Admin session cookies are HttpOnly, Secure (in production), SameSite=Lax
+### 安全
+- `POST /api/tasks/` 和 `POST /api/rebuild/` 需要 `X-Api-Key`
+- 非 safe 帖子对匿名用户返回 404（隐藏存在性，非 403）
+- 管理员 session cookie 为 HttpOnly、Secure（生产环境）、SameSite=Lax
 
 ## [0.1.2] - 2026-06-19
 
-### Added
-- **Tag categorization system** — Tags from Pixiv/Danbooru sources are now properly categorized into artist/character/copyright/general/meta instead of all being "general".
-  - `tag_categories` field flows from gallery-dl metadata → Pydantic schema → database storage
-  - Danbooru `tag_string_*` fields mapped to our `TagCategory` enum
-  - Pixiv `user.name` extracted as artist tag automatically
-  - Category upgrade logic: existing "general" tags upgraded when source provides better category
-  - Migration script for existing tags: `backend/scripts/recategorize_tags.py`
-- **Bot forwarded message support** — Bot now correctly processes forwarded Telegram channel messages containing image URLs.
-  - Fixed `AuthMiddleware` to use `chat.id` (forwarding user) instead of `from_user.id` (channel ID) for private chat auth
-  - Added `handle_photo_url` handler for forwarded messages with photo + caption URLs
-  - Batch processing: multiple recognized URLs processed sequentially with progress updates
-- **HTML description rendering** — Pixiv artwork descriptions with HTML (hyperlinks, formatting) now render correctly in the frontend.
-  - Backend: `bleach` library sanitizes HTML descriptions (allows safe tags: `<a>`, `<br>`, `<p>`, etc.)
-  - Backend: External links automatically get `target="_blank"` + `rel="noopener noreferrer"`
-  - Frontend: `set:html` directive renders sanitized HTML instead of escaped text
-  - Meta description tags use plain text (HTML stripped)
+### 新增
+- **标签分类系统** — Pixiv/Danbooru 来源标签正确分类为 artist/character/copyright/general/meta，不再全部归为"general"。
+  - `tag_categories` 字段从 gallery-dl 元数据 → Pydantic schema → 数据库
+  - Danbooru `tag_string_*` 字段映射到 `TagCategory` 枚举
+  - Pixiv `user.name` 自动提取为 artist 标签
+  - 分类升级逻辑：源数据提供更好分类时升级现有"general"标签
+- **Bot 转发消息支持** — Bot 正确处理包含图片 URL 的转发 Telegram 频道消息。
+- **HTML 描述渲染** — Pixiv 作品描述中的 HTML（超链接、格式化）在前端正确渲染。
+  - 后端：`bleach` 库消毒 HTML（允许安全标签）
+  - 外部链接自动添加 `target="_blank"` + `rel="noopener noreferrer"`
+  - 前端：`set:html` 指令渲染消毒后的 HTML
 
-### Changed
-- **Backend requirements**: Added `bleach` for HTML sanitization
-- **Bot handler architecture**: `url_handler.py` split into `handle_url_message` (text), `handle_photo_url` (photo+caption), and shared `_handle_urls_from_text()` helper
-- **docker-compose.yml**: All services updated to v0.1.2 images
+### 变更
+- **后端依赖**：新增 `bleach` 用于 HTML 消毒
+- **Bot 处理器架构**：`url_handler.py` 拆分为文本/图片+标题/共享辅助函数
+- **docker-compose.yml**：所有服务更新到 v0.1.2 镜像
 
-### Fixed
-- **AuthMiddleware forwarding bug**: `from_user.id` was channel ID (negative) for forwarded messages, causing auth rejection. Now uses `chat.id` for private chats.
-- **Tag categories empty**: All tags were hardcoded as `general`. Now properly categorized from source metadata.
-- **HTML description escaped**: Raw HTML rendered as literal text (`<a href="...">`). Now sanitized and rendered as clickable links.
+### 修复
+- **AuthMiddleware 转发 bug**：转发消息 `from_user.id` 为频道 ID（负数），导致认证失败。改用 `chat.id`。
+- **标签分类为空**：所有标签硬编码为 `general`。现在从源元数据正确分类。
+- **HTML 描述被转义**：原始 HTML 渲染为文字。现在消毒后渲染为可点击链接。
 
-### Security
-- HTML descriptions sanitized server-side with `bleach` to prevent XSS
-- External links marked with `rel="noopener noreferrer"`
+### 安全
+- HTML 描述服务端消毒防止 XSS
+- 外部链接标记 `rel="noopener noreferrer"`
 
 ## [0.1.1] - 2026-06-19
 
-### Added
-- `infra/scripts/build.sh` — unified Docker image build script that injects version tag into frontend footer.
-- `CHANGELOG.md` — version history tracking.
+### 新增
+- `infra/scripts/build.sh` — 统一 Docker 镜像构建脚本，注入版本标签到前端 footer。
+- `CHANGELOG.md` — 版本历史追踪。
 
-### Changed
-- **Frontend version display**: `BaseLayout.astro` footer now reads `PUBLIC_GIT_TAG` from Docker build args instead of hardcoded `"dev"`. ([infra/scripts/build.sh](infra/scripts/build.sh) `--build-arg PUBLIC_GIT_TAG=<version>`)
-- **Date display**: "添加时间" on post detail page now uses the **browser's default locale/timezone** (`toLocaleDateString(undefined, ...)`) instead of hardcoded `ja-JP`. Falls back to the browser's system settings.
+### 变更
+- **前端版本显示**：`BaseLayout.astro` footer 从 Docker build arg 读取 `PUBLIC_GIT_TAG`，不再硬编码。
+- **日期显示**：详情页"添加时间"使用浏览器默认区域设置，不再硬编码 `ja-JP`。
 
-### Fixed
-- Frontend `package.json` version bumped from `0.0.1` → `0.1.1`.
-- China build mirrors documented in `CLAUDE.md` (v0.1.1 lessons).
-- Redis empty-password `--requirepass` parsing issue documented.
-- `schemas/__init__.py` stale import crash documented.
-- Caddy `/i/*` S3 proxy configuration notes added.
+### 修复
+- 前端 `package.json` 版本从 `0.0.1` 升级到 `0.1.1`。
+- 中国构建镜像源记录在 `CLAUDE.md`。
+- Redis 空密码 `--requirepass` 解析问题记录。
+- `schemas/__init__.py` 过期导入崩溃记录。
+- Caddy `/i/*` S3 代理配置备注添加。
 
 ## [0.1.0] - 2026-06-18
 
-### Added
-- Full processing pipeline: Telegram bot → backend API → ARQ worker → gallery-dl → S3 storage.
-- Frontend: Astro SSR with Tailwind v4, masonry grid, tag system, search, pagination.
-- Bot: URL auto-detection, `/save`, `/info`, `/search` commands.
-- Infrastructure: Docker Compose, Caddy reverse proxy, MinIO/R2 S3.
-- Perceptual hash (phash) deduplication with prefix-bucket indexing.
-- Source extractors for Pixiv, Twitter/X, Danbooru + generic fallback.
-- Image pipeline: HEAD size check → download → phash → thumbnail/preview generation → S3 upload.
-- Tag system with categories (artist, character, copyright, general, meta).
-- `/api/search` with tag inclusion/exclusion (`-tag`) support.
-- `/api/tags/autocomplete` for search bar suggestions.
-- Caddy Souin cache layer for SSR pages (5-min TTL).
+### 新增
+- 完整处理流水线：Telegram Bot → 后端 API → ARQ Worker → gallery-dl → S3 存储。
+- 前端：Astro SSR + Tailwind v4，瀑布流网格，标签系统，搜索，分页。
+- Bot：URL 自动检测，`/save`、`/info`、`/search` 命令。
+- 基础设施：Docker Compose，Caddy 反向代理，MinIO/R2 S3。
+- 感知哈希（phash）去重，前缀桶索引。
+- Pixiv、Twitter/X、Danbooru 源提取器 + 通用回退。
+- 图片流水线：HEAD 大小检查 → 下载 → phash → 缩略图/预览生成 → S3 上传。
+- 标签系统，5 类分类（artist、character、copyright、general、meta）。
+- `/api/search` 支持标签组合搜索（`+`）和排除（`-tag`）。
+- `/api/tags/autocomplete` 搜索栏自动补全。
+- Caddy Souin 缓存层（5 分钟 TTL）。
 
-### Changed
-- **Architecture decision**: SSR + Caddy cache (NOT SSG), because SSG cannot do incremental rebuilds.
-- **Image serving**: Direct from S3/CDN, not proxied through Caddy.
-- **S3 abstraction**: Generic S3-compatible layer — switch providers (R2/MinIO/AWS S3) via env vars only, no code changes.
+### 变更
+- **架构决策**：SSR + Caddy 缓存（非 SSG），因为 SSG 不支持增量重建。
+- **图片服务**：直接从 S3/CDN，不经 Caddy 代理。
+- **S3 抽象**：通用 S3 兼容层 — 仅通过环境变量切换提供商（R2/MinIO/AWS S3）。
 
-### Security
-- phash values never exposed in API responses.
-- `BOT_ADMIN_IDS` unified middleware auth for all bot commands.
-- Multi-stage Dockerfiles with pinned base images.
+### 安全
+- phash 值永不暴露在 API 响应中。
+- `BOT_ADMIN_IDS` 统一中间件认证所有 Bot 命令。
+- 多阶段 Dockerfile，基础镜像固定版本。
 
-### Infrastructure
-- Multi-stage Dockerfiles (`dev` / `builder` / `runner`).
-- Stream-based S3 uploads (no memory buffering).
-- S3 key normalization + post-upload URL verification.
-- Explicit database indexes in Alembic migrations.
-- Database migration scripts (`migrate-db.sh`, `validate-env.sh`).
+### 基础设施
+- 多阶段 Dockerfile（`dev` / `builder` / `runner`）。
+- 流式 S3 上传（无内存缓冲）。
+- S3 key 规范化 + 上传后 URL 验证。
+- Alembic 迁移中显式数据库索引。
+- 数据库迁移脚本（`migrate-db.sh`、`validate-env.sh`）。

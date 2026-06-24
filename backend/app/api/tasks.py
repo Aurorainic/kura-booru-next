@@ -1,7 +1,8 @@
-"""Task creation endpoints.
+"""Task creation and status endpoints.
 
 Provides APIs to enqueue image processing tasks to the ARQ worker:
 - POST /api/tasks/         — bot/internal, requires X-Api-Key
+- GET  /api/tasks/{task_id} — task status polling, requires X-Api-Key
 - POST /api/tasks/web-import — admin web UI, requires admin session
 - GET  /api/tasks/web-import/stream — SSE stream of import job progress (admin)
 """
@@ -85,6 +86,58 @@ async def create_process_task(request: ProcessImageRequest):
         )
 
     return ProcessImageResponse(task_id=task_id, status="queued")
+
+
+class TaskStatusResponse(BaseModel):
+    """Response for a single task status query."""
+
+    task_id: str
+    status: str = Field(description="queued | in_progress | complete | not_found")
+    result: dict | None = Field(default=None, description="Job result if complete")
+
+
+@router.get("/{task_id}", response_model=TaskStatusResponse, dependencies=[Depends(require_api_key)])
+async def get_task_status(task_id: str):
+    """Poll the status of an ARQ task by its job ID.
+
+    Used by the browser extension (API key auth) to check import progress
+    without needing an admin session cookie.
+    """
+    from arq import create_pool
+
+    redis_settings = _parse_redis_url(settings.REDIS_URL)
+    pool = await create_pool(redis_settings)
+    try:
+        job = Job(task_id, redis=pool)
+        job_status = await job.status()
+
+        if job_status == JobStatus.not_found:
+            return TaskStatusResponse(task_id=task_id, status="not_found")
+
+        if job_status == JobStatus.complete:
+            try:
+                result_info = await job.result_info()
+                result = getattr(result_info, "result", None) if result_info else {}
+            except Exception:
+                try:
+                    result = await job.result(timeout=0.1)
+                except Exception:
+                    result = {}
+            if not isinstance(result, dict):
+                result = {}
+            return TaskStatusResponse(task_id=task_id, status="complete", result=result)
+
+        # Map ARQ status enum to string
+        status_map = {
+            JobStatus.queued: "queued",
+            JobStatus.in_progress: "in_progress",
+        }
+        return TaskStatusResponse(
+            task_id=task_id,
+            status=status_map.get(job_status, str(job_status)),
+        )
+    finally:
+        await pool.aclose()
 
 
 class WebImportRequest(BaseModel):

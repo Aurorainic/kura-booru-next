@@ -25,8 +25,11 @@ async def lifespan(app: FastAPI):
         await ensure_default_admin(db)
     yield
     # Shutdown
+    from app.auth import _redis_client
     from app.services.s3 import s3_service
     await s3_service.close()
+    if _redis_client is not None:
+        await _redis_client.aclose()
 
 
 async def _cache_control_dispatch(request: Request, call_next):

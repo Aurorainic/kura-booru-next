@@ -21,6 +21,7 @@
 - **Caddy**: Runs on the HOST machine, not in Docker Compose. Containers expose ports to localhost.
 - **schemas/__init__.py**: Must only import classes that actually exist. Stale imports crash uvicorn at startup.
 - **URL patterns**: Centralized in `backend/app/services/url_patterns.py`. Bot mirrors with sync comment at top of `bot/app/handlers/url_handler.py`.
+- **Password epoch**: `get_is_admin` now checks Redis-cached `password_changed_at` on every request. If Redis is down, it fail-opens (allows session). Never bypass this check in new auth code.
 
 ## Common Pitfalls
 
@@ -33,7 +34,16 @@
 
 ## Changelog
 
-### v0.4.2 (2026-06-23) — 开发中
+### v0.5.0 (2026-06-24) — 已发布
+
+- [x] 密码修改后 Session 失效（`password_changed_at` 列 + Redis 60s 缓存）
+- [x] Chromium 浏览器扩展（Pixiv 作品页导入按钮，API key 认证）
+- [x] `GET /api/tasks/{task_id}` 任务状态查询端点
+- [x] `_ensure_tags` 并发安全（IntegrityError catch + re-query）
+- [x] 项目 Logo（logo.svg → header + favicon）
+- [x] 扩展打包 workflow（build-extension.yml）
+
+### v0.4.2 (2026-06-23) — 已发布
 
 - [x] Tag `post_count` 定时同步（ARQ cron，每小时 + 启动时修正漂移）
 - [x] `_ensure_tags` 批量查询（N+1 → 3 queries + inserts）

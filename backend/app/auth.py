@@ -28,13 +28,14 @@ import time
 from typing import Optional
 
 import bcrypt
+import redis.asyncio as aioredis
 from fastapi import Depends, Header, HTTPException, Request, status
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.database import get_db
+from app.database import async_session_factory, get_db
 from app.models.admin import Admin
 
 logger = logging.getLogger(__name__)
@@ -97,15 +98,86 @@ def clear_session_cookie(response) -> None:
     )
 
 
+# ── Password-epoch session invalidation (Redis-cached) ──────────────────
+
+_redis_client: aioredis.Redis | None = None
+_EPOCH_CACHE_TTL = 60  # seconds
+
+
+async def _get_redis() -> aioredis.Redis:
+    global _redis_client
+    if _redis_client is None:
+        _redis_client = aioredis.from_url(settings.REDIS_URL)
+    return _redis_client
+
+
+async def _get_password_epoch(admin_id: str) -> float | None:
+    """Return the password_changed_at timestamp for an admin, cached in Redis.
+
+    Returns None if the admin has never changed their password (grandfathered).
+    Gracefully returns None on Redis/DB errors (fail-open).
+    """
+    try:
+        redis = await _get_redis()
+        cache_key = f"kura:admin_password_epoch:{admin_id}"
+
+        cached = await redis.get(cache_key)
+        if cached is not None:
+            val = float(cached)
+            return None if val == 0 else val
+
+        async with async_session_factory() as db:
+            stmt = select(Admin.password_changed_at).where(Admin.id == admin_id)
+            result = await db.execute(stmt)
+            row = result.scalar_one_or_none()
+
+        if row is None:
+            # Column is NULL — admin never changed password
+            await redis.setex(cache_key, _EPOCH_CACHE_TTL, "0")
+            return None
+
+        epoch = row.timestamp()
+        await redis.setex(cache_key, _EPOCH_CACHE_TTL, str(epoch))
+        return epoch
+    except Exception:
+        logger.warning("password epoch lookup failed, fail-open", exc_info=True)
+        return None
+
+
+async def invalidate_password_epoch_cache(admin_id: str) -> None:
+    """Clear the cached password epoch after a password change."""
+    try:
+        redis = await _get_redis()
+        await redis.delete(f"kura:admin_password_epoch:{admin_id}")
+    except Exception:
+        pass  # Cache miss is fine — next lookup will repopulate
+
+
 # ── Lightweight auth dependency (cookie-only, no DB lookup) ─────────────
 
 async def get_is_admin(request: Request) -> bool:
     """FastAPI dependency: return True if the request carries a valid admin
-    session cookie. Checks signature only — does NOT query the database.
-    Suitable for visibility gating (show NSFW or not).
+    session cookie. Checks signature and password epoch — if the admin has
+    changed their password since this session was created, the session is
+    rejected.
     """
     token = request.cookies.get(SESSION_COOKIE_NAME)
-    return verify_session(token) is not None
+    admin_id = verify_session(token)
+    if admin_id is None:
+        return False
+
+    # Check if session was created before the last password change
+    epoch = await _get_password_epoch(admin_id)
+    if epoch is None:
+        return True  # Admin never changed password (grandfathered)
+
+    try:
+        payload = _serializer().loads(token, max_age=settings.ADMIN_SESSION_MAX_AGE)
+        iat = payload.get("iat", 0)
+    except (BadSignature, SignatureExpired):
+        return False
+
+    return iat >= epoch
 
 
 # ── Heavy auth dependency (cookie + DB lookup) ──────────────────────────
@@ -115,8 +187,8 @@ async def get_current_admin(
 ) -> Admin:
     """FastAPI dependency: return the Admin row for the session cookie.
 
-    Raises 401 if not authenticated. Use this for write endpoints that need
-    to identify the admin (change password, etc).
+    Raises 401 if not authenticated or if the session predates the last
+    password change.
     """
     token = request.cookies.get(SESSION_COOKIE_NAME)
     admin_id = verify_session(token)
@@ -125,6 +197,24 @@ async def get_current_admin(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
         )
+
+    # Check password epoch
+    epoch = await _get_password_epoch(admin_id)
+    if epoch is not None:
+        try:
+            payload = _serializer().loads(token, max_age=settings.ADMIN_SESSION_MAX_AGE)
+            iat = payload.get("iat", 0)
+            if iat < epoch:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Session expired due to password change",
+                )
+        except (BadSignature, SignatureExpired):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session expired",
+            )
+
     try:
         import uuid
         uid = uuid.UUID(admin_id)

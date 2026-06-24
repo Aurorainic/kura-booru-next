@@ -16,6 +16,7 @@ from app.auth import (
     clear_session_cookie,
     get_current_admin,
     get_is_admin,
+    invalidate_password_epoch_cache,
     set_session_cookie,
     sign_session,
     verify_admin_login,
@@ -104,4 +105,13 @@ async def change_password(
     admin.password_hash = bcrypt.hashpw(
         body.new_password.encode("utf-8"), bcrypt.gensalt()
     ).decode("utf-8")
-    return {"ok": True}
+
+    # Invalidate all existing sessions
+    from datetime import datetime, timezone
+    admin.password_changed_at = datetime.now(timezone.utc)
+    await invalidate_password_epoch_cache(str(admin.id))
+
+    # Clear this admin's session cookie so they must re-login
+    response = JSONResponse(content={"ok": True})
+    clear_session_cookie(response)
+    return response

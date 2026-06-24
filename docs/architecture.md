@@ -290,6 +290,7 @@ kura-booru-next/
 | id | UUID | Primary key |
 | username | String | Username (unique) |
 | password_hash | String | bcrypt hash |
+| password_changed_at | DateTime? | Timestamp of last password change (null = never changed, all sessions valid) |
 | created_at | DateTime | Creation time |
 
 ---
@@ -312,6 +313,7 @@ kura-booru-next/
 | POST | `/api/tasks/` | Create image processing task (requires X-Api-Key) |
 | POST | `/api/tasks/web-import` | Batch import images (requires admin session) |
 | GET | `/api/tasks/web-import/stream?task_ids=...` | SSE progress stream for import jobs (admin session) |
+| GET | `/api/tasks/{task_id}` | Task status polling (requires X-Api-Key; used by browser extension) |
 | GET | `/api/admin/tags` | List all tags with pagination (admin only) |
 | PATCH | `/api/admin/tags/{id}` | Update tag (name, category, translation) (admin only) |
 | POST | `/api/admin/tags/merge` | Merge tags (admin only) |

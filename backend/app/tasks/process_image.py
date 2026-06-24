@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -473,10 +474,18 @@ async def _ensure_tags(
                 tag.category = category
             tags.append(tag)
         else:
-            # New tag — insert
+            # New tag — insert (may race with concurrent workers)
             tag = Tag(name=name, category=category, post_count=0)
             db.add(tag)
-            await db.flush()
+            try:
+                await db.flush()
+            except IntegrityError:
+                # Concurrent worker created this tag — re-query
+                await db.rollback()
+                existing = await db.execute(
+                    select(Tag).where(Tag.name == name)
+                )
+                tag = existing.scalar_one()
             tag_map[name] = tag
             tags.append(tag)
 

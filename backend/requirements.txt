@@ -6,6 +6,7 @@ alembic
 pydantic>=2.0
 pydantic-settings>=2.0
 arq
+redis[hiredis]
 aiobotocore
 Pillow
 imagehash

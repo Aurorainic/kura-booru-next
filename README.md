@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🎨 Kura Booru Next
+<img src="logo.svg" alt="Kura Booru" width="120" />
+
+# Kura Booru Next
 
 **个人二次元插图收藏与展示平台**
 

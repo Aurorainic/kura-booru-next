@@ -1,0 +1,40 @@
+name: Build Extension
+
+on:
+  push:
+    paths:
+      - "extension/**"
+      - "logo.svg"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install resvg
+        run: pip install resvg
+
+      - name: Rasterize logo to extension icons
+        run: |
+          for size in 16 48 128; do
+            resvg -w $size -h $size logo.svg extension/icons/icon${size}.png
+          done
+
+      - name: Read version from manifest
+        id: version
+        run: |
+          VERSION=$(python3 -c "import json; print(json.load(open('extension/manifest.json'))['version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Package extension
+        run: |
+          cd extension
+          zip -r ../kura-booru-importer-v${{ steps.version.outputs.version }}.zip .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kura-booru-importer-v${{ steps.version.outputs.version }}
+          path: kura-booru-importer-v${{ steps.version.outputs.version }}.zip

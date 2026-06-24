@@ -1,0 +1,47 @@
+/* Floating import button — bottom-right corner */
+#kura-import-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 99999;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #06b6d4, #22d3ee);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.4);
+  transition: all 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+#kura-import-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(6, 182, 212, 0.5);
+}
+
+#kura-import-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+#kura-import-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+#kura-import-btn.kura-success {
+  background: linear-gradient(135deg, #10b981, #34d399);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+#kura-import-btn.kura-error {
+  background: linear-gradient(135deg, #ef4444, #f87171);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+#kura-import-btn.kura-duplicate {
+  background: linear-gradient(135deg, #f59e0b, #fbbf24);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+}
