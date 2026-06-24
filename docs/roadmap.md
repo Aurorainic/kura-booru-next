@@ -6,12 +6,12 @@
 - [ ] 端到端测试
 - [ ] SSR 缓存启用（需先解决 Vary: Cookie + 缓存 key 问题）
 - [ ] 数据库定期备份 cron
-- [ ] Admin 密码修改后旧 session 失效机制
 - [ ] `random_post` 深分页优化（TABLESAMPLE 或随机 UUID，当前方案在 100K+ 行时会慢）
-- [ ] `_ensure_tags` 并发安全（多个 worker 同时创建同名 tag 可能冲突）
-- [ ] S3 client 连接错误重连（当前懒缓存 client 如遇断连不会自动重建）
 
 ## 已完成功能
+
+- [x] Chromium 浏览器扩展（Pixiv 作品页一键导入）— v0.5.0
+- [x] 密码修改后 Session 失效（`password_changed_at` + Redis 缓存）— v0.5.0
 
 - [x] S3 client 连接池复用（懒缓存单例）— v0.4.2
 - [x] `random_post` 计数缓存（in-process TTL）— v0.4.2
@@ -35,3 +35,5 @@
 - keyset pagination（深分页优化）
 - Danbooru API 作为 AI 之前的查询层（`tag_knowledge.source='danbooru_api'`）
 - Danbooru tag implications（3 万+ 条隐含关系）
+- 浏览器扩展支持更多站点（Twitter、Danbooru）
+- Chrome Web Store 发布（需审核流程）

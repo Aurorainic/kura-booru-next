@@ -173,3 +173,40 @@ All three are required when `ENABLE_AI_TAG_PROCESSING=true`. When disabled (defa
 ### Caddy SSE Note
 
 The web import page uses SSE (`GET /api/tasks/web-import/stream`) for real-time progress. Caddy must have `flush_interval -1` in the `/api/*` reverse_proxy block, otherwise SSE responses are buffered and the browser never receives updates. This is already set in the provided Caddyfile template.
+
+---
+
+## Browser Extension Installation
+
+### Prerequisites
+
+- Chromium-based browser (Chrome, Edge, Brave, etc.)
+- `BACKEND_API_KEY` from your Kura Booru server (same key used by Telegram Bot)
+
+### Install from CI Artifact
+
+1. Download the latest `kura-booru-importer-v*.zip` from [GitHub Actions build-extension workflow artifacts](https://github.com/<owner>/kura-booru-next/actions/workflows/build-extension.yml)
+2. Unzip the file
+3. Open `chrome://extensions/` (or `edge://extensions/`)
+4. Enable "Developer mode" (top-right toggle)
+5. Click "Load unpacked" and select the unzipped folder
+6. Click the extension icon in the toolbar, enter your server URL and API Key, click "保存"
+
+### Install from Source
+
+```bash
+# Generate icons from logo.svg
+pip install cairosvg
+python3 -c "
+import cairosvg
+for size in [16, 48, 128]:
+    cairosvg.svg2png(url='logo.svg', write_to=f'extension/icons/icon{size}.png',
+                     output_width=size, output_height=size)
+"
+
+# Then load unpacked from the extension/ directory
+```
+
+### API Key
+
+The extension uses the same `BACKEND_API_KEY` environment variable as the Telegram Bot. If you rotate this key, extension users must update their saved API Key in the extension popup.

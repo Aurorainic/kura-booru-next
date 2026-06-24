@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <style>
@@ -49,6 +49,7 @@
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
+      transition: opacity 0.15s ease;
     }
     button:hover { opacity: 0.9; }
     #status {
@@ -57,20 +58,27 @@
       text-align: center;
       min-height: 18px;
     }
-    #status.success { color: #34d399; }
+    #status.success {
+      color: #34d399;
+      animation: kura-pop 0.3s ease;
+    }
     #status.error { color: #f87171; }
+    @keyframes kura-pop {
+      from { opacity: 0; transform: scale(0.8); }
+      to   { opacity: 1; transform: scale(1); }
+    }
   </style>
 </head>
 <body>
-  <h1>Kura Booru Importer</h1>
+  <h1>Kura Booru 导入助手</h1>
 
-  <label for="server-url">Server URL</label>
+  <label for="server-url">服务器地址</label>
   <input type="url" id="server-url" placeholder="https://kura.example.com" />
 
-  <label for="api-key">API Key</label>
+  <label for="api-key">API 密钥</label>
   <input type="password" id="api-key" placeholder="X-Api-Key value" />
 
-  <button id="save-btn">Save</button>
+  <button id="save-btn">保存</button>
   <div id="status"></div>
 
   <script src="popup.js"></script>

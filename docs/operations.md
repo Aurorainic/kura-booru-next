@@ -151,6 +151,7 @@ Migrates the database from a development environment to production. Supports dum
 - [ ] Build three images (backend, bot, frontend) with both latest + versioned tags
 - [ ] Push to registry (latest + versioned)
 - [ ] Verify registry image tags
+- [ ] Extension zip built and uploaded as CI artifact (build-extension.yml)
 
 ### Deploy & Verify
 - [ ] Production server pulls latest images
@@ -195,3 +196,7 @@ Docker builds in China require mirror overrides due to network restrictions:
 - The web import page uses SSE for real-time progress updates
 - Caddy **must** have `flush_interval -1` in the `/api/*` reverse_proxy block, otherwise SSE responses are buffered and the browser never receives events
 - This is already set in the provided Caddyfile template — do not remove it
+
+### Extension API Key Rotation
+
+When rotating `BACKEND_API_KEY`, notify all extension users — they must manually update the API Key in their extension popup settings. The old key stops working immediately upon backend restart.

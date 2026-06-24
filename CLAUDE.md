@@ -22,6 +22,7 @@
 - **schemas/__init__.py**: Must only import classes that actually exist. Stale imports crash uvicorn at startup.
 - **URL patterns**: Centralized in `backend/app/services/url_patterns.py`. Bot mirrors with sync comment at top of `bot/app/handlers/url_handler.py`.
 - **Password epoch**: `get_is_admin` now checks Redis-cached `password_changed_at` on every request. If Redis is down, it fail-opens (allows session). Never bypass this check in new auth code.
+- **Extension content scripts**: Must be plain ES5 JavaScript — no TypeScript, no arrow functions, no template literals, no `const`/`let`. Same constraint as `is:inline` scripts in Astro. The service worker and popup scripts follow the same rule.
 
 ## Common Pitfalls
 
@@ -31,6 +32,9 @@
 - **Huawei SWR**: Does not support Docker BuildKit attestation manifests. Use `--provenance=false --sbom=false`.
 - **Cookie deletion**: Must match all attributes (`Secure`, `HttpOnly`, `SameSite`, `Path`) used when setting the cookie, otherwise browsers silently ignore the deletion.
 - **Logout race condition**: Use server-side redirect (SSR endpoint `POST /logout`) instead of client-side `fetch()` + `window.location.href`, to ensure cookie is cleared before next page request.
+- **Extension `btn.className` reset**: `resetButton()` sets `btn.className = ""` which removes all animation classes. If adding new state classes, ensure they are cleared here or animations won't replay on subsequent clicks.
+- **Extension CSS animation replay**: CSS animations only fire when the class is added. If the same class is re-applied without being removed first, the animation does not replay. The existing `resetButton()` timeout (3s) handles this by clearing the class.
+- **Extension `chrome.storage.sync` limits**: 100 items, 8KB total. Current usage (2 keys: serverUrl + apiKey) is well within limits. Don't add large data here.
 
 ## Changelog
 

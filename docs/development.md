@@ -90,3 +90,35 @@ All Dockerfiles have 3 stages:
 13. **Rating visibility**: Anonymous sees only safe; non-safe returns 404; admin sees all
 14. **Admin login/logout**: `/login` → homepage shows "admin mode" → click logout → back to normal
 15. **Pixiv multi-image**: Multi-image Pixiv post → only first image downloaded and stored
+
+---
+
+## Browser Extension Development
+
+### Load Unpacked in Dev Mode
+
+1. Generate icons: `pip install cairosvg && python3 -c "import cairosvg; [cairosvg.svg2png(url='logo.svg', write_to=f'extension/icons/icon{s}.png', output_width=s, output_height=s) for s in [16,48,128]]"`
+2. Open `chrome://extensions/`, enable Developer mode
+3. Click "Load unpacked", select the `extension/` directory
+4. Navigate to a Pixiv artwork page to test the import button
+
+### Debugging
+
+- **Content script**: Open DevTools on the Pixiv page → Console/Elements tab. Content script logs appear in the page console.
+- **Service worker**: Go to `chrome://extensions/` → click "Inspect views: service worker" under the extension. This opens a dedicated DevTools for the background script.
+- **Popup**: Right-click the extension icon → "Inspect popup" to debug popup.html/popup.js.
+- **Storage**: In service worker DevTools → Application tab → Chrome Extension Storage to inspect saved settings.
+
+### Extension Code Constraints
+
+Content scripts, service worker, and popup scripts must be plain ES5 JavaScript:
+- No TypeScript, no arrow functions, no template literals, no `const`/`let` (use `var`)
+- This matches the Astro `is:inline` script constraint in the frontend
+
+### Verification Steps
+
+1. **Import flow**: Click "导入到 Kura" → button shows "导入中..." with spinner → "排队中..." → "处理中..." → "已导入！" (bounce + checkmark)
+2. **Duplicate detection**: Import same artwork twice → second attempt shows "重复" (amber pulse)
+3. **Error handling**: Enter wrong API key → button shows "API 密钥无效" (shake)
+4. **Settings persistence**: Set server URL + API key → close popup → reopen → values persist
+5. **Not configured**: Click import without setting server URL → shows "未配置"

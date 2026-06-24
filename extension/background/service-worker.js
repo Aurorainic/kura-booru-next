@@ -1,5 +1,5 @@
-// Kura Booru Importer — background service worker
-// Handles API calls to the Kura backend
+// Kura Booru 导入助手 — background service worker
+// 处理与 Kura 后端的 API 通信
 
 chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
   if (message.type === "IMPORT_URL") {
@@ -15,7 +15,7 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
 async function handleImport(url) {
   var config = await getConfig();
   if (!config.serverUrl || !config.apiKey) {
-    return { success: false, error: "Not configured" };
+    return { success: false, error: "未配置" };
   }
 
   try {
@@ -34,12 +34,12 @@ async function handleImport(url) {
     }
 
     if (resp.status === 401) {
-      return { success: false, error: "Invalid API key" };
+      return { success: false, error: "API 密钥无效" };
     }
 
     return { success: false, error: "HTTP " + resp.status };
   } catch (err) {
-    return { success: false, error: "Network error" };
+    return { success: false, error: "网络错误" };
   }
 }
 

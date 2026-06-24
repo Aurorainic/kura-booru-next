@@ -40,6 +40,11 @@ Internet
             │  │ :9000   │                          │
             │  └─────────┘                          │
             └──────────────────────────────────────┘
+
+┌──────────────┐
+│  Extension   │  X-Api-Key → POST /api/tasks/ + GET /api/tasks/{id}
+│  (Manifest3) │
+└──────────────┘
 ```
 
 ---
@@ -49,6 +54,7 @@ Internet
 | Layer | Tech | Version | Purpose |
 |---|---|---|---|
 | **Bot** | aiogram | 3.x | Telegram Bot (webhook mode) |
+| **Extension** | Chromium (Manifest V3) | — | Pixiv artwork import button |
 | **Backend** | FastAPI | 0.110+ | REST API |
 | | SQLAlchemy | 2.0+ (async) | ORM |
 | | Alembic | latest | Database migrations |
@@ -165,6 +171,17 @@ kura-booru-next/
 │   │       └── backend_api.py   #   HTTP client for backend API
 │   ├── requirements.txt
 │   └── Dockerfile
+├── extension/        # Chromium extension (Manifest V3)
+│   ├── manifest.json          # Extension manifest
+│   ├── content/
+│   │   ├── content.js         #   Content script (Pixiv page injection)
+│   │   └── content.css        #   Button styles + animations
+│   ├── background/
+│   │   └── service-worker.js  #   API proxy (X-Api-Key auth)
+│   ├── popup/
+│   │   ├── popup.html         #   Settings UI
+│   │   └── popup.js           #   Save config to chrome.storage
+│   └── icons/                 #   16/48/128px PNGs (rasterized from logo.svg)
 ├── frontend/         # Astro SSR
 │   ├── src/
 │   │   ├── components/    # React Islands
@@ -310,7 +327,7 @@ kura-booru-next/
 | GET | `/api/tags/{name}` | Tag detail (404 for non-admin if 0 safe posts) |
 | GET | `/api/tags/autocomplete?q=prefix` | Tag name autocomplete (non-admin: safe-only counts) |
 | GET | `/api/search?q=tag1+tag2&rating=safe` | Tag search (supports `-` exclusion, `rating:` syntax for admin) |
-| POST | `/api/tasks/` | Create image processing task (requires X-Api-Key) |
+| POST | `/api/tasks/` | Create image processing task (requires X-Api-Key; used by Bot and Extension) |
 | POST | `/api/tasks/web-import` | Batch import images (requires admin session) |
 | GET | `/api/tasks/web-import/stream?task_ids=...` | SSE progress stream for import jobs (admin session) |
 | GET | `/api/tasks/{task_id}` | Task status polling (requires X-Api-Key; used by browser extension) |
@@ -434,6 +451,50 @@ Do NOT enable Souin/HTTP cache for SSR pages without `Vary: Cookie` + cookie-in-
 | Send URL directly | Auto-detect and save |
 
 Supports Pixiv, Twitter/X, Danbooru links. Unknown URLs fall back to generic download.
+
+---
+
+## Browser Extension
+
+Chromium 扩展提供 Pixiv 作品页一键导入按钮。
+
+### Architecture
+
+- **Manifest V3** (Chromium, 不支持 Firefox)
+- **Content script** (`content/content.js`): 注入于 `*://www.pixiv.net/artworks/*`，创建浮动按钮，发送 `IMPORT_URL` 消息给 service worker，轮询 `CHECK_STATUS` 获取结果
+- **Service worker** (`background/service-worker.js`): 代理 API 调用，使用 `X-Api-Key` 认证。两种消息：`IMPORT_URL` → `POST /api/tasks/`，`CHECK_STATUS` → `GET /api/tasks/{id}`
+- **Popup** (`popup/popup.html` + `popup.js`): 设置界面，配置服务器地址和 API 密钥，存储于 `chrome.storage.sync`
+
+### Import Flow
+
+```
+[用户点击「导入到 Kura」]
+      │
+      ▼
+[Content script → IMPORT_URL message]
+      │
+      ▼
+[Service worker: POST /api/tasks/ (X-Api-Key)]
+      │
+      ▼
+[Backend 入队 ARQ task → 返回 task_id]
+      │
+      ▼
+[Content script 轮询: CHECK_STATUS 每 2s]
+      │
+      ▼
+[Service worker: GET /api/tasks/{id}]
+      │
+      ├─ queued / in_progress → 继续轮询 (spinner 动画)
+      ├─ complete + success   → 「已导入！」(绿色弹跳+勾号)
+      ├─ complete + duplicate → 「重复」(琥珀色脉冲)
+      ├─ complete + too_large → 「图片过大」(红色抖动)
+      └─ not_found            → 「任务丢失」(红色抖动)
+```
+
+### Authentication
+
+使用 `BACKEND_API_KEY`（与 Telegram Bot 相同），存储于扩展设置中。每次 API 调用通过 `X-Api-Key` header 发送。未配置时显示「未配置」错误。
 
 ---
 

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Kura Booru Importer",
+  "name": "Kura Booru 导入助手",
   "version": "1.0.0",
-  "description": "Import Pixiv artworks to your Kura Booru instance",
+  "description": "将 Pixiv 作品导入你的 Kura Booru 实例",
   "permissions": ["storage"],
   "host_permissions": ["<all_urls>"],
   "background": {

@@ -24,6 +24,7 @@
 ## ✨ 特性
 
 - 🔗 **甩链即存** — Telegram Bot 发链接，自动下载原图 + 元数据；也支持网页端批量导入
+- 🧩 **浏览器扩展** — Pixiv 作品页一键导入按钮，实时显示导入状态
 - 🏷️ **标签体系** — artist / character / copyright / general / meta 五类标签，支持别名
 - 🔍 **标签搜索** — `tag1+tag2` 组合搜索，`-tag2` 排除，`rating:safe` 评级筛选
 - 📄 **分页浏览** — safebooru 风格，URL 可分享，每页 20/40/100 可选
@@ -42,6 +43,13 @@
 3. **初始化数据库** — `docker compose exec backend alembic upgrade head`
 4. **配置 Caddy** — 详见 [部署文档](docs/deployment.md)
 5. **设置 Telegram Webhook** — 详见 [部署文档](docs/deployment.md)
+
+### 浏览器扩展工作流
+
+1. 安装 Chromium 扩展（加载解压包或 CI artifact）
+2. 在扩展设置中填入服务器地址和 API Key
+3. 访问 Pixiv 作品页，点击右下角「导入到 Kura」按钮
+4. 等待处理完成，按钮显示导入结果
 
 ## 📚 文档
 

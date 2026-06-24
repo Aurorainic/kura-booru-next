@@ -1,4 +1,4 @@
-// Kura Booru Importer — popup settings
+// Kura Booru 导入助手 — popup settings
 
 document.addEventListener("DOMContentLoaded", function () {
   var serverUrlInput = document.getElementById("server-url");
@@ -17,7 +17,7 @@ document.addEventListener("DOMContentLoaded", function () {
     var apiKey = apiKeyInput.value.trim();
 
     chrome.storage.sync.set({ serverUrl: serverUrl, apiKey: apiKey }, function () {
-      statusDiv.textContent = "Saved!";
+      statusDiv.textContent = "已保存！";
       statusDiv.className = "success";
       setTimeout(function () {
         statusDiv.textContent = "";
