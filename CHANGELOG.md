@@ -2,6 +2,35 @@
 
 本文件记录项目的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.6.0] - 2026-06-26
+
+### 新增
+- **站点设置系统** — DB 驱动的 key-value 配置，替代部分 `.env` 硬编码。管理后台 UI 直接修改，无需编辑文件重启容器。
+  - `Setting` 模型 — `settings` 表（key PK + value + updated_at），Alembic 迁移 007
+  - `GET /api/settings/` — 管理员读取全部设置（含基础设施 URL）
+  - `PUT /api/settings/` — 管理员批量更新设置
+  - `GET /api/settings/public` — 公开端点，仅返回非敏感设置（site_title / site_description / announcement / head_inject / maintenance_mode）
+  - `POST /api/settings/test-pg` — 临时引擎测试 PG 连通性（管理员）
+  - `POST /api/settings/test-redis` — 临时客户端测试 Redis 连通性（管理员）
+  - Redis 缓存 — 单 hash key `kura:settings`，300s TTL，更新时刷新
+  - 启动时从环境变量 seed — `INSERT ... ON CONFLICT DO NOTHING`，不覆盖已有值
+- **站点标题 / 描述可配置** — 从 `siteSettings` 读取，替代硬编码 `"Kura Booru"` / `"个人动漫插画收藏与展示平台"`。导航栏标题自动拆分（首词 gradient + 其余 muted）。
+- **公告横幅** — 顶部细横幅（32px），紧贴导航栏下方。每行一条公告，多行时每 5s 上下滑动切换；单行超宽时以 28px/s 缓慢横向滚动。支持内联 Markdown（加粗/斜体/代码/链接）。可手动关闭，sessionStorage 记忆已关闭状态（导航不重复弹出）。替代原右上角 Toast。
+- **维护模式** — 管理后台设置页新增「调试 / 维护」开关。开启后非管理员访问任何页面被 302 重定向到 `/maintenance` 维护提示页；管理员凭 session cookie 绕过，可正常访问全站关闭维护。中间件手动构造重定向响应并附 `Cache-Control: private, no-store`，防止 CDN 缓存导致用户卡死。设置缓存失败时 back off 整个 TTL 并保留 stale 数据，避免 hammer 死掉的后端。
+- **Head 注入** — 管理后台可注入分析脚本等 HTML 到 `<head>`，用于接入 Umami 等访问追踪。
+- **管理后台标签页整合** — 原 `/admin/posts`、`/admin/tags`、`/admin/auto-rating`、`/admin/settings`、`/admin/password`、`/admin/import` 六个独立页面整合为单页 `/admin` + 子标签页（URL `?tab=` 驱动，支持浏览器前进/后退）。旧路径 301 重定向到对应标签。
+- **主题色选择器** (`AccentPicker.tsx`) — 导航栏新增调色板按钮，拖动色相滑块实时改变全站 accent 色。Cookie + localStorage 双写持久化，SSR 读 Cookie 在首帧即设置 CSS 变量，消除 anti-flash。
+- **每页数量 Cookie 持久化** — `per_page` 偏好从 localStorage 迁移到 Cookie，SSR 可读，首次加载即应用偏好，消除原客户端 `window.location.replace` 重定向闪烁。
+- **前端中间件设置缓存** — 30s 进程内缓存 `GET /api/settings/public`，避免每请求打后端。
+
+### 变更
+- **Docker 镜像标签** — 升级为 `v0.6.0`。
+- **BaseLayout** — 标题/描述/footer 从 `siteSettings` 动态读取；公告改为顶部横幅；管理员菜单新增"站点设置"链接（桌面 + 移动端）；accent hue 从 Cookie 读取并在 `<html>` 上设置 CSS 变量。
+- **前端中间件** — 新增 `context.locals.siteSettings`，30s 进程内缓存；新增维护模式重定向逻辑（非管理员拦截，带 `Cache-Control`）。
+- **`env.d.ts`** — `Astro.locals` 新增 `siteSettings` 类型声明（含 `maintenance_mode`）。
+- **通用标签颜色** — `.tag-general` / 标签分类背景色不再跟随全站 accent hue，改回固定青绿色 `oklch(72% 0.12 175)`，与 `--color-tag-general` 定义一致。
+- **`docs/operations.md`** — 移除 Huawei SWR 专用推送说明（`--provenance=false --sbom=false`），构建示例版本号更新。
+
 ## [0.5.0] - 2026-06-24 — 已发布
 
 ### 新增

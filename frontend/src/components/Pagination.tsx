@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -9,6 +9,7 @@ interface PaginationProps {
 }
 
 const PER_PAGE_OPTIONS = [20, 40, 100] as const;
+const PER_PAGE_COOKIE_KEY = "kura-per-page";
 
 function getPageRange(current: number, total: number): (number | "...")[] {
   if (total <= 7) {
@@ -46,7 +47,6 @@ function getPageRange(current: number, total: number): (number | "...")[] {
  */
 function buildUrl(page: number, perPage: number): string {
   if (typeof window === "undefined") {
-    // SSR fallback — won't be rendered as interactive links anyway
     const params = new URLSearchParams();
     if (page > 1) params.set("page", String(page));
     if (perPage !== 40) params.set("per_page", String(perPage));
@@ -56,14 +56,21 @@ function buildUrl(page: number, perPage: number): string {
   const url = new URL(window.location.href);
   url.searchParams.set("page", String(page));
   url.searchParams.set("per_page", String(perPage));
-  // Clean up defaults so URLs stay tidy
   if (page === 1) url.searchParams.delete("page");
-  if (perPage === 40) url.searchParams.delete("per_page");
+  // Note: per_page is always kept in the URL so the persisted cookie
+  // preference stays consistent with what the user explicitly selected.
   return url.pathname + url.search;
 }
 
 export default function Pagination({ currentPage, totalPages, perPage }: PaginationProps) {
   const pages = useMemo(() => getPageRange(currentPage, totalPages), [currentPage, totalPages]);
+
+  // Sync per_page from URL to cookie so SSR can apply the preference
+  // on the next visit (cookie is readable server-side, localStorage is not).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    document.cookie = `${PER_PAGE_COOKIE_KEY}=${perPage}; path=/; max-age=31536000; samesite=lax`;
+  }, [perPage]);
 
   const hasPrev = currentPage > 1;
   const hasNext = currentPage < totalPages;

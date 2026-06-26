@@ -10,6 +10,11 @@
 
 ## 已完成功能
 
+- [x] 站点设置系统（DB 驱动 key-value 配置 + 管理后台 UI）— v0.6.0
+- [x] 公告横幅（顶部细横幅，多行轮播 + 超宽滚动 + Markdown）— v0.6.0
+- [x] 维护模式（非管理员拦截 + 维护提示页）— v0.6.0
+- [x] 主题色选择器（accent hue Cookie 持久化，SSR anti-flash）— v0.6.0
+- [x] 管理后台标签页整合（单页 + 子标签）— v0.6.0
 - [x] Chromium 浏览器扩展（Pixiv 作品页一键导入）— v0.5.0
 - [x] 密码修改后 Session 失效（`password_changed_at` + Redis 缓存）— v0.5.0
 

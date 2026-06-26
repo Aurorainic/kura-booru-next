@@ -32,12 +32,13 @@ _SETTING_DEFAULTS: dict[str, str] = {
     "site_description": "个人动漫插画收藏与展示平台",
     "announcement": "",
     "head_inject": "",
+    "maintenance_mode": "false",  # "true" | "false"
     "database_url": "",  # filled from env at seed time
     "redis_url": "",  # filled from env at seed time
 }
 
 # Keys that are safe to expose publicly (no infrastructure secrets)
-_PUBLIC_KEYS = {"site_title", "site_description", "announcement", "head_inject"}
+_PUBLIC_KEYS = {"site_title", "site_description", "announcement", "head_inject", "maintenance_mode"}
 
 
 async def get_all_settings(db: AsyncSession) -> dict[str, str]:

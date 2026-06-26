@@ -120,12 +120,14 @@ kura-booru-next/
 │   │   │   ├── search.py         #   GET /api/search?q=tag1+tag2+rating:safe
 │   │   │   ├── tasks.py          #   POST /api/tasks/ (X-Api-Key), POST /api/tasks/web-import (admin session), GET /api/tasks/web-import/stream (SSE)
 │   │   │   ├── auto_rating_rules.py # GET/POST/DELETE /api/auto-rating-rules (admin only)
+│   │   │   ├── settings.py          # GET/PUT /api/settings, GET /public, POST /test-pg|test-redis
 │   │   │   ├── constants.py      #   Shared API constants (ALLOWED_PER_PAGE, clamp_per_page)
 │   │   │   └── webhook.py         #   POST /api/rebuild/ (X-Api-Key required)
 │   │   ├── auth.py               # Admin auth (signed cookie, bcrypt verify, DB lookup, auto-create default admin)
 │   │   ├── models/               # SQLAlchemy models
 │   │   │   ├── admin.py           #   Admin model (username, password_hash)
 │   │   │   ├── auto_rating_rule.py #  AutoRatingRule model (tag_name → target_rating)
+│   │   │   ├── setting.py            #   Setting model (key-value site config)
 │   │   │   ├── post.py            #   Post model (with Rating enum)
 │   │   │   ├── tag.py            #   Tag model (TagCategory enum, danbooru_name, translation, ai_processed_at)
 │   │   │   ├── tag_knowledge.py  #   TagKnowledge model (AI tag knowledge cache)
@@ -136,6 +138,7 @@ kura-booru-next/
 │   │   │   └── tag.py            #   TagRead, TagListRead, TagKnowledgeRead
 │   │   ├── services/             # Business logic
 │   │   │   ├── s3.py             #   S3 storage (upload, delete, presigned URL, verify)
+│   │   │   ├── settings.py      #   Site settings (Redis-cached key-value, connectivity tests, env seed)
 │   │   │   ├── pipeline.py       #   Image processing pipeline (HEAD check → download → phash → thumb → S3)
 │   │   │   ├── phash.py          #   Perceptual hash with prefix-bucket indexing
 │   │   │   ├── ai_tag.py         #   AI tag processing (OpenAI-compatible API, 5-category classification)
@@ -152,7 +155,7 @@ kura-booru-next/
 │   │       ├── worker.py          #   Worker settings + enqueue helper
 │   │       └── process_image.py   #   Main task: resolve → extract → pipeline → DB
 │   ├── alembic/                  # Database migrations
-│   │   └── versions/             #   001_initial, 002_add_rating, 003_add_admin, 004_add_auto_rating_rules, 005_ai_tag
+│   │   └── versions/             #   001_initial, 002_add_rating, 003_add_admin, 004_add_auto_rating_rules, 005_ai_tag, 006_password_changed_at, 007_add_settings
 │   ├── requirements.txt
 │   └── Dockerfile                # Multi-stage (dev + builder + runner)
 ├── bot/              # aiogram 3 Telegram bot
@@ -186,33 +189,32 @@ kura-booru-next/
 │   ├── src/
 │   │   ├── components/    # React Islands
 │   │   │   ├── ThemeToggle.tsx  # 3-state dark/light/auto toggle
-│   │   │   ├── Pagination.tsx  # Page nav + per-page selector (20/40/100)
+│   │   │   ├── AccentPicker.tsx # Accent hue picker (Cookie+localStorage, SSR-anti-flash)
+│   │   │   ├── Pagination.tsx  # Page nav + per-page selector (20/40/100, Cookie-persisted)
 │   │   │   ├── PhotoAlbum.astro# Masonry grid (rating badges for admin)
 │   │   │   ├── TagBadge.astro  # Tag with category-colored dot
 │   │   │   └── SearchBar.tsx   # Tag autocomplete search
 │   │   ├── layouts/
-│   │   │   └── BaseLayout.astro # Nav + auth controls + theme + footer
-│   │   ├── middleware.ts   # SSR cookie forwarding + admin session resolution
+│   │   │   └── BaseLayout.astro # Nav + auth controls + theme + accent + announcement banner + footer
+│   │   ├── middleware.ts   # SSR cookie forwarding + admin session resolution + settings cache + maintenance mode redirect
 │   │   ├── pages/
 │   │   │   ├── index.astro      # Home (masonry + pagination + rating filter)
 │   │   │   ├── logout.ts        # SSR logout endpoint (POST → redirect)
 │   │   │   ├── 404.astro        # 404 page
+│   │   │   ├── maintenance.astro # Maintenance mode notice (shown to non-admins when enabled)
 │   │   │   ├── login.astro      # Admin login form
 │   │   │   ├── posts/[id].astro # Detail (Danbooru tag sidebar + rating badge + edit)
 │   │   │   ├── tags/index.astro # Tag cloud + table
 │   │   │   ├── tags/[name].astro# Tag detail (filtered posts)
 │   │   │   ├── search.astro     # Search results (+ rating:safe syntax)
 │   │   │   └── admin/
-│   │   │       ├── posts.astro      # Admin post management
-│   │   │       ├── tags.astro       # Admin tag management (list/edit/merge/AI reprocess)
-│   │   │       ├── auto-rating.astro # Auto-rating rules
-│   │   │       ├── import.astro      # Batch URL import
-│   │   │       └── password.astro    # Change password
-│   │   ├── lib/
-│   │   │   ├── api.ts          # Typed API client + pagination + auto-rating + import helpers
-│   │   │   └── utils.ts        # cn() utility
-│   │   └── styles/
-│   │       └── globals.css     # Tailwind v4 + theme tokens
+│   │   │       ├── index.astro      # Single-page admin panel (sub-tabs: posts/tags/auto-rating/settings/password)
+│   │   │       ├── posts.astro      # 301 redirect → /admin?tab=posts
+│   │   │       ├── tags.astro       # 301 redirect → /admin?tab=tags
+│   │   │       ├── auto-rating.astro # 301 redirect → /admin?tab=auto-rating
+│   │   │       ├── import.astro      # Batch URL import (standalone page)
+│   │   │       ├── settings.astro    # 301 redirect → /admin?tab=settings
+│   │   │       └── password.astro    # 301 redirect → /admin?tab=password
 │   ├── astro.config.mjs
 │   ├── tsconfig.json
 │   ├── package.json
@@ -300,6 +302,16 @@ kura-booru-next/
 | target_rating | Enum | Target rating (questionable/explicit) |
 | created_at | DateTime | Creation time |
 
+### Setting
+
+| Field | Type | Description |
+|---|---|---|
+| key | String (PK) | Setting identifier (e.g. site_title, database_url) |
+| value | Text | Setting value (string, empty string default) |
+| updated_at | DateTime(tz) | Last update timestamp (auto-set on change) |
+
+Known keys: `site_title`, `site_description`, `announcement`, `head_inject`, `maintenance_mode` (public); `database_url`, `redis_url` (admin-only infrastructure).
+
 ### Admin
 
 | Field | Type | Description |
@@ -339,6 +351,11 @@ kura-booru-next/
 | GET | `/api/auto-rating-rules` | List auto-rating rules (admin only) |
 | POST | `/api/auto-rating-rules` | Create auto-rating rule (admin only) |
 | DELETE | `/api/auto-rating-rules/{id}` | Delete auto-rating rule (admin only) |
+| GET | `/api/settings/` | List all settings (admin only) |
+| PUT | `/api/settings/` | Batch update settings (admin only) |
+| GET | `/api/settings/public` | Public settings (no auth; site_title, description, announcement, head_inject, maintenance_mode) |
+| POST | `/api/settings/test-pg` | Test PostgreSQL connectivity (admin only) |
+| POST | `/api/settings/test-redis` | Test Redis connectivity (admin only) |
 | POST | `/api/rebuild/` | Purge Caddy cache (requires X-Api-Key) |
 | POST | `/api/auth/login` | Admin login (username + password → set cookie) |
 | POST | `/api/auth/logout` | Admin logout (clear cookie) |

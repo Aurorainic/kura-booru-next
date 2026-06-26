@@ -27,44 +27,13 @@ Or manually per service:
 
 ```bash
 # Backend (API + Worker share this image)
-docker build --provenance=false --sbom=false -t kura-booru-next-backend:v0.4.1 -t kura-booru-next-backend:latest ./backend
+docker build -t kura-booru-next-backend:v0.4.1 -t kura-booru-next-backend:latest ./backend
 
 # Bot (aiogram 3, webhook mode)
-docker build --provenance=false --sbom=false -t kura-booru-next-bot:v0.4.1 -t kura-booru-next-bot:latest ./bot
+docker build -t kura-booru-next-bot:v0.4.1 -t kura-booru-next-bot:latest ./bot
 
 # Frontend (Astro SSR, Node.js runtime)
-docker build --provenance=false --sbom=false -t kura-booru-next-frontend:v0.4.1 -t kura-booru-next-frontend:latest ./frontend
-```
-
-> **Note**: `--provenance=false --sbom=false` is required for Huawei SWR, which does not support Docker BuildKit attestation manifests.
-
-### Registry Login & Push (SWR)
-
-```bash
-docker login swr.cn-east-3.myhuaweicloud.com
-```
-
-```bash
-VERSION=v0.4.1
-REGISTRY="swr.cn-east-3.myhuaweicloud.com/lainsaka"
-
-# Backend
-docker tag kura-booru-next-backend:${VERSION} ${REGISTRY}/kura-booru-next-backend:${VERSION}
-docker tag kura-booru-next-backend:latest ${REGISTRY}/kura-booru-next-backend:latest
-docker push ${REGISTRY}/kura-booru-next-backend:${VERSION}
-docker push ${REGISTRY}/kura-booru-next-backend:latest
-
-# Bot
-docker tag kura-booru-next-bot:${VERSION} ${REGISTRY}/kura-booru-next-bot:${VERSION}
-docker tag kura-booru-next-bot:latest ${REGISTRY}/kura-booru-next-bot:latest
-docker push ${REGISTRY}/kura-booru-next-bot:${VERSION}
-docker push ${REGISTRY}/kura-booru-next-bot:latest
-
-# Frontend
-docker tag kura-booru-next-frontend:${VERSION} ${REGISTRY}/kura-booru-next-frontend:${VERSION}
-docker tag kura-booru-next-frontend:latest ${REGISTRY}/kura-booru-next-frontend:latest
-docker push ${REGISTRY}/kura-booru-next-frontend:${VERSION}
-docker push ${REGISTRY}/kura-booru-next-frontend:latest
+docker build -t kura-booru-next-frontend:v0.4.1 -t kura-booru-next-frontend:latest ./frontend
 ```
 
 ### Local Test Run
@@ -177,7 +146,7 @@ Docker builds in China require mirror overrides due to network restrictions:
   ```
 - **`pip install`** needs `-i https://mirrors.aliyun.com/pypi/simple/` for PyPI in China
 - **`npm ci`** needs `npm config set registry https://registry.npmmirror.com` for npmmirror
-- **Huawei SWR** does NOT support Docker BuildKit attestation manifests. Use `--provenance=false --sbom=false` or `DOCKER_BUILDKIT=0`
+
 
 ### Docker Compose Notes
 

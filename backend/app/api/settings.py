@@ -56,6 +56,7 @@ class PublicSettingsResponse(BaseModel):
     site_description: str
     announcement: str
     head_inject: str
+    maintenance_mode: str
 
 
 # ── Endpoints ────────────────────────────────────────────────────────
@@ -131,6 +132,7 @@ async def public_settings(
         site_description=all_settings.get("site_description", "个人动漫插画收藏与展示平台"),
         announcement=all_settings.get("announcement", ""),
         head_inject=all_settings.get("head_inject", ""),
+        maintenance_mode=all_settings.get("maintenance_mode", "false"),
     )
 
 

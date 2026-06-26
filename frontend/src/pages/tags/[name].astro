@@ -9,7 +9,16 @@ const ssrCookie = Astro.locals.ssrCookie;
 const isAdmin = Astro.locals.isAdmin ?? false;
 
 const page = Math.max(1, parseInt(Astro.url.searchParams.get("page") || "1"));
-const perPage = clampPerPage(parseInt(Astro.url.searchParams.get("per_page") || "40"));
+// per_page: URL param wins; otherwise fall back to the persisted cookie preference
+const perPageParam = Astro.url.searchParams.get("per_page");
+let perPage: number;
+if (perPageParam) {
+  perPage = clampPerPage(parseInt(perPageParam));
+} else {
+  const ppCookie = Astro.cookies.get("kura-per-page")?.value;
+  const parsed = ppCookie ? clampPerPage(parseInt(ppCookie)) : NaN;
+  perPage = isNaN(parsed) ? 40 : parsed;
+}
 
 // Search for posts with this tag
 let data;

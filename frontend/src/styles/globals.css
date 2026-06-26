@@ -63,6 +63,10 @@
 
 /* === CSS Custom Properties for Runtime Theme === */
 :root {
+  /* Accent hue — change this to recolor the entire accent system */
+  --accent-hue: 175;
+  --accent-hue-end: 200;
+
   --bg-primary: var(--color-light-bg);
   --bg-surface: var(--color-light-surface);
   --bg-alt: var(--color-light-surface-alt);
@@ -70,13 +74,16 @@
   --border-hover: var(--color-light-border-hover);
   --text-primary: var(--color-light-text);
   --text-muted: var(--color-light-muted);
-  --accent-color: var(--color-accent);
-  --accent-hover: var(--color-accent-hover);
-  --accent-subtle: var(--color-accent-subtle);
-  --accent-gradient: linear-gradient(135deg, oklch(72% 0.12 175), oklch(78% 0.1 200));
+  --accent-color: oklch(72% 0.12 var(--accent-hue));
+  --accent-hover: oklch(65% 0.14 var(--accent-hue));
+  --accent-subtle: oklch(95% 0.03 var(--accent-hue));
+  --accent-gradient: linear-gradient(135deg, oklch(72% 0.12 var(--accent-hue)), oklch(78% 0.1 var(--accent-hue-end)));
   --shadow-card: 0 1px 2px oklch(0% 0 0 / 0.04), 0 1px 3px oklch(0% 0 0 / 0.02);
-  --shadow-card-hover: 0 8px 24px oklch(72% 0.12 175 / 0.08), 0 2px 8px oklch(0% 0 0 / 0.04);
+  --shadow-card-hover: 0 8px 24px oklch(72% 0.12 var(--accent-hue) / 0.08), 0 2px 8px oklch(0% 0 0 / 0.04);
+  --shadow-accent-glow: 0 4px 16px oklch(72% 0.12 var(--accent-hue) / 0.08);
 }
+
+/* Accent hue set directly via JS on :root — no preset selectors needed */
 
 .dark {
   --bg-primary: var(--color-dark-bg);
@@ -86,11 +93,12 @@
   --border-hover: var(--color-dark-border-hover);
   --text-primary: var(--color-dark-text);
   --text-muted: var(--color-dark-muted);
-  --accent-color: var(--color-accent);
-  --accent-hover: oklch(78% 0.14 175);
-  --accent-subtle: var(--color-accent-subtle-dark);
+  --accent-color: oklch(72% 0.12 var(--accent-hue));
+  --accent-hover: oklch(78% 0.14 var(--accent-hue));
+  --accent-subtle: oklch(22% 0.04 var(--accent-hue));
   --shadow-card: 0 1px 2px oklch(0% 0 0 / 0.2), 0 1px 3px oklch(0% 0 0 / 0.15);
-  --shadow-card-hover: 0 8px 24px oklch(72% 0.12 175 / 0.12), 0 2px 8px oklch(0% 0 0 / 0.2);
+  --shadow-card-hover: 0 8px 24px oklch(72% 0.12 var(--accent-hue) / 0.12), 0 2px 8px oklch(0% 0 0 / 0.2);
+  --shadow-accent-glow: 0 4px 16px oklch(72% 0.12 var(--accent-hue) / 0.12);
 }
 
 /* === Base Styles === */
@@ -313,11 +321,11 @@ body:is(.dark *)::before {
 
 .masonry-item:hover {
   transform: translateY(-3px);
-  box-shadow: 0 8px 24px oklch(72% 0.12 175 / 0.08), 0 2px 8px oklch(0% 0 0 / 0.06);
+  box-shadow: 0 8px 24px oklch(72% 0.12 var(--accent-hue) / 0.08), 0 2px 8px oklch(0% 0 0 / 0.06);
 }
 
 .dark .masonry-item:hover {
-  box-shadow: 0 8px 24px oklch(72% 0.12 175 / 0.12), 0 2px 8px oklch(0% 0 0 / 0.2);
+  box-shadow: 0 8px 24px oklch(72% 0.12 var(--accent-hue) / 0.12), 0 2px 8px oklch(0% 0 0 / 0.2);
 }
 
 .masonry-item img {

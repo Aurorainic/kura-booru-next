@@ -13,6 +13,7 @@ declare namespace App {
       site_description: string;
       announcement: string;
       head_inject: string;
+      maintenance_mode: string;
     };
   }
 }
