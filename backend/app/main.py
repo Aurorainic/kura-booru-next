@@ -18,11 +18,13 @@ async def lifespan(app: FastAPI):
         logging.warning("SECRET_KEY is not set — using insecure default")
     await create_tables()
     setup_gallery_dl_config()
-    # Ensure a default admin exists on first startup
+    # Ensure a default admin exists on first startup, then seed settings from env
     from app.auth import ensure_default_admin
     from app.database import async_session_factory
+    from app.services.settings import seed_settings_from_env
     async with async_session_factory() as db:
         await ensure_default_admin(db)
+        await seed_settings_from_env(db)
     yield
     # Shutdown
     from app.auth import _redis_client

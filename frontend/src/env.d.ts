@@ -7,5 +7,12 @@ declare namespace App {
     isAdmin: boolean;
     /** The raw Cookie header forwarded from the browser request (SSR only). */
     ssrCookie?: string;
+    /** Public site settings (non-sensitive, cached in middleware). */
+    siteSettings?: {
+      site_title: string;
+      site_description: string;
+      announcement: string;
+      head_inject: string;
+    };
   }
 }

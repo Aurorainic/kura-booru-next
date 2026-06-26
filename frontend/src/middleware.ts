@@ -12,9 +12,18 @@ import type { MiddlewareResponseHandler } from "astro";
  * 2. Calls GET /api/auth/status to determine whether the current visitor is an
  *    admin, then stores the result in Astro.locals.isAdmin so that every page can
  *    read it without an extra API call.
+ *
+ * 3. Calls GET /api/settings/public to fetch non-sensitive site settings
+ *    (title, description, announcement, head_inject) with a 30s in-process
+ *    cache to avoid hitting the backend on every request.
  */
 
 const ADMIN_SESSION_COOKIE = "kura_admin_session";
+
+// In-process cache for public settings — 30s TTL
+// Redis is fast but there's no need to make a network round-trip on every SSR request
+let _settingsCache: { data: { site_title: string; site_description: string; announcement: string; head_inject: string } | null; at: number } = { data: null, at: 0 };
+const SETTINGS_CACHE_TTL = 30000;
 
 export const onRequest: MiddlewareResponseHandler = async (context, next) => {
   const request = context.request;
@@ -51,6 +60,24 @@ export const onRequest: MiddlewareResponseHandler = async (context, next) => {
   }
 
   context.locals.isAdmin = isAdmin;
+
+  // ── 3. Fetch public site settings (with in-process cache) ───────────────
+  const now = Date.now();
+  if (!_settingsCache.data || now - _settingsCache.at > SETTINGS_CACHE_TTL) {
+    try {
+      const backendUrl =
+        import.meta.env.INTERNAL_API_URL || "http://backend:8000/api";
+      const resp = await fetch(`${backendUrl}/settings/public`, {
+        headers: { Accept: "application/json" },
+      });
+      if (resp.ok) {
+        _settingsCache = { data: await resp.json(), at: now };
+      }
+    } catch {
+      // Backend unreachable — keep stale cache or leave null
+    }
+  }
+  context.locals.siteSettings = _settingsCache.data || undefined;
 
   const response = await next();
 
