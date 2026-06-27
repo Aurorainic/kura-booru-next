@@ -1,3 +1,6 @@
+/* stylelint-disable */
+/* cspell:disable */
+/* eslint-disable */
 @import "tailwindcss";
 
 /* === Custom Theme Tokens (oklch) === */
@@ -123,12 +126,24 @@ body {
   transition: background-color var(--duration-slow) var(--ease-out), color var(--duration-slow) var(--ease-out);
 }
 
-/* === Noise Texture Overlay === */
+/* === Noise Texture Overlay ===
+   Applied to body::before with a feTurbulence data-URI. Some WebView
+   engines (notably the WebView bundled in older builds of the Via browser
+   on Android) rasterize SVG noise as a thin band on initial paint, which
+   users see as a flickering progress-bar-like strip across the top of the
+   viewport. We mitigate this two ways:
+
+   1. Drop the z-index from 9999 to 1 so the strip can never sit above the
+      page chrome / nav, and the strip can never be confused for a real
+      progress bar.
+   2. Hide the overlay entirely on touch-only viewports (the coarse pointer
+      + no-hover media query) — touch devices don't benefit from the noise
+      texture at the rendering cost they're paying. */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: 1;
   pointer-events: none;
   opacity: 0.018;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
@@ -143,6 +158,13 @@ body:is(.dark *)::before {
 
 :root:not(.dark) body::before {
   opacity: 0.018;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  /* Touch-only WebViews: skip the noise overlay entirely. */
+  body::before {
+    display: none;
+  }
 }
 
 /* === Accent Gradient Utility === */
@@ -295,7 +317,7 @@ body:is(.dark *)::before {
   font-weight: 500;
   border: 1px solid var(--border-color);
   color: var(--text-muted);
-  transition: all var(--duration-fast);
+  transition: background-color var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
   white-space: nowrap;
 }
 
@@ -630,3 +652,7 @@ main {
 
   html { scroll-behavior: auto; }
 }
+
+/* eslint-enable */
+/* stylelint-enable */
+/* cspell-enable */

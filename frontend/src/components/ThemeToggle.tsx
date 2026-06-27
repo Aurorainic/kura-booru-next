@@ -78,7 +78,7 @@ export default function ThemeToggle() {
       className={cn(
         "relative flex items-center justify-center",
         "w-9 h-9 rounded-[var(--radius-sm)]",
-        "transition-all duration-[var(--duration-fast)]",
+        "transition-[background-color,transform,box-shadow] duration-[var(--duration-fast)]",
         "hover:bg-[var(--accent-subtle)]",
         "focus-visible:ring-2 focus-visible:ring-[var(--accent-color)] focus-visible:ring-offset-2",
         "active:scale-[0.85]",
@@ -89,7 +89,7 @@ export default function ThemeToggle() {
     >
       <Icon
         className={cn(
-          "w-[18px] h-[18px] transition-all duration-[var(--duration-normal)]",
+          "w-[18px] h-[18px] transition-[color,transform,opacity] duration-[var(--duration-normal)]",
           "text-[var(--text-muted)] group-hover:text-[var(--text-primary)] group-hover:scale-110",
           spinning && "animate-spin"
         )}

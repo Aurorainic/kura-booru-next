@@ -40,15 +40,26 @@ async def _cache_control_dispatch(request: Request, call_next):
     - Anonymous: public, s-maxage=60 (cacheable by shared caches for 60s)
     - Admin: private, no-store (never cache)
     - Preserves existing Cache-Control (e.g. SSE endpoint sets its own)
+
+    Exception: GET /api/posts/random — anonymous callers only ever see safe
+    posts, so the response is highly cacheable. We bump the public TTL to
+    s-maxage=10 there because repeated refreshes on the /random page don't
+    need every request to hit the backend.
     """
     from app.auth import SESSION_COOKIE_NAME, verify_session
 
     response = await call_next(request)
 
     if request.url.path.startswith("/api/") and not response.headers.get("cache-control"):
+        path = request.url.path
         token = request.cookies.get(SESSION_COOKIE_NAME)
-        if verify_session(token) is not None:
+        is_admin = verify_session(token) is not None
+
+        if is_admin:
             response.headers["Cache-Control"] = "private, no-store"
+        elif path == "/api/posts/random":
+            # Anonymous random — safe pool only, cacheable aggressively.
+            response.headers["Cache-Control"] = "public, s-maxage=10, max-age=5"
         else:
             response.headers["Cache-Control"] = "public, s-maxage=60, max-age=30"
 

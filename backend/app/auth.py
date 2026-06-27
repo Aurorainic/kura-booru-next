@@ -22,6 +22,7 @@ Two auth dependency levels:
 from __future__ import annotations
 
 import hmac
+import hashlib
 import logging
 import secrets
 import time
@@ -118,6 +119,20 @@ def clear_session_cookie(response) -> None:
 _redis_client: aioredis.Redis | None = None
 _EPOCH_CACHE_TTL = 60  # seconds
 
+# In-process LRU for get_is_admin.
+# Avoids hitting Redis (and possibly the DB) on every request — only the very
+# first anonymous request after a worker boots pays the cost, then we reuse
+# the resolved truth value until the TTL expires.
+#
+# Layout: list[ [expires_at_monotonic, (token_hash, is_admin)], ... ]
+# We key on a hash of the session token (the raw cookie value never leaves the
+# process), so cookies of different admins don't collide and a tampered token
+# gets its own entry. Eviction is by linear scan because the working set is
+# tiny (one entry per active admin × workers).
+_is_admin_cache: list[list] = []
+_IS_ADMIN_CACHE_TTL = 30.0  # seconds
+_IS_ADMIN_CACHE_MAX = 256
+
 
 async def _get_redis() -> aioredis.Redis:
     global _redis_client
@@ -166,33 +181,81 @@ async def invalidate_password_epoch_cache(admin_id: str) -> None:
         await redis.delete(f"kura:admin_password_epoch:{admin_id}")
     except Exception:
         pass  # Cache miss is fine — next lookup will repopulate
+    # Also drop any cached get_is_admin decisions so the very next request
+    # re-resolves against the new epoch.
+    _is_admin_cache.clear()
 
 
 # ── Lightweight auth dependency (cookie-only, no DB lookup) ─────────────
+
+def _cache_get(token_hash: str) -> Optional[bool]:
+    now = time.monotonic()
+    for entry in _is_admin_cache:
+        if entry[1] is not None and entry[1][0] == token_hash:
+            if entry[0] > now:
+                return entry[1][1]
+            # Expired — drop it.
+            _is_admin_cache.remove(entry)
+            return None
+    return None
+
+
+def _cache_put(token_hash: str, is_admin: bool) -> None:
+    now = time.monotonic()
+    # Evict expired entries first.
+    expired = [e for e in _is_admin_cache if e[0] <= now]
+    for e in expired:
+        _is_admin_cache.remove(e)
+    # If still over capacity, drop the oldest (FIFO — simplest, fine here).
+    while len(_is_admin_cache) >= _IS_ADMIN_CACHE_MAX:
+        _is_admin_cache.pop(0)
+    _is_admin_cache.append([now + _IS_ADMIN_CACHE_TTL, (token_hash, is_admin)])
+
 
 async def get_is_admin(request: Request) -> bool:
     """FastAPI dependency: return True if the request carries a valid admin
     session cookie. Checks signature and password epoch — if the admin has
     changed their password since this session was created, the session is
     rejected.
+
+    A short in-process LRU caches the (token_hash -> is_admin) decision so
+    repeat requests within a few seconds skip Redis entirely. The TTL is
+    short enough that password rotations propagate within at most
+    _IS_ADMIN_CACHE_TTL seconds per worker.
     """
     token = request.cookies.get(SESSION_COOKIE_NAME)
+    if not token:
+        return False
+
+    # Anonymous traffic is the common case — skip the cache key work entirely.
+    # The cookie value also doubles as our cache key so we only ever hash real
+    # session tokens.
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    cached = _cache_get(token_hash)
+    if cached is not None:
+        return cached
+
     admin_id = verify_session(token)
     if admin_id is None:
+        _cache_put(token_hash, False)
         return False
 
     # Check if session was created before the last password change
     epoch = await _get_password_epoch(admin_id)
     if epoch is None:
+        _cache_put(token_hash, True)
         return True  # Admin never changed password (grandfathered)
 
     try:
         payload = _serializer().loads(token, max_age=settings.ADMIN_SESSION_MAX_AGE)
         iat = payload.get("iat", 0)
     except (BadSignature, SignatureExpired):
+        _cache_put(token_hash, False)
         return False
 
-    return iat >= epoch
+    is_admin = iat >= epoch
+    _cache_put(token_hash, is_admin)
+    return is_admin
 
 
 # ── Heavy auth dependency (cookie + DB lookup) ──────────────────────────

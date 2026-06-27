@@ -94,7 +94,7 @@ export default function Pagination({ currentPage, totalPages, perPage }: Paginat
             className={cn(
               "flex items-center justify-center w-10 h-10 rounded-[var(--radius-sm)]",
               "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-              "hover:bg-[var(--accent-subtle)] transition-all duration-[var(--duration-fast)]",
+              "hover:bg-[var(--accent-subtle)] transition-[background-color,color,transform] duration-[var(--duration-fast)]",
               "active:scale-[0.92]"
             )}
             aria-label="上一页"
@@ -122,7 +122,7 @@ export default function Pagination({ currentPage, totalPages, perPage }: Paginat
               href={buildUrl(page, perPage)}
               className={cn(
                 "flex items-center justify-center w-10 h-10 rounded-[var(--radius-sm)] text-sm font-medium",
-                "transition-all duration-[var(--duration-fast)]",
+                "transition-[background-color,color,transform] duration-[var(--duration-fast)]",
                 page === currentPage
                   ? "bg-[var(--accent-color)] text-[var(--bg-primary)] font-bold"
                   : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)]"
@@ -142,7 +142,7 @@ export default function Pagination({ currentPage, totalPages, perPage }: Paginat
             className={cn(
               "flex items-center justify-center w-10 h-10 rounded-[var(--radius-sm)]",
               "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
-              "hover:bg-[var(--accent-subtle)] transition-all duration-[var(--duration-fast)]",
+              "hover:bg-[var(--accent-subtle)] transition-[background-color,color,transform] duration-[var(--duration-fast)]",
               "active:scale-[0.92]"
             )}
             aria-label="下一页"
@@ -171,7 +171,7 @@ function PerPageSelector({ perPage }: { perPage: number }) {
           key={option}
           href={buildUrl(1, option)}
           className={cn(
-            "px-3 py-2 rounded-[var(--radius-sm)] transition-all duration-[var(--duration-fast)]",
+            "px-3 py-2 rounded-[var(--radius-sm)] transition-[background-color,color] duration-[var(--duration-fast)]",
             option === perPage
               ? "bg-[var(--accent-color)] text-[var(--bg-primary)] font-bold"
               : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)]"

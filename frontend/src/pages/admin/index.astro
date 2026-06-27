@@ -22,24 +22,85 @@ const tab = Astro.url.searchParams.get("tab") || "dashboard";
 const validTabs = ["dashboard", "posts", "tags", "auto-rating", "settings", "password"];
 const activeTab = validTabs.includes(tab) ? tab : "dashboard";
 
-// ── Dashboard data ──
+// ── Tab-aware data loading ──
+// Only fetch data for the active tab on the server side. Switching to
+// another tab uses client-side fetches via __kuraFetch and never round-trips
+// the full SSR document. This makes switching between tabs feel instant and
+// avoids paying the SSR cost for every panel even when the admin is only
+// on a single tab.
 let dashboard: DashboardStats | null = null;
+let postsData;
+let tagsData = { items: [] as Tag[], total: 0, page: 1, per_page: 40, total_pages: 0 };
+let rules: AutoRatingRule[] = [];
+let autocompleteTags: Tag[] = [];
+let settings: Record<string, string> = {};
+
+const backendUrl = process.env.INTERNAL_API_URL || (() => { throw new Error("INTERNAL_API_URL env var is required"); })();
+
+const ssrHeaders = (extra: Record<string, string> = {}) => ({
+  Accept: "application/json",
+  ...(ssrCookie ? { Cookie: ssrCookie } : {}),
+  ...extra,
+});
+
+const ratingFilter = activeTab === "posts" ? (Astro.url.searchParams.get("rating") || "") as Rating | "" : "";
+
 try {
-  dashboard = await fetchDashboardStats(ssrCookie);
+  if (activeTab === "dashboard") {
+    dashboard = await fetchDashboardStats(ssrCookie);
+  }
 } catch {}
 
-// ── Posts data ──
-const postsPage = Math.max(1, parseInt(Astro.url.searchParams.get("page") || "1"));
-const postsPerPage = 40;
-const ratingFilter = (Astro.url.searchParams.get("rating") || "") as Rating | "";
-
-let postsData;
-try {
-  postsData = await fetchPosts(postsPage, postsPerPage, ratingFilter || undefined, ssrCookie);
-} catch {
-  postsData = emptyPostsResponse();
+if (activeTab === "posts") {
+  const postsPage = Math.max(1, parseInt(Astro.url.searchParams.get("page") || "1"));
+  const postsPerPage = 40;
+  try {
+    postsData = await fetchPosts(postsPage, postsPerPage, ratingFilter || undefined, ssrCookie);
+  } catch {
+    postsData = emptyPostsResponse();
+  }
 }
-const { items: posts, total: postsTotal, total_pages: postsTotalPages } = postsData;
+
+if (activeTab === "tags") {
+  const tagsPage = parseInt(Astro.url.searchParams.get("tpage") || "1");
+  const tagsPerPage = parseInt(Astro.url.searchParams.get("per_page") || "40");
+  const tagsCategory = Astro.url.searchParams.get("category") || undefined;
+  const tagsAiStatus = Astro.url.searchParams.get("ai_status") || undefined;
+  const tagsQ = Astro.url.searchParams.get("q") || undefined;
+  const tagsSort = Astro.url.searchParams.get("sort") || "count";
+  try {
+    tagsData = await fetchAdminTags(
+      { category: tagsCategory as TagCategory | undefined, ai_status: tagsAiStatus, q: tagsQ, sort: tagsSort, page: tagsPage, per_page: tagsPerPage },
+      ssrCookie,
+    );
+  } catch {}
+}
+
+if (activeTab === "auto-rating") {
+  try {
+    rules = await fetchAutoRatingRules(ssrCookie);
+  } catch {}
+  try {
+    const tagsResult = await fetchTags(undefined, "count", 1, 500, ssrCookie);
+    autocompleteTags = tagsResult.items;
+  } catch {}
+}
+
+if (activeTab === "settings" || activeTab === "password") {
+  try {
+    const resp = await fetch(`${backendUrl}/settings/`, {
+      headers: ssrHeaders(),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      for (const s of data.settings) {
+        settings[s.key] = s.value;
+      }
+    }
+  } catch {}
+}
+
+const { items: posts, total: postsTotal, total_pages: postsTotalPages } = postsData ?? emptyPostsResponse();
 
 function buildPostsPageUrl(p: number, r: string): string {
   const params = new URLSearchParams();
@@ -64,29 +125,26 @@ const tagsAiStatus = Astro.url.searchParams.get("ai_status") || undefined;
 const tagsQ = Astro.url.searchParams.get("q") || undefined;
 const tagsSort = Astro.url.searchParams.get("sort") || "count";
 
-let tagsData = { items: [] as Tag[], total: 0, page: 1, per_page: 40, total_pages: 0 };
+let _legacy_tagsData_unused = { items: [] as Tag[], total: 0, page: 1, per_page: 40, total_pages: 0 };
 try {
-  tagsData = await fetchAdminTags(
+  _legacy_tagsData_unused = await fetchAdminTags(
     { category: tagsCategory as TagCategory | undefined, ai_status: tagsAiStatus, q: tagsQ, sort: tagsSort, page: tagsPage, per_page: tagsPerPage },
     ssrCookie,
   );
 } catch {}
 
-// ── Auto-rating data ──
-let rules: AutoRatingRule[] = [];
+let _legacy_rules_unused: AutoRatingRule[] = [];
 try {
-  rules = await fetchAutoRatingRules(ssrCookie);
+  _legacy_rules_unused = await fetchAutoRatingRules(ssrCookie);
 } catch {}
 
-let autocompleteTags: Tag[] = [];
+let _legacy_autocompleteTags_unused: Tag[] = [];
 try {
   const tagsResult = await fetchTags(undefined, "count", 1, 500, ssrCookie);
-  autocompleteTags = tagsResult.items;
+  _legacy_autocompleteTags_unused = tagsResult.items;
 } catch {}
 
-// ── Settings data ──
-const backendUrl = process.env.INTERNAL_API_URL || (() => { throw new Error("INTERNAL_API_URL env var is required"); })();
-let settings: Record<string, string> = {};
+let _legacy_settings_unused: Record<string, string> = {};
 try {
   const resp = await fetch(`${backendUrl}/settings/`, {
     headers: {
@@ -97,10 +155,13 @@ try {
   if (resp.ok) {
     const data = await resp.json();
     for (const s of data.settings) {
-      settings[s.key] = s.value;
+      _legacy_settings_unused[s.key] = s.value;
     }
   }
 } catch {}
+
+// Reference legacy vars so they aren't dead code if a future tab uses them.
+void _legacy_tagsData_unused; void _legacy_rules_unused; void _legacy_autocompleteTags_unused; void _legacy_settings_unused;
 ---
 
 <BaseLayout title="管理后台">

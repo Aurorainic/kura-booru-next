@@ -134,7 +134,7 @@ export default function SearchBar({ initialQuery = "", onSearch, placeholder = "
             "text-[var(--text-primary)] placeholder:text-[var(--text-muted)]",
             "focus:outline-none focus:border-[var(--accent-color)]",
             "focus:shadow-[0_0_0_3px_var(--accent-subtle),var(--shadow-accent-glow)]",
-            "transition-all duration-[var(--duration-normal)]"
+            "transition-[border-color,box-shadow,background-color] duration-[var(--duration-normal)]"
           )}
           aria-label="搜索标签"
           aria-expanded={showSuggestions}
