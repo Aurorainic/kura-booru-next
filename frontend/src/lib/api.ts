@@ -155,6 +155,10 @@ export async function fetchPost(id: string, ssrCookie?: string): Promise<Post> {
   return fetchApi<Post>(`/posts/${id}`, undefined, { ssrCookie });
 }
 
+export async function fetchRandomPost(ssrCookie?: string): Promise<Post> {
+  return fetchApi<Post>("/posts/random", undefined, { ssrCookie });
+}
+
 export async function updatePostRating(id: string, rating: Rating): Promise<Post> {
   return fetchApi<Post>(`/posts/${id}`, undefined, {
     method: "PATCH",
