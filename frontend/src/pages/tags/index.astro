@@ -133,40 +133,65 @@ function getTagCategoryBg(cat: TagCategory): string {
             {sort === "count" ? "热门标签" : "全部标签"}
           </h2>
         </div>
-        <table class="w-full">
-          <thead>
-            <tr class="border-b border-[var(--border-color)]">
-              <th class="text-left px-4 py-3 text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">标签</th>
-              <th class="text-left px-4 py-3 text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">分类</th>
-              <th class="text-right px-4 py-3 text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">数量</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tags.map((tag: any) => (
-              <tr class="border-b border-[var(--border-color)] hover:bg-[var(--accent-subtle)] transition-all duration-[var(--duration-fast)]" style="transition-timing-function: var(--ease-out);">
-                <td class="px-4 py-2">
-                  <a
-                    href={`/tags/${encodeURIComponent(tag.name)}`}
-                    class="text-[var(--text-primary)] hover:text-[var(--accent-color)] transition-colors duration-[var(--duration-fast)] font-medium"
-                  >
-                    {tag.name}
-                  </a>
-                  {tag.translation && (
-                    <span class="text-[0.6875rem] text-[var(--text-muted)] ml-1.5">{tag.translation}</span>
-                  )}
-                </td>
-                <td class="px-4 py-2">
-                  <span class="text-[0.6875rem] px-2 py-0.5 rounded-[var(--radius-sm)]" style={`color: ${getTagCategoryVar(tag.category as TagCategory)}; background: ${getTagCategoryBg(tag.category as TagCategory)};`}>
-                    {getTagCategoryLabel(tag.category as TagCategory)}
-                  </span>
-                </td>
-                <td class="px-4 py-2 text-right text-sm text-[var(--text-muted)] font-mono tabular-nums">
-                  {tag.post_count}
-                </td>
+        {/* Desktop table */}
+        <div class="hidden md:block overflow-x-auto">
+          <table class="w-full">
+            <thead>
+              <tr class="border-b border-[var(--border-color)]">
+                <th class="text-left px-4 py-3 text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">标签</th>
+                <th class="text-left px-4 py-3 text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">分类</th>
+                <th class="text-right px-4 py-3 text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em]">数量</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {tags.map((tag: any) => (
+                <tr class="border-b border-[var(--border-color)] hover:bg-[var(--accent-subtle)] transition-all duration-[var(--duration-fast)]" style="transition-timing-function: var(--ease-out);">
+                  <td class="px-4 py-2">
+                    <a
+                      href={`/tags/${encodeURIComponent(tag.name)}`}
+                      class="text-[var(--text-primary)] hover:text-[var(--accent-color)] transition-colors duration-[var(--duration-fast)] font-medium"
+                    >
+                      {tag.name}
+                    </a>
+                    {tag.translation && (
+                      <span class="text-[0.6875rem] text-[var(--text-muted)] ml-1.5">{tag.translation}</span>
+                    )}
+                  </td>
+                  <td class="px-4 py-2">
+                    <span class="text-[0.6875rem] px-2 py-0.5 rounded-[var(--radius-sm)]" style={`color: ${getTagCategoryVar(tag.category as TagCategory)}; background: ${getTagCategoryBg(tag.category as TagCategory)};`}>
+                      {getTagCategoryLabel(tag.category as TagCategory)}
+                    </span>
+                  </td>
+                  <td class="px-4 py-2 text-right text-sm text-[var(--text-muted)] font-mono tabular-nums">
+                    {tag.post_count}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {/* Mobile cards */}
+        <div class="md:hidden divide-y divide-[var(--border-color)]">
+          {tags.map((tag: any) => (
+            <a
+              href={`/tags/${encodeURIComponent(tag.name)}`}
+              class="flex items-center justify-between px-4 py-3 hover:bg-[var(--accent-subtle)] transition-colors duration-[var(--duration-fast)]"
+            >
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="font-medium text-[var(--text-primary)] truncate">{tag.name}</span>
+                {tag.translation && (
+                  <span class="text-[0.6875rem] text-[var(--text-muted)] truncate">{tag.translation}</span>
+                )}
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <span class="text-[0.6875rem] px-2 py-0.5 rounded-[var(--radius-sm)]" style={`color: ${getTagCategoryVar(tag.category as TagCategory)}; background: ${getTagCategoryBg(tag.category as TagCategory)};`}>
+                  {getTagCategoryLabel(tag.category as TagCategory)}
+                </span>
+                <span class="text-sm text-[var(--text-muted)] font-mono tabular-nums">{tag.post_count}</span>
+              </div>
+            </a>
+          ))}
+        </div>
       </div>
     )}
 

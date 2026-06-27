@@ -336,6 +336,25 @@ body:is(.dark *)::before {
   transform: scale(1.02);
 }
 
+/* Tag overlay: hidden by default on pointer devices, always visible on touch */
+.tag-overlay {
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-out);
+}
+.masonry-item:hover .tag-overlay {
+  opacity: 1;
+}
+
+/* Touch devices can't hover — show tags always (slightly transparent to not obscure image) */
+@media (hover: none) {
+  .tag-overlay {
+    opacity: 0.85;
+  }
+  .masonry-item:hover .tag-overlay {
+    opacity: 0.85;
+  }
+}
+
 /* === Skeleton Shimmer === */
 .skeleton {
   background: linear-gradient(

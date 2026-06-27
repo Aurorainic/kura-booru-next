@@ -33,8 +33,8 @@ const { posts, isAdmin = false } = Astro.props;
             {post.rating === "questionable" ? "敏" : "限"}
           </span>
         )}
-        {/* Hover overlay with tags */}
-        <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-[var(--duration-normal)] flex flex-col justify-end p-2.5">
+        {/* Tag overlay — always visible on touch, hover on pointer devices */}
+        <div class="tag-overlay absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex flex-col justify-end p-2.5">
           {post.tags && post.tags.length > 0 && (
             <div class="flex flex-wrap gap-1">
               {post.tags.slice(0, 5).map((tag, tagIndex) => (
