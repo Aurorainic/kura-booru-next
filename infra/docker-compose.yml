@@ -17,7 +17,7 @@ services:
   # Backend — FastAPI REST API
   # ---------------------------------------------------------------------------
   backend:
-    image: kura-booru-next-backend:v0.6.2
+    image: kura-booru-next-backend:v0.6.2-fix2
     container_name: kura-backend
     restart: unless-stopped
     ports:
@@ -42,7 +42,7 @@ services:
   # Worker — ARQ background task processor
   # ---------------------------------------------------------------------------
   worker:
-    image: kura-booru-next-backend:v0.6.2
+    image: kura-booru-next-backend:v0.6.2-fix2
     container_name: kura-worker
     restart: unless-stopped
     env_file:
@@ -66,7 +66,7 @@ services:
   # Bot — aiogram 3.x Telegram Bot (webhook mode)
   # ---------------------------------------------------------------------------
   bot:
-    image: kura-booru-next-bot:v0.6.2
+    image: kura-booru-next-bot:v0.6.2-fix2
     container_name: kura-bot
     restart: unless-stopped
     ports:
@@ -85,7 +85,7 @@ services:
   # Frontend — Astro SSR
   # ---------------------------------------------------------------------------
   frontend:
-    image: kura-booru-next-frontend:v0.6.2
+    image: kura-booru-next-frontend:v0.6.2-fix2
     container_name: kura-frontend
     restart: unless-stopped
     ports:
