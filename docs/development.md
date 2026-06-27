@@ -90,6 +90,24 @@ All Dockerfiles have 3 stages:
 13. **Rating visibility**: Anonymous sees only safe; non-safe returns 404; admin sees all
 14. **Admin login/logout**: `/login` → homepage shows "admin mode" → click logout → back to normal
 15. **Pixiv multi-image**: Multi-image Pixiv post → only first image downloaded and stored
+16. **Dashboard load**: Login as admin → visit `/admin` (default = dashboard) → see 4 overview cards + 2 distribution charts + 2 leaderboards; numbers match DB
+17. **Sub-tab switching**: Click 图片/标签 etc. → switch back to 概览 → numbers consistent (no duplicate requests)
+18. **Empty dashboard**: Empty DB → dashboard still renders (shows 0, no crash)
+19. **Anon dashboard access**: `/api/admin/dashboard/` returns 401/403 when not logged in (`get_current_admin` rejects)
+20. **Merge — duplicates**: Create tags A and B both linked to the same post → merge A→B → B.post_count unchanged (not +1)
+21. **Merge — new**: A links post X, B does not → merge A→B → B.post_count += 1
+22. **Merge — mixed**: A links 5 posts (3 already in B + 2 new) → merge A→B → response `posts_moved=2, posts_skipped=3, target_new_post_count = B_old+2`
+23. **Merge — self-merge protection**: merge A→A → returns 400
+24. **Merge — missing tag**: source_id or target_id nonexistent → returns 404
+25. **Merge — atomicity**: kill DB connection mid-merge (`docker kill postgres`) → DB has no残留 data
+26. **Tag ID tooltip — display**: hover a tag row cell 200ms → tooltip appears with full UUID
+27. **Tag ID tooltip — copy**: click "复制" button → clipboard contains full UUID, button changes to "✓ 已复制"
+28. **Tag ID tooltip — fallback**: disable Clipboard API (DevTools) → still copies via textarea fallback
+29. **View Transitions**: navigate between pages → smooth SPA-like transitions; footer, announcement banner, ThemeToggle, AccentPicker, mobile menu persist without re-render (transition:persist)
+30. **Bot /random**: send `/random` → bot replies with a random post image + link
+31. **Bot /stats**: send `/stats` → bot replies with dashboard stats (post count, tag count, etc.)
+32. **Settings cache TTL**: change a setting in admin → refresh frontend within 10s → new value visible (frontend middleware TTL 10s, backend Redis TTL 60s)
+33. **Mobile responsive**: touch targets ≥ 44px; safe-area insets respected on notched devices; tag overlay works on touch
 
 ---
 

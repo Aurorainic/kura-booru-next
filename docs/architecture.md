@@ -138,7 +138,7 @@ kura-booru-next/
 │   │   │   └── tag.py            #   TagRead, TagListRead, TagKnowledgeRead
 │   │   ├── services/             # Business logic
 │   │   │   ├── s3.py             #   S3 storage (upload, delete, presigned URL, verify)
-│   │   │   ├── settings.py      #   Site settings (Redis-cached key-value, connectivity tests, env seed)
+│   │   │   ├── settings.py      #   Site settings (Redis-cached key-value, TTL 60s, connectivity tests, env seed)
 │   │   │   ├── pipeline.py       #   Image processing pipeline (HEAD check → download → phash → thumb → S3)
 │   │   │   ├── phash.py          #   Perceptual hash with prefix-bucket indexing
 │   │   │   ├── ai_tag.py         #   AI tag processing (OpenAI-compatible API, 5-category classification)
@@ -196,7 +196,7 @@ kura-booru-next/
 │   │   │   └── SearchBar.tsx   # Tag autocomplete search
 │   │   ├── layouts/
 │   │   │   └── BaseLayout.astro # Nav + auth controls + theme + accent + announcement banner + footer
-│   │   ├── middleware.ts   # SSR cookie forwarding + admin session resolution + settings cache + maintenance mode redirect
+│   │   ├── middleware.ts   # SSR cookie forwarding + admin session resolution + settings cache (TTL 10s) + maintenance mode redirect
 │   │   ├── pages/
 │   │   │   ├── index.astro      # Home (masonry + pagination + rating filter)
 │   │   │   ├── logout.ts        # SSR logout endpoint (POST → redirect)
@@ -345,9 +345,10 @@ Known keys: `site_title`, `site_description`, `announcement`, `head_inject`, `ma
 | GET | `/api/tasks/{task_id}` | Task status polling (requires X-Api-Key; used by browser extension) |
 | GET | `/api/admin/tags` | List all tags with pagination (admin only) |
 | PATCH | `/api/admin/tags/{id}` | Update tag (name, category, translation) (admin only) |
-| POST | `/api/admin/tags/merge` | Merge tags (admin only) |
+| POST | `/api/admin/tags/merge` | Merge tags (admin only; recomputes target post_count via COUNT(*), single atomic commit) |
 | POST | `/api/admin/tags/reprocess` | Re-run AI classification on tags (admin only) |
 | GET | `/api/admin/tags/knowledge` | List tag knowledge cache (admin only) |
+| GET | `/api/admin/dashboard/` | Dashboard aggregate stats (admin only; 4 overview counts + 2 breakdowns + top tags + recent posts) |
 | GET | `/api/auto-rating-rules` | List auto-rating rules (admin only) |
 | POST | `/api/auto-rating-rules` | Create auto-rating rule (admin only) |
 | DELETE | `/api/auto-rating-rules/{id}` | Delete auto-rating rule (admin only) |
@@ -465,6 +466,8 @@ Do NOT enable Souin/HTTP cache for SSR pages without `Vary: Cookie` + cookie-in-
 | `/save <url>` | Save an image |
 | `/search <tags>` | Search posts |
 | `/info <url>` | View post details by source URL |
+| `/random` | Get a random post (calls GET /api/posts/random) |
+| `/stats` | Show dashboard stats (calls GET /api/admin/dashboard/) |
 | Send URL directly | Auto-detect and save |
 
 Supports Pixiv, Twitter/X, Danbooru links. Unknown URLs fall back to generic download.
@@ -546,6 +549,14 @@ Chromium 扩展提供 Pixiv 作品页一键导入按钮。
 - **Cards**: Rounded corners + soft shadows + hover lift + tag preview on hover
 - **Progressive image loading**: blur placeholder → thumbnail → preview → click for original
 - **Responsive**: 2 cols mobile, 3 cols tablet, 4–5 cols desktop
+
+### View Transitions
+Astro ClientRouter enables SPA-like page transitions without full page reloads. Key elements use `transition:persist` to survive navigations:
+- Footer
+- Announcement banner
+- ThemeToggle
+- AccentPicker
+- Mobile menu
 
 ---
 

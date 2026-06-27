@@ -8,6 +8,8 @@ from app.handlers.save import router as save_router
 from app.handlers.search import router as search_router
 from app.handlers.info import router as info_router
 from app.handlers.callback import router as callback_router
+from app.handlers.random import router as random_router
+from app.handlers.stats import router as stats_router
 
 
 def register_all_handlers(dp: Dispatcher) -> None:
@@ -18,3 +20,5 @@ def register_all_handlers(dp: Dispatcher) -> None:
     dp.include_router(search_router)
     dp.include_router(info_router)
     dp.include_router(callback_router)
+    dp.include_router(random_router)
+    dp.include_router(stats_router)

@@ -2,7 +2,7 @@
 
 Provides Redis-cached access to the settings key-value table.
 All settings are stored in a single Redis hash key `kura:settings`
-for efficient bulk reads. TTL is 300s.
+for efficient bulk reads. TTL is 60s.
 
 Connectivity tests for PG/Redis use temporary connections that are
 destroyed after the test — they never touch the running engine/client.
@@ -24,7 +24,7 @@ from app.models.setting import Setting
 logger = logging.getLogger(__name__)
 
 _REDIS_HASH_KEY = "kura:settings"
-_CACHE_TTL = 300  # seconds
+_CACHE_TTL = 60  # seconds
 
 # Default values for all known settings keys
 _SETTING_DEFAULTS: dict[str, str] = {

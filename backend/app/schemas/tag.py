@@ -52,6 +52,23 @@ class TagMergeRequest(BaseModel):
     target_tag_id: uuid.UUID
 
 
+class TagMergeResponse(BaseModel):
+    """Schema for tag merge result.
+
+    All counts are verified after the merge commits.
+    """
+
+    merged: bool
+    source_tag_id: uuid.UUID
+    source_tag_name: str
+    target_tag_id: uuid.UUID
+    target_tag_name: str
+    posts_moved: int  # New associations added to target
+    posts_skipped: int  # Source associations that were already in target
+    target_old_post_count: int  # Target's count BEFORE merge
+    target_new_post_count: int  # Target's count AFTER merge (verified)
+
+
 class TagReprocessRequest(BaseModel):
     """Schema for triggering tag reprocessing (admin)."""
 

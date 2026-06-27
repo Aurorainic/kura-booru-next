@@ -141,3 +141,31 @@ async def update_post_rating(post_id: str, rating: str) -> bool:
     except aiohttp.ClientError as exc:
         logger.error("Failed to update rating for post %s: %s", post_id, exc)
         return False
+
+
+async def get_random_post() -> dict[str, Any] | None:
+    """Fetch a random post from the backend API."""
+    session = await get_session()
+    try:
+        async with session.get("/api/posts/random") as resp:
+            if resp.status == 404:
+                return None
+            resp.raise_for_status()
+            return await resp.json()
+    except aiohttp.ClientError as exc:
+        logger.error("Failed to fetch random post: %s", exc)
+        return None
+
+
+async def get_dashboard_stats() -> dict[str, Any] | None:
+    """Fetch dashboard stats from the backend API (uses X-Api-Key)."""
+    session = await get_session()
+    try:
+        async with session.get("/api/admin/dashboard/") as resp:
+            if resp.status in (401, 403, 404):
+                return None
+            resp.raise_for_status()
+            return await resp.json()
+    except aiohttp.ClientError as exc:
+        logger.error("Failed to fetch dashboard stats: %s", exc)
+        return None

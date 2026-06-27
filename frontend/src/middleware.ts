@@ -23,7 +23,7 @@ const ADMIN_SESSION_COOKIE = "kura_admin_session";
 // In-process cache for public settings — 30s TTL
 // Redis is fast but there's no need to make a network round-trip on every SSR request
 let _settingsCache: { data: { site_title: string; site_description: string; announcement: string; head_inject: string; maintenance_mode: string } | null; at: number } = { data: null, at: 0 };
-const SETTINGS_CACHE_TTL = 30000;
+const SETTINGS_CACHE_TTL = 10000;
 
 export const onRequest: MiddlewareResponseHandler = async (context, next) => {
   const request = context.request;

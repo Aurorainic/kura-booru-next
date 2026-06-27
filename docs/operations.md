@@ -7,42 +7,42 @@
 Uses **latest + versioned** dual tags:
 
 - **`latest`** — Always points to the current stable version
-- **`v0.4.1`, ...** — Versioned tags for rollback and audit
+- **`v0.6.2`, ...** — Versioned tags for rollback and audit
 
 Tag lifecycle:
 1. **Build**: Each release tags both `latest` and `v0.2.x`
 2. **Push**: Both tags pushed to registry
 3. **Deploy**: Production uses `latest` tag
-4. **Rollback**: Specify a versioned tag (e.g., `v0.4.1`)
+4. **Rollback**: Specify a versioned tag (e.g., `v0.6.2`)
 
 ### Building Images
 
 Using the unified build script:
 
 ```bash
-./infra/scripts/build.sh v0.4.1
+./infra/scripts/build.sh v0.6.2
 ```
 
 Or manually per service:
 
 ```bash
 # Backend (API + Worker share this image)
-docker build -t kura-booru-next-backend:v0.4.1 -t kura-booru-next-backend:latest ./backend
+docker build -t kura-booru-next-backend:v0.6.2 -t kura-booru-next-backend:latest ./backend
 
 # Bot (aiogram 3, webhook mode)
-docker build -t kura-booru-next-bot:v0.4.1 -t kura-booru-next-bot:latest ./bot
+docker build -t kura-booru-next-bot:v0.6.2 -t kura-booru-next-bot:latest ./bot
 
 # Frontend (Astro SSR, Node.js runtime)
-docker build -t kura-booru-next-frontend:v0.4.1 -t kura-booru-next-frontend:latest ./frontend
+docker build -t kura-booru-next-frontend:v0.6.2 -t kura-booru-next-frontend:latest ./frontend
 ```
 
 ### Local Test Run
 
 ```bash
-docker run -p 8000:8000 --env-file .env kura-booru-next-backend:v0.4.1
-docker run --env-file .env kura-booru-next-backend:v0.4.1 arq app.tasks.worker.WorkerSettings
-docker run -p 8080:8080 --env-file .env kura-booru-next-bot:v0.4.1
-docker run -p 4321:4321 --env-file .env kura-booru-next-frontend:v0.4.1
+docker run -p 8000:8000 --env-file .env kura-booru-next-backend:v0.6.2
+docker run --env-file .env kura-booru-next-backend:v0.6.2 arq app.tasks.worker.WorkerSettings
+docker run -p 8080:8080 --env-file .env kura-booru-next-bot:v0.6.2
+docker run -p 4321:4321 --env-file .env kura-booru-next-frontend:v0.6.2
 ```
 
 ### Production Deployment
@@ -58,7 +58,7 @@ docker compose up -d
 
 ```bash
 # Edit docker-compose.yml to pin a specific version
-# e.g., image: kura-booru-next-backend:v0.4.0
+# e.g., image: kura-booru-next-backend:v0.6.2
 docker compose up -d
 ```
 
@@ -69,10 +69,10 @@ docker compose up -d
 docker images | grep kura-booru
 
 # Delete specific old versions
-docker rmi kura-booru-next-backend:v0.4.0
+docker rmi kura-booru-next-backend:v0.6.2
 
 # Batch delete (keep latest and current)
-CURRENT_VERSION="v0.4.1"
+CURRENT_VERSION="v0.6.2"
 docker images --format "{{.Repository}}:{{.Tag}}" | grep kura-booru | grep -v latest | grep -v ${CURRENT_VERSION} | xargs docker rmi -f
 ```
 
@@ -83,7 +83,7 @@ docker images --format "{{.Repository}}:{{.Tag}}" | grep kura-booru | grep -v la
 ### build.sh
 
 ```bash
-./infra/scripts/build.sh v0.4.1
+./infra/scripts/build.sh v0.6.2
 ```
 
 Unified Docker image build script. Injects `PUBLIC_GIT_TAG` build arg into the frontend for version display in the footer. Builds all three images with both `latest` and versioned tags.

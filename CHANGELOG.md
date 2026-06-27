@@ -2,6 +2,66 @@
 
 本文件记录项目的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.6.2] - 2026-06-27
+
+### 新增
+- **Astro ClientRouter (View Transitions)** — 全站页面切换过渡动效。导航不再全页重载，改为 SPA 式平滑 cross-fade + 轻量 pageIn 入口动画。
+  - `transition:persist` 持久化：footer、公告横幅（保持关闭状态）、AccentPicker/ThemeToggle（保持 React 状态）、移动端菜单（保持开/关状态）
+  - 导航栏不 persist（确保 admin/login 链接始终反映当前认证状态）
+  - 移动端菜单脚本改为事件委托（兼容 View Transitions DOM swap）
+- **Bot `/random` 命令** — 获取随机作品，调用 `GET /api/posts/random`
+- **Bot `/stats` 命令** — 显示全站统计（作品数/标签数/关联数/存储量），调用 `GET /api/admin/dashboard/`
+- **Bot `/start` 更新** — 欢迎信息列出所有命令（含 /random 和 /stats）
+
+### 变更
+- **页面入口动画减轻** — `pageIn` 位移 12px→6px，时长 350ms→200ms；卡片交错 40ms→25ms 间隔（总时长 440ms→275ms），导航时不再感觉"等卡片飞完"
+- **设置传播提效** — 前端中间件缓存 TTL 30s→10s，后端 Redis 缓存 TTL 300s→60s。维护模式/公告修改后最迟 10s 生效
+- **分页触控目标增大** — 页码/翻页按钮 36px→40px，每页选择器 padding 增大
+- **刘海屏安全区域** — viewport `viewport-fit=cover` + body `env(safe-area-inset-*)` padding
+- **首页移动端搜索框** — 小屏时全宽（`w-full sm:max-w-[280px]`）
+- **依赖升级** — `fastapi>=0.115`，`lucide-react` 0.511.0（修复 icons 构建问题）
+- **Docker 镜像标签** — 升级为 `v0.6.2-dev`
+
+## [0.6.1] - 2026-06-27
+
+### 新增
+- **移动端主题控件修复** — AccentPicker 和 ThemeToggle 从 `hidden md:flex` 桌面独占 div 移至始终可见的独立区域，所有屏幕尺寸均可操作
+- **管理后台响应式重设计** — 图片表格：桌面表格 + 移动端卡片布局；移动卡片展示缩略图、标题、来源、评级、操作按钮
+- **主题同步（多实例）** — AccentPicker 派发 `kura-accent-change` CustomEvent，ThemeToggle 派发 `kura-theme-change` CustomEvent，同一页面多实例实时同步
+- **Docker 构建优化** — backend/bot/frontend 各自添加 `.dockerignore`；`PYTHONDONTWRITEBYTECODE` + `PYTHONUNBUFFERED` 环境变量；`pip install --no-compile` + 清理 tests/pip/setuptools/wheel 缓存；前端多阶段构建 + node_modules 缓存层
+
+### 变更
+- **Docker 镜像标签** — 升级为 `v0.6.1`
+- **标签页卡片适配** — 移动端标签列表改为紧凑卡片形式
+- **标签云触控优化** — 触屏设备标签覆盖层始终可见（`@media (hover: none)`）
+
+## [0.6.3] - 2026-06-27
+
+### 新增
+- **管理后台仪表盘** (`/admin?tab=dashboard`) — 4 张概览卡（作品总数 / 标签总数 / 关联总数 / 存储总量）+ 2 张分布图（来源 / 评级横向 bar）+ 2 张榜单（热门标签 TOP 10 / 最新作品 6 张缩略图）。默认 tab 改为 dashboard，进管理后台直接看到全站总览。
+  - `GET /api/admin/dashboard/` — admin only，单请求聚合 8 个指标（4 COUNT + 2 GROUP BY + 2 LIMIT）
+  - 4 个新 Pydantic schema（`OverviewStats` / `SourceBreakdownItem` / `RatingBreakdownItem` / `TopTagItem` / `RecentPostItem` / `DashboardResponse`）
+  - 纯 SQL 聚合，无缓存层（admin 专属低频访问）
+  - 空数据正常渲染（0 不崩溃）；匿名返回 401
+- **标签 ID 复制浮泡** — admin 标签列表中 UUID 列从「原生 title 提示」升级为「hover 200ms 显示完整 UUID + 点击复制按钮」。Clipboard API 优先，textarea + execCommand 降级。浮泡自身 `user-select: all` 作为终极降级（手动全选复制）。
+- **标签合并重写** — `POST /api/admin/tags/merge` 端点完全重写：
+  - `target.post_count` 改用 `SELECT COUNT(*) FROM post_tags WHERE tag_id = target` 重新计算，作为 single source of truth（替代旧的「累加 moved」方式）
+  - 2 次批量查询（source/target post_ids）替代 N+1 循环
+  - 行级锁 `with_for_update=True` 序列化并发合并
+  - 单次 commit，失败回滚整个事务
+  - 新增 `TagMergeResponse` schema：`target_old_post_count` / `target_new_post_count` 让 UI 能显示合并前后对比
+  - 删除死代码 `source.post_count = 0`（紧随 `db.delete(source)`，无意义）
+
+### 变更
+- **管理后台默认 tab** — 从「图片」改为「概览」。子标签「管理」组首位新增「概览」。
+- **合并确认弹窗** — 文案增强，显示源/目标 ID（防止误操作）。成功弹窗显示「合并前 / 合并后 post_count」对比，admin 可立即确认 `post_count` 是否真的对上了。
+- **前端合并 tags 类型** — `mergeTags` 响应类型从 `source_tag` / `target_tag` 改为 `source_tag_id` / `source_tag_name` / `target_tag_id` / `target_tag_name`（与新后端 schema 对齐）。
+- **管理后台 sub-tab 路由** — `admin/index.astro` `manageGroup` 内联 JS 数组加入 `dashboard`，子标签栏 visible 条件更新。
+- **`docs/architecture.md`** — API endpoints 表追加 `/api/admin/dashboard/`；`merge` 端点描述补「verified post_count」。
+
+### 修复
+- **标签合并 post_count 漂移** — 旧实现 `target.post_count = target.post_count + moved` 仅累加「新增」关联，未考虑被删除的重复项；多次串联合并后 `post_count` 会偏离真实关联数。新实现用 `COUNT(*)` 重算，与实际 `post_tags` 行数严格一致。
+
 ## [0.6.0] - 2026-06-26
 
 ### 新增
