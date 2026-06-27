@@ -112,6 +112,7 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ username, password }),
+          credentials: "include",
         });
 
         if (resp.ok) {

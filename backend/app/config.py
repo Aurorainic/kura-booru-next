@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     # ── Application ──────────────────────────────────────────────────
     APP_URL: str = ""
+    APP_DOMAIN: str = ""  # e.g. "lainns.xyz" — used for cross-subdomain cookie sharing
     SECRET_KEY: str = ""
 
     # ── Admin Auth ───────────────────────────────────────────────────

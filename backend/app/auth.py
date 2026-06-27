@@ -70,6 +70,19 @@ def verify_session(token: Optional[str]) -> Optional[str]:
     return str(sub) if sub else None
 
 
+def _cookie_domain() -> str | None:
+    """Derive the cookie domain for cross-subdomain sharing.
+
+    If APP_DOMAIN is set (e.g. "lainns.xyz"), cookies get domain=".lainns.xyz"
+    so they work across api.kura-booru.lainns.xyz and kura-booru.lainns.xyz.
+    If not set, returns None (cookie scoped to the exact host — Docker Compose default).
+    """
+    domain = settings.APP_DOMAIN
+    if domain:
+        return f".{domain}" if not domain.startswith(".") else domain
+    return None
+
+
 def set_session_cookie(response, token: str) -> None:
     """Attach the session cookie to a Starlette/FastAPI Response."""
     response.set_cookie(
@@ -80,13 +93,14 @@ def set_session_cookie(response, token: str) -> None:
         secure=bool(settings.APP_URL.startswith("https://")),
         samesite="lax",
         path="/",
+        domain=_cookie_domain(),
     )
 
 
 def clear_session_cookie(response) -> None:
     """Delete the session cookie.
 
-    Must match the same Secure/SameSite attributes used when setting the cookie,
+    Must match the same Secure/SameSite/Domain attributes used when setting the cookie,
     otherwise browsers will silently ignore the deletion directive.
     """
     response.delete_cookie(
@@ -95,6 +109,7 @@ def clear_session_cookie(response) -> None:
         secure=bool(settings.APP_URL.startswith("https://")),
         httponly=True,
         samesite="lax",
+        domain=_cookie_domain(),
     )
 
 
