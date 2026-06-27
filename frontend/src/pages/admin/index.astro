@@ -830,8 +830,15 @@ try {
 </BaseLayout>
 
 <!-- ── Tag autocomplete data for auto-rating tab ── -->
-<script define:vars={{ tagNames: autocompleteTags.map((t: any) => t.name) }}>
+<script define:vars={{ tagNames: autocompleteTags.map((t: any) => t.name), apiBase: import.meta.env.PUBLIC_API_URL || "/api" }}>
   window.TAG_NAMES = tagNames;
+  window.__KURA_API_BASE = apiBase;
+  // ponytail: admin fetch helper — auto-injects apiBase and credentials for cross-origin deployments
+  window.__kuraFetch = function(path, opts) {
+    opts = opts || {};
+    opts.credentials = 'include';
+    return fetch((window.__KURA_API_BASE || '/api') + path, opts);
+  };
 </script>
 
 <!-- ── Tab switching ── -->
@@ -952,10 +959,11 @@ try {
       var newRating = select.value;
       var originalRating = select.dataset.currentRating || 'safe';
       try {
-        var resp = await fetch('/api/posts/' + postId, {
+        var resp = await __kuraFetch('/posts/' + postId, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ rating: newRating }),
+          credentials: 'include',
         });
         if (!resp.ok) {
           select.value = originalRating;
@@ -985,7 +993,7 @@ try {
       var postId = btn.dataset.postId;
       if (!confirm('确定要删除这张插画吗？此操作不可恢复，将同时删除存储文件。')) return;
       try {
-        var resp = await fetch('/api/posts/' + postId, { method: 'DELETE' });
+        var resp = await __kuraFetch('/posts/' + postId, { method: 'DELETE', credentials: 'include' });
         if (resp.ok) {
           var row = btn.closest('tr');
           if (row) row.remove();
@@ -1013,7 +1021,7 @@ try {
       btn.disabled = true;
       btn.textContent = '…';
       try {
-        var resp = await fetch('/api/admin/tags/' + tagId, {
+        var resp = await __kuraFetch('/admin/tags/' + tagId, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ category: category, danbooru_name: danbooruName || null, translation: translation || null }),
@@ -1042,7 +1050,7 @@ try {
     reprocessBtn.addEventListener('click', async function() {
       if (!confirm('处理所有未处理的标签？')) return;
       try {
-        var resp = await fetch('/api/admin/tags/reprocess', {
+        var resp = await __kuraFetch('/admin/tags/reprocess', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ force: false }),
@@ -1058,7 +1066,7 @@ try {
     reprocessForceBtn.addEventListener('click', async function() {
       if (!confirm('⚠️ 确定重新处理所有标签？此操作将覆盖现有分类和翻译。')) return;
       try {
-        var resp = await fetch('/api/admin/tags/reprocess', {
+        var resp = await __kuraFetch('/admin/tags/reprocess', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ force: true }),
@@ -1082,7 +1090,7 @@ try {
                        '此操作不可撤销。';
       if (!confirm(confirmMsg)) return;
       try {
-        var resp = await fetch('/api/admin/tags/merge', {
+        var resp = await __kuraFetch('/admin/tags/merge', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ source_tag_id: sourceId, target_tag_id: targetId }),
@@ -1155,7 +1163,7 @@ try {
       addBtn.disabled = true;
       addBtn.textContent = '添加中…';
       try {
-        var resp = await fetch('/api/auto-rating-rules/', {
+        var resp = await __kuraFetch('/auto-rating-rules/', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tag_name: tagName, target_rating: rating }),
@@ -1172,7 +1180,7 @@ try {
       var ruleId = btn.dataset.ruleId;
       if (!confirm('确定删除此规则？')) return;
       try {
-        var resp = await fetch('/api/auto-rating-rules/' + ruleId, { method: 'DELETE' });
+        var resp = await __kuraFetch('/auto-rating-rules/' + ruleId, { method: 'DELETE' });
         if (resp.ok) {
           // Remove from desktop table row or mobile card
           var row = btn.closest('tr') || btn.closest('[data-rule-id]');
@@ -1222,8 +1230,7 @@ try {
       testPgBtn.disabled = true;
       testPgBtn.textContent = '测试中…';
       pgResult.classList.add('hidden');
-      var apiBase = window.__KURA_API_BASE || '/api';
-      fetch(apiBase + '/settings/test-pg', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: url }) })
+            __kuraFetch('/settings/test-pg', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: url }) })
         .then(function(resp) { return resp.json(); })
         .then(function(data) {
           pgResult.classList.remove('hidden');
@@ -1244,8 +1251,7 @@ try {
       testRedisBtn.disabled = true;
       testRedisBtn.textContent = '测试中…';
       redisResult.classList.add('hidden');
-      var apiBase = window.__KURA_API_BASE || '/api';
-      fetch(apiBase + '/settings/test-redis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: url }) })
+            __kuraFetch('/settings/test-redis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: url }) })
         .then(function(resp) { return resp.json(); })
         .then(function(data) {
           redisResult.classList.remove('hidden');
@@ -1277,8 +1283,7 @@ try {
       saveBtn.disabled = true;
       saveBtn.textContent = '保存中…';
       saveStatus.classList.add('hidden');
-      var apiBase = window.__KURA_API_BASE || '/api';
-      fetch(apiBase + '/settings/', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings: updates }) })
+            __kuraFetch('/settings/', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings: updates }) })
         .then(function(resp) {
           if (resp.ok) {
             origPg = pgInput ? pgInput.value : '';
@@ -1448,11 +1453,11 @@ try {
     pwSubmitBtn.textContent = "修改中…";
 
     try {
-      const apiBase = import.meta.env.PUBLIC_API_URL || "/api";
-      const resp = await fetch(`${apiBase}/auth/change-password`, {
+      const resp = await fetch(`${import.meta.env.PUBLIC_API_URL || "/api"}/auth/change-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+        credentials: "include",
       });
 
       if (resp.ok) {
