@@ -109,11 +109,19 @@ try {
     <div class="flex items-center gap-1 mb-4 border-b border-[var(--border-color)]">
       <button
         class="admin-top-tab px-5 py-2.5 text-sm font-medium transition-colors duration-[var(--duration-fast)] relative"
+        data-group="dashboard"
+        data-active={activeTab === "dashboard" ? "true" : undefined}
+      >
+        概览
+        <span class="admin-top-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--accent-color)] rounded-full" style={activeTab === "dashboard" ? "" : "display:none"}></span>
+      </button>
+      <button
+        class="admin-top-tab px-5 py-2.5 text-sm font-medium transition-colors duration-[var(--duration-fast)] relative"
         data-group="manage"
-        data-active={["dashboard", "posts", "tags", "auto-rating"].includes(activeTab) ? "true" : undefined}
+        data-active={["posts", "tags", "auto-rating"].includes(activeTab) ? "true" : undefined}
       >
         管理
-        <span class="admin-top-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--accent-color)] rounded-full" style={["dashboard", "posts", "tags", "auto-rating"].includes(activeTab) ? "" : "display:none"}></span>
+        <span class="admin-top-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--accent-color)] rounded-full" style={["posts", "tags", "auto-rating"].includes(activeTab) ? "" : "display:none"}></span>
       </button>
       <button
         class="admin-top-tab px-5 py-2.5 text-sm font-medium transition-colors duration-[var(--duration-fast)] relative"
@@ -126,8 +134,7 @@ try {
     </div>
 
     <!-- Sub-tabs: Manage -->
-    <div id="subtabs-manage" class="flex items-center gap-2 mb-6" style={["dashboard", "posts", "tags", "auto-rating"].includes(activeTab) ? "" : "display:none"}>
-      <a href="/admin?tab=dashboard" class={`admin-subtab filter-chip ${activeTab === "dashboard" ? "active" : ""}`} data-tab="dashboard">概览</a>
+    <div id="subtabs-manage" class="flex items-center gap-2 mb-6" style={["posts", "tags", "auto-rating"].includes(activeTab) ? "" : "display:none"}>
       <a href="/admin?tab=posts" class={`admin-subtab filter-chip ${activeTab === "posts" ? "active" : ""}`} data-tab="posts">图片</a>
       <a href="/admin?tab=tags" class={`admin-subtab filter-chip ${activeTab === "tags" ? "active" : ""}`} data-tab="tags">标签</a>
       <a href="/admin?tab=auto-rating" class={`admin-subtab filter-chip ${activeTab === "auto-rating" ? "active" : ""}`} data-tab="auto-rating">评级</a>
@@ -859,22 +866,26 @@ try {
     var activeLink = document.querySelector('.admin-subtab[data-tab="' + tab + '"]');
     if (activeLink) activeLink.classList.add('active');
 
-    // Show correct sub-tab group
+    // Show correct sub-tab group (dashboard has none)
     var subtabsManage = document.getElementById('subtabs-manage');
     var subtabsSettings = document.getElementById('subtabs-settings');
     if (manageGroup.indexOf(tab) >= 0) {
       subtabsManage.style.display = '';
       subtabsSettings.style.display = 'none';
-    } else {
+    } else if (settingsGroup.indexOf(tab) >= 0) {
       subtabsManage.style.display = 'none';
       subtabsSettings.style.display = '';
+    } else {
+      subtabsManage.style.display = 'none';
+      subtabsSettings.style.display = 'none';
     }
 
     // Update top-level tab indicators
     document.querySelectorAll('.admin-top-tab').forEach(function(btn) {
       var group = btn.getAttribute('data-group');
       var indicator = btn.querySelector('.admin-top-tab-indicator');
-      var isActive = (group === 'manage' && manageGroup.indexOf(tab) >= 0) ||
+      var isActive = (group === 'dashboard' && tab === 'dashboard') ||
+                     (group === 'manage' && manageGroup.indexOf(tab) >= 0) ||
                      (group === 'settings' && settingsGroup.indexOf(tab) >= 0);
       btn.style.color = isActive ? 'var(--text-primary)' : 'var(--text-muted)';
       if (indicator) indicator.style.display = isActive ? '' : 'none';
@@ -898,7 +909,7 @@ try {
   document.querySelectorAll('.admin-top-tab').forEach(function(btn) {
     btn.addEventListener('click', function() {
       var group = this.getAttribute('data-group');
-      var defaultTab = group === 'manage' ? 'posts' : 'settings';
+      var defaultTab = group === 'manage' ? 'posts' : (group === 'settings' ? 'settings' : 'dashboard');
       var url = new URL(window.location);
       url.searchParams.set('tab', defaultTab);
       history.pushState({}, '', url);
@@ -909,12 +920,12 @@ try {
   // Back/forward
   window.addEventListener('popstate', function() {
     var params = new URLSearchParams(window.location.search);
-    var tab = params.get('tab') || 'posts';
+    var tab = params.get('tab') || 'dashboard';
     switchTab(tab);
   });
 
   // Initialize top-level tab styling
-  var currentTab = new URLSearchParams(window.location.search).get('tab') || 'posts';
+  var currentTab = new URLSearchParams(window.location.search).get('tab') || 'dashboard';
   switchTab(currentTab);
 
   // Tags filter form — include tab param

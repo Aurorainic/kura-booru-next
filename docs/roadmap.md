@@ -13,6 +13,10 @@
 - [x] 管理后台仪表盘（4 张概览卡 + 来源/评级分布 + 热门标签 TOP 10 + 最新作品 6 张）— v0.6.3
 - [x] 标签合并重写（`post_count` COUNT(*) 重新计算 + 单事务原子提交 + 并发合并行锁）— v0.6.3
 - [x] 标签 UUID 复制浮泡（hover 显示 + 点击复制 + 降级到 textarea）— v0.6.3
+- [x] ClientRouter View Transitions（SPA-like 页面切换 + transition:persist 持久化 footer/公告/主题/配色/移动菜单）— v0.6.2
+- [x] Bot /random 和 /stats 命令（随机图片 + 仪表盘统计）— v0.6.2
+- [x] Settings cache TTL 优化（前端中间件 10s + 后端 Redis 60s）— v0.6.2
+- [x] 响应式布局修复（触控目标、safe-area、标签浮层适配）— v0.6.2
 - [x] 站点设置系统（DB 驱动 key-value 配置 + 管理后台 UI）— v0.6.0
 - [x] 公告横幅（顶部细横幅，多行轮播 + 超宽滚动 + Markdown）— v0.6.0
 - [x] 维护模式（非管理员拦截 + 维护提示页）— v0.6.0

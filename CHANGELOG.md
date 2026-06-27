@@ -2,6 +2,39 @@
 
 本文件记录项目的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.6.2] - 2026-06-27
+
+### 新增
+- **Astro ClientRouter (View Transitions)** — 全站页面切换过渡动效。导航不再全页重载，改为 SPA 式平滑 cross-fade + 轻量 pageIn 入口动画。
+  - `transition:persist` 持久化：footer、公告横幅（保持关闭状态）、AccentPicker/ThemeToggle（保持 React 状态）、移动端菜单（保持开/关状态）
+  - 导航栏不 persist（确保 admin/login 链接始终反映当前认证状态）
+  - 移动端菜单脚本改为事件委托（兼容 View Transitions DOM swap）
+- **Bot `/random` 命令** — 获取随机作品，调用 `GET /api/posts/random`
+- **Bot `/stats` 命令** — 显示全站统计（作品数/标签数/关联数/存储量），调用 `GET /api/admin/dashboard/`
+- **Bot `/start` 更新** — 欢迎信息列出所有命令（含 /random 和 /stats）
+
+### 变更
+- **页面入口动画减轻** — `pageIn` 位移 12px→6px，时长 350ms→200ms；卡片交错 40ms→25ms 间隔（总时长 440ms→275ms），导航时不再感觉"等卡片飞完"
+- **设置传播提效** — 前端中间件缓存 TTL 30s→10s，后端 Redis 缓存 TTL 300s→60s。维护模式/公告修改后最迟 10s 生效
+- **分页触控目标增大** — 页码/翻页按钮 36px→40px，每页选择器 padding 增大
+- **刘海屏安全区域** — viewport `viewport-fit=cover` + body `env(safe-area-inset-*)` padding
+- **首页移动端搜索框** — 小屏时全宽（`w-full sm:max-w-[280px]`）
+- **依赖升级** — `fastapi>=0.115`，`lucide-react` 0.511.0（修复 icons 构建问题）
+- **Docker 镜像标签** — 升级为 `v0.6.2-dev`
+
+## [0.6.1] - 2026-06-27
+
+### 新增
+- **移动端主题控件修复** — AccentPicker 和 ThemeToggle 从 `hidden md:flex` 桌面独占 div 移至始终可见的独立区域，所有屏幕尺寸均可操作
+- **管理后台响应式重设计** — 图片表格：桌面表格 + 移动端卡片布局；移动卡片展示缩略图、标题、来源、评级、操作按钮
+- **主题同步（多实例）** — AccentPicker 派发 `kura-accent-change` CustomEvent，ThemeToggle 派发 `kura-theme-change` CustomEvent，同一页面多实例实时同步
+- **Docker 构建优化** — backend/bot/frontend 各自添加 `.dockerignore`；`PYTHONDONTWRITEBYTECODE` + `PYTHONUNBUFFERED` 环境变量；`pip install --no-compile` + 清理 tests/pip/setuptools/wheel 缓存；前端多阶段构建 + node_modules 缓存层
+
+### 变更
+- **Docker 镜像标签** — 升级为 `v0.6.1`
+- **标签页卡片适配** — 移动端标签列表改为紧凑卡片形式
+- **标签云触控优化** — 触屏设备标签覆盖层始终可见（`@media (hover: none)`）
+
 ## [0.6.3] - 2026-06-27
 
 ### 新增

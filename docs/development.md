@@ -103,6 +103,11 @@ All Dockerfiles have 3 stages:
 26. **Tag ID tooltip — display**: hover a tag row cell 200ms → tooltip appears with full UUID
 27. **Tag ID tooltip — copy**: click "复制" button → clipboard contains full UUID, button changes to "✓ 已复制"
 28. **Tag ID tooltip — fallback**: disable Clipboard API (DevTools) → still copies via textarea fallback
+29. **View Transitions**: navigate between pages → smooth SPA-like transitions; footer, announcement banner, ThemeToggle, AccentPicker, mobile menu persist without re-render (transition:persist)
+30. **Bot /random**: send `/random` → bot replies with a random post image + link
+31. **Bot /stats**: send `/stats` → bot replies with dashboard stats (post count, tag count, etc.)
+32. **Settings cache TTL**: change a setting in admin → refresh frontend within 10s → new value visible (frontend middleware TTL 10s, backend Redis TTL 60s)
+33. **Mobile responsive**: touch targets ≥ 44px; safe-area insets respected on notched devices; tag overlay works on touch
 
 ---
 

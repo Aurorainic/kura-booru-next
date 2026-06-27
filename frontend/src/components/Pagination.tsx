@@ -92,7 +92,7 @@ export default function Pagination({ currentPage, totalPages, perPage }: Paginat
           <a
             href={buildUrl(currentPage - 1, perPage)}
             className={cn(
-              "flex items-center justify-center w-9 h-9 rounded-[var(--radius-sm)]",
+              "flex items-center justify-center w-10 h-10 rounded-[var(--radius-sm)]",
               "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
               "hover:bg-[var(--accent-subtle)] transition-all duration-[var(--duration-fast)]",
               "active:scale-[0.92]"
@@ -102,7 +102,7 @@ export default function Pagination({ currentPage, totalPages, perPage }: Paginat
             <ChevronLeft className="w-5 h-5" />
           </a>
         ) : (
-          <span className="flex items-center justify-center w-9 h-9 text-[var(--border-color)] cursor-not-allowed">
+          <span className="flex items-center justify-center w-10 h-10 text-[var(--border-color)] cursor-not-allowed">
             <ChevronLeft className="w-5 h-5" />
           </span>
         )}
@@ -112,7 +112,7 @@ export default function Pagination({ currentPage, totalPages, perPage }: Paginat
           page === "..." ? (
             <span
               key={`ellipsis-${index}`}
-              className="flex items-center justify-center w-9 h-9 text-[var(--text-muted)]"
+              className="flex items-center justify-center w-10 h-10 text-[var(--text-muted)]"
             >
               …
             </span>
@@ -121,7 +121,7 @@ export default function Pagination({ currentPage, totalPages, perPage }: Paginat
               key={page}
               href={buildUrl(page, perPage)}
               className={cn(
-                "flex items-center justify-center w-9 h-9 rounded-[var(--radius-sm)] text-sm font-medium",
+                "flex items-center justify-center w-10 h-10 rounded-[var(--radius-sm)] text-sm font-medium",
                 "transition-all duration-[var(--duration-fast)]",
                 page === currentPage
                   ? "bg-[var(--accent-color)] text-[var(--bg-primary)] font-bold"
@@ -140,7 +140,7 @@ export default function Pagination({ currentPage, totalPages, perPage }: Paginat
           <a
             href={buildUrl(currentPage + 1, perPage)}
             className={cn(
-              "flex items-center justify-center w-9 h-9 rounded-[var(--radius-sm)]",
+              "flex items-center justify-center w-10 h-10 rounded-[var(--radius-sm)]",
               "text-[var(--text-muted)] hover:text-[var(--text-primary)]",
               "hover:bg-[var(--accent-subtle)] transition-all duration-[var(--duration-fast)]",
               "active:scale-[0.92]"
@@ -150,7 +150,7 @@ export default function Pagination({ currentPage, totalPages, perPage }: Paginat
             <ChevronRight className="w-5 h-5" />
           </a>
         ) : (
-          <span className="flex items-center justify-center w-9 h-9 text-[var(--border-color)] cursor-not-allowed">
+          <span className="flex items-center justify-center w-10 h-10 text-[var(--border-color)] cursor-not-allowed">
             <ChevronRight className="w-5 h-5" />
           </span>
         )}
@@ -171,7 +171,7 @@ function PerPageSelector({ perPage }: { perPage: number }) {
           key={option}
           href={buildUrl(1, option)}
           className={cn(
-            "px-2 py-1 rounded-[var(--radius-sm)] transition-all duration-[var(--duration-fast)]",
+            "px-3 py-2 rounded-[var(--radius-sm)] transition-all duration-[var(--duration-fast)]",
             option === perPage
               ? "bg-[var(--accent-color)] text-[var(--bg-primary)] font-bold"
               : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)]"
