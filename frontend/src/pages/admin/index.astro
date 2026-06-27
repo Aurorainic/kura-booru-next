@@ -5,7 +5,9 @@ import {
   getRatingColorClass, getRatingLabel, getSourceSiteLabel,
   getThumbUrl, formatFileSize, formatDate,
   fetchAdminTags, fetchAutoRatingRules, fetchTags,
+  fetchDashboardStats,
   type Rating, type Tag, type TagCategory, type AutoRatingRule,
+  type DashboardStats, type Post,
 } from "@/lib/api";
 
 const isAdmin = Astro.locals.isAdmin ?? false;
@@ -16,9 +18,15 @@ if (!isAdmin) {
 }
 
 // Tab state from URL
-const tab = Astro.url.searchParams.get("tab") || "posts";
-const validTabs = ["posts", "tags", "auto-rating", "settings", "password"];
-const activeTab = validTabs.includes(tab) ? tab : "posts";
+const tab = Astro.url.searchParams.get("tab") || "dashboard";
+const validTabs = ["dashboard", "posts", "tags", "auto-rating", "settings", "password"];
+const activeTab = validTabs.includes(tab) ? tab : "dashboard";
+
+// ── Dashboard data ──
+let dashboard: DashboardStats | null = null;
+try {
+  dashboard = await fetchDashboardStats(ssrCookie);
+} catch {}
 
 // ── Posts data ──
 const postsPage = Math.max(1, parseInt(Astro.url.searchParams.get("page") || "1"));
@@ -102,10 +110,10 @@ try {
       <button
         class="admin-top-tab px-5 py-2.5 text-sm font-medium transition-colors duration-[var(--duration-fast)] relative"
         data-group="manage"
-        data-active={["posts", "tags", "auto-rating"].includes(activeTab) ? "true" : undefined}
+        data-active={["dashboard", "posts", "tags", "auto-rating"].includes(activeTab) ? "true" : undefined}
       >
         管理
-        <span class="admin-top-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--accent-color)] rounded-full" style={["posts", "tags", "auto-rating"].includes(activeTab) ? "" : "display:none"}></span>
+        <span class="admin-top-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--accent-color)] rounded-full" style={["dashboard", "posts", "tags", "auto-rating"].includes(activeTab) ? "" : "display:none"}></span>
       </button>
       <button
         class="admin-top-tab px-5 py-2.5 text-sm font-medium transition-colors duration-[var(--duration-fast)] relative"
@@ -118,7 +126,8 @@ try {
     </div>
 
     <!-- Sub-tabs: Manage -->
-    <div id="subtabs-manage" class="flex items-center gap-2 mb-6" style={["posts", "tags", "auto-rating"].includes(activeTab) ? "" : "display:none"}>
+    <div id="subtabs-manage" class="flex items-center gap-2 mb-6" style={["dashboard", "posts", "tags", "auto-rating"].includes(activeTab) ? "" : "display:none"}>
+      <a href="/admin?tab=dashboard" class={`admin-subtab filter-chip ${activeTab === "dashboard" ? "active" : ""}`} data-tab="dashboard">概览</a>
       <a href="/admin?tab=posts" class={`admin-subtab filter-chip ${activeTab === "posts" ? "active" : ""}`} data-tab="posts">图片</a>
       <a href="/admin?tab=tags" class={`admin-subtab filter-chip ${activeTab === "tags" ? "active" : ""}`} data-tab="tags">标签</a>
       <a href="/admin?tab=auto-rating" class={`admin-subtab filter-chip ${activeTab === "auto-rating" ? "active" : ""}`} data-tab="auto-rating">评级</a>
@@ -128,6 +137,151 @@ try {
     <div id="subtabs-settings" class="flex items-center gap-2 mb-6" style={["settings", "password"].includes(activeTab) ? "" : "display:none"}>
       <a href="/admin?tab=settings" class={`admin-subtab filter-chip ${activeTab === "settings" ? "active" : ""}`} data-tab="settings">通用</a>
       <a href="/admin?tab=password" class={`admin-subtab filter-chip ${activeTab === "password" ? "active" : ""}`} data-tab="password">密码</a>
+    </div>
+
+    <!-- ═══════════ Panel: Dashboard ═══════════ -->
+    <div id="panel-dashboard" class="admin-panel" style={activeTab !== "dashboard" ? "display:none" : ""}>
+      <!-- 概览卡 -->
+      {dashboard && (
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div class="card p-5">
+            <div class="text-xs text-[var(--text-muted)] mb-1">作品总数</div>
+            <div class="flex items-baseline gap-1">
+              <span class="text-2xl font-bold text-[var(--accent-color)]">{dashboard.overview.total_posts.toLocaleString()}</span>
+              <span class="text-sm text-[var(--text-muted)]">张</span>
+            </div>
+          </div>
+          <div class="card p-5">
+            <div class="text-xs text-[var(--text-muted)] mb-1">标签总数</div>
+            <div class="flex items-baseline gap-1">
+              <span class="text-2xl font-bold text-[var(--accent-color)]">{dashboard.overview.total_tags.toLocaleString()}</span>
+              <span class="text-sm text-[var(--text-muted)]">个</span>
+            </div>
+          </div>
+          <div class="card p-5">
+            <div class="text-xs text-[var(--text-muted)] mb-1">关联总数</div>
+            <div class="flex items-baseline gap-1">
+              <span class="text-2xl font-bold text-[var(--accent-color)]">{dashboard.overview.total_post_tags.toLocaleString()}</span>
+              <span class="text-sm text-[var(--text-muted)]">条</span>
+            </div>
+          </div>
+          <div class="card p-5">
+            <div class="text-xs text-[var(--text-muted)] mb-1">存储总量</div>
+            <div class="flex items-baseline gap-1">
+              <span class="text-2xl font-bold text-[var(--accent-color)]">{formatFileSize(dashboard.overview.total_file_size_bytes)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <!-- 分布图 -->
+      {dashboard && (
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <!-- 来源分布 -->
+          <div class="card p-5">
+            <h2 class="text-sm font-medium text-[var(--text-muted)] mb-4">来源分布</h2>
+            {dashboard.source_breakdown.length === 0 ? (
+              <p class="text-sm text-[var(--text-muted)]">暂无数据</p>
+            ) : (
+              dashboard.source_breakdown.map(item => {
+                const total = dashboard.overview.total_posts || 1;
+                const pct = (item.count / total * 100).toFixed(1);
+                return (
+                  <div class="mb-3 last:mb-0">
+                    <div class="flex justify-between text-sm mb-1">
+                      <span>{getSourceSiteLabel(item.source_site)}</span>
+                      <span class="text-[var(--text-muted)]">{item.count} ({pct}%)</span>
+                    </div>
+                    <div class="h-2 rounded-full bg-[var(--bg-alt)] overflow-hidden">
+                      <div class="h-full bg-[var(--accent-color)]" style={`width: ${pct}%`}></div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <!-- 评级分布 -->
+          <div class="card p-5">
+            <h2 class="text-sm font-medium text-[var(--text-muted)] mb-4">评级分布</h2>
+            {dashboard.rating_breakdown.length === 0 ? (
+              <p class="text-sm text-[var(--text-muted)]">暂无数据</p>
+            ) : (
+              dashboard.rating_breakdown.map(item => {
+                const total = dashboard.overview.total_posts || 1;
+                const pct = (item.count / total * 100).toFixed(1);
+                return (
+                  <div class="mb-3 last:mb-0">
+                    <div class="flex justify-between text-sm mb-1">
+                      <span>{getRatingLabel(item.rating)}</span>
+                      <span class="text-[var(--text-muted)]">{item.count} ({pct}%)</span>
+                    </div>
+                    <div class="h-2 rounded-full bg-[var(--bg-alt)] overflow-hidden">
+                      <div class={`h-full ${getRatingColorClass(item.rating)}`} style={`width: ${pct}%`}></div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      <!-- 热门标签 + 最新作品 -->
+      {dashboard && (
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- 热门标签 TOP 10 -->
+          <div class="card p-5 lg:col-span-2">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-sm font-medium text-[var(--text-muted)]">热门标签 TOP 10</h2>
+              <a href="/admin?tab=tags" class="text-xs text-[var(--accent-color)] hover:underline">查看全部 →</a>
+            </div>
+            {dashboard.top_tags.length === 0 ? (
+              <p class="text-sm text-[var(--text-muted)]">暂无标签</p>
+            ) : (
+              <div class="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2">
+                {dashboard.top_tags.map(tag => (
+                  <a href={`/admin?tab=tags&q=${encodeURIComponent(tag.name)}`} class="flex items-center justify-between text-sm py-1 hover:text-[var(--accent-color)] transition-colors">
+                    <span class="truncate flex items-center gap-2 min-w-0">
+                      <span class={`tag-${tag.category} w-2 h-2 rounded-full flex-shrink-0`}></span>
+                      <span class="truncate">{tag.name}</span>
+                    </span>
+                    <span class="text-[var(--text-muted)] tabular-nums ml-2 flex-shrink-0">{tag.post_count}</span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <!-- 最新作品 6 张 -->
+          <div class="card p-5">
+            <h2 class="text-sm font-medium text-[var(--text-muted)] mb-4">最新作品</h2>
+            {dashboard.recent_posts.length === 0 ? (
+              <p class="text-sm text-[var(--text-muted)]">暂无作品</p>
+            ) : (
+              <div class="grid grid-cols-3 gap-2">
+                {dashboard.recent_posts.map(post => (
+                  <a href={`/posts/${post.id}`} class="block aspect-square overflow-hidden rounded">
+                    <img
+                      src={getThumbUrl({ thumb_key: post.thumb_key } as Post)}
+                      alt={post.title || ""}
+                      class="w-full h-full object-cover hover:scale-105 transition-transform"
+                      loading="lazy"
+                    />
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!dashboard && (
+        <div class="flex flex-col items-center justify-center py-24 text-[var(--text-muted)]">
+          <p class="text-xl mb-2">仪表盘加载失败</p>
+          <p class="text-sm">请稍后重试或检查后端日志</p>
+        </div>
+      )}
     </div>
 
     <!-- ═══════════ Panel: Posts ═══════════ -->
@@ -377,7 +531,7 @@ try {
               {tagsData.items.map((tag) => (
                 <tr class="border-b border-[var(--border-color)] hover:bg-[var(--bg-primary)] transition-colors" data-tag-id={tag.id}>
                   <td class="px-4 py-2">
-                    <span class="text-[0.625rem] font-mono text-[var(--text-muted)] bg-[var(--bg-primary)] px-1 py-0.5 rounded" title={tag.id}>{tag.id.slice(0, 8)}…</span>
+                    <span class="tag-id-cell text-[0.625rem] font-mono text-[var(--text-muted)] bg-[var(--bg-primary)] px-1 py-0.5 rounded cursor-pointer" data-tag-id={tag.id}>{tag.id.slice(0, 8)}…</span>
                   </td>
                   <td class="px-4 py-2">
                     <span class="text-[var(--text-primary)] font-medium tag-name-cell">{tag.name}</span>
@@ -911,7 +1065,11 @@ try {
       var sourceId = document.getElementById('merge-source-id').value.trim();
       var targetId = document.getElementById('merge-target-id').value.trim();
       if (!sourceId || !targetId) return;
-      if (!confirm('确定将源标签合并到目标标签？此操作不可撤销。')) return;
+      var confirmMsg = '确定将源标签合并到目标标签？\n\n' +
+                       '源 ID: ' + sourceId + '\n' +
+                       '目标 ID: ' + targetId + '\n\n' +
+                       '此操作不可撤销。';
+      if (!confirm(confirmMsg)) return;
       try {
         var resp = await fetch('/api/admin/tags/merge', {
           method: 'POST',
@@ -920,7 +1078,17 @@ try {
         });
         if (resp.ok) {
           var data = await resp.json();
-          alert('合并完成：移动 ' + data.posts_moved + ' 个帖子，跳过 ' + data.posts_skipped + ' 个');
+          var srcName = data.source_tag_name || data.source_tag_id;
+          var tgtName = data.target_tag_name || data.target_tag_id;
+          alert(
+            '✅ 合并完成\n\n' +
+            '源标签: ' + srcName + '\n' +
+            '目标标签: ' + tgtName + '\n\n' +
+            '新增关联: ' + data.posts_moved + '\n' +
+            '跳过重复: ' + data.posts_skipped + '\n' +
+            '目标标签最终 post_count: ' + data.target_new_post_count +
+            '（合并前 ' + data.target_old_post_count + '）'
+          );
           window.location.reload();
         } else {
           var err = await resp.json().catch(function() { return {}; });
@@ -1125,6 +1293,121 @@ try {
         .finally(function() { saveBtn.disabled = false; saveBtn.textContent = '保存设置'; setTimeout(function() { saveStatus.classList.add('hidden'); }, 3000); });
     });
   }
+})();
+</script>
+
+<!-- ── Tag ID copy tooltip ── -->
+<div id="tag-id-tooltip" class="fixed z-50 hidden pointer-events-none">
+  <div class="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-md shadow-lg px-3 py-2 text-xs flex items-center gap-2">
+    <code id="tag-id-tooltip-text" class="font-mono text-[var(--text-primary)] select-all">uuid</code>
+    <button id="tag-id-copy-btn" type="button" class="pointer-events-auto px-1.5 py-0.5 rounded bg-[var(--accent-subtle)] text-[var(--accent-color)] hover:bg-[var(--accent-hover)] hover:text-[var(--bg-primary)] transition-colors">复制</button>
+  </div>
+</div>
+
+<!-- ── Tag ID copy tooltip script ── -->
+<script is:inline>
+(function() {
+  var tooltip = document.getElementById('tag-id-tooltip');
+  var tooltipText = document.getElementById('tag-id-tooltip-text');
+  var copyBtn = document.getElementById('tag-id-copy-btn');
+  if (!tooltip || !tooltipText || !copyBtn) return;
+
+  var currentTagId = null;
+  var showTimer = null;
+  var hideTimer = null;
+
+  function showTooltip(target) {
+    var rect = target.getBoundingClientRect();
+    currentTagId = target.getAttribute('data-tag-id');
+    tooltipText.textContent = currentTagId;
+    copyBtn.textContent = '复制';
+    copyBtn.disabled = false;
+    tooltip.style.left = (rect.left + rect.width / 2) + 'px';
+    tooltip.style.top = (rect.top - 8) + 'px';
+    tooltip.style.transform = 'translate(-50%, -100%)';
+    tooltip.classList.remove('hidden');
+    tooltip.classList.remove('pointer-events-none');
+    tooltip.classList.add('pointer-events-auto');
+  }
+
+  function hideTooltip() {
+    tooltip.classList.add('hidden');
+    tooltip.classList.remove('pointer-events-auto');
+    tooltip.classList.add('pointer-events-none');
+    currentTagId = null;
+  }
+
+  function scheduleShow(target) {
+    clearTimeout(hideTimer);
+    clearTimeout(showTimer);
+    showTimer = setTimeout(function() { showTooltip(target); }, 200);
+  }
+
+  function scheduleHide() {
+    clearTimeout(showTimer);
+    hideTimer = setTimeout(hideTooltip, 200);
+  }
+
+  document.addEventListener('mouseover', function(e) {
+    var cell = e.target.closest && e.target.closest('.tag-id-cell');
+    if (cell) scheduleShow(cell);
+  });
+  document.addEventListener('mouseout', function(e) {
+    var cell = e.target.closest && e.target.closest('.tag-id-cell');
+    if (cell) scheduleHide();
+  });
+
+  document.addEventListener('click', function(e) {
+    var cell = e.target.closest && e.target.closest('.tag-id-cell');
+    if (cell && cell.getAttribute('data-tag-id') === currentTagId && !tooltip.classList.contains('hidden')) {
+      hideTooltip();
+    } else if (cell) {
+      clearTimeout(hideTimer);
+      clearTimeout(showTimer);
+      showTooltip(cell);
+    }
+  });
+
+  copyBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (!currentTagId) return;
+    var done = function() {
+      copyBtn.textContent = '✓ 已复制';
+      copyBtn.disabled = true;
+      setTimeout(function() {
+        copyBtn.textContent = '复制';
+        copyBtn.disabled = false;
+      }, 1500);
+    };
+    var fail = function() {
+      copyBtn.textContent = '✗ 失败';
+      setTimeout(function() { copyBtn.textContent = '复制'; }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(currentTagId).then(done, fail);
+    } else {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = currentTagId;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        done();
+      } catch (err) {
+        fail();
+      }
+    }
+  });
+
+  tooltip.addEventListener('mouseenter', function() {
+    clearTimeout(hideTimer);
+  });
+  tooltip.addEventListener('mouseleave', function() {
+    scheduleHide();
+  });
 })();
 </script>
 

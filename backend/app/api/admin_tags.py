@@ -10,7 +10,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_admin
@@ -24,6 +24,7 @@ from app.schemas.tag import (
     TagKnowledgeRead,
     TagListRead,
     TagMergeRequest,
+    TagMergeResponse,
     TagRead,
     TagReprocessRequest,
     TagUpdate,
@@ -161,66 +162,125 @@ async def update_tag(
     return TagRead.model_validate(tag)
 
 
-@router.post("/merge")
+@router.post("/merge", response_model=TagMergeResponse)
 async def merge_tags(
     body: TagMergeRequest,
     db: AsyncSession = Depends(get_db),
     _admin: Admin = Depends(get_current_admin),
 ):
-    """Merge source tag into target tag.
+    """Merge source tag into target tag with verified post_count consistency.
 
-    Moves all post associations from the source tag to the target tag,
-    then deletes the source tag. The target tag's post_count is updated.
+    Algorithm:
+      1. Load both tags (404 if missing) with row-level lock to serialize
+         concurrent merges on the same tag pair.
+      2. Reject self-merge (400).
+      3. Bulk-fetch source.post_tags and target.post_tags (1+1 queries, no N+1).
+      4. Compute set difference: posts to move vs posts to delete.
+      5. DELETE PostTag rows for skipped (already in target).
+      6. UPDATE PostTag.tag_id for moved (bulk).
+      7. Recompute target.post_count via COUNT(*) — single source of truth.
+      8. DELETE source tag.
+      9. Single commit (atomic).
+
+    Returns verified counts so the UI can show a confirmation toast.
     """
     if body.source_tag_id == body.target_tag_id:
-        raise HTTPException(status_code=400, detail="Cannot merge a tag into itself")
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot merge a tag into itself",
+        )
 
-    # Load both tags
-    source = await db.get(Tag, body.source_tag_id)
-    target = await db.get(Tag, body.target_tag_id)
+    # ── 1. Load tags (with row-level lock to prevent concurrent merges) ──
+    source = await db.get(
+        Tag, body.source_tag_id, with_for_update=True
+    )
+    target = await db.get(
+        Tag, body.target_tag_id, with_for_update=True
+    )
 
     if source is None:
-        raise HTTPException(status_code=404, detail="Source tag not found")
-    if target is None:
-        raise HTTPException(status_code=404, detail="Target tag not found")
-
-    # Find post_tags that reference the source tag
-    pt_stmt = select(PostTag).where(PostTag.tag_id == source.id)
-    pt_result = await db.execute(pt_stmt)
-    source_post_tags = pt_result.scalars().all()
-
-    moved = 0
-    skipped = 0
-    for pt in source_post_tags:
-        # Check if target already has this post
-        exists_stmt = select(PostTag).where(
-            PostTag.post_id == pt.post_id, PostTag.tag_id == target.id
+        raise HTTPException(
+            status_code=404,
+            detail=f"Source tag not found: {body.source_tag_id}",
         )
-        exists_result = await db.execute(exists_stmt)
-        if exists_result.scalar_one_or_none():
-            # Target already has this post — just delete the source link
-            skipped += 1
-            await db.delete(pt)
-        else:
-            # Move the association
-            pt.tag_id = target.id
-            moved += 1
+    if target is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Target tag not found: {body.target_tag_id}",
+        )
 
-    # Update post counts
-    target.post_count = target.post_count + moved
-    source.post_count = 0
+    # ── 2. Bulk-fetch post_ids (2 queries, no N+1) ──
+    source_post_ids_stmt = select(PostTag.post_id).where(
+        PostTag.tag_id == source.id
+    )
+    target_post_ids_stmt = select(PostTag.post_id).where(
+        PostTag.tag_id == target.id
+    )
 
-    # Delete source tag
+    source_post_ids = set(
+        (await db.execute(source_post_ids_stmt)).scalars().all()
+    )
+    target_post_ids = set(
+        (await db.execute(target_post_ids_stmt)).scalars().all()
+    )
+
+    # ── 3. Compute set difference ──
+    to_move_ids = source_post_ids - target_post_ids  # need to be added
+    to_delete_ids = source_post_ids & target_post_ids  # already in target, drop
+
+    # ── 4. Apply changes ──
+    if to_delete_ids:
+        await db.execute(
+            delete(PostTag).where(
+                PostTag.tag_id == source.id,
+                PostTag.post_id.in_(to_delete_ids),
+            )
+        )
+
+    if to_move_ids:
+        await db.execute(
+            update(PostTag)
+            .where(
+                PostTag.tag_id == source.id,
+                PostTag.post_id.in_(to_move_ids),
+            )
+            .values(tag_id=target.id)
+        )
+
+    # ── 5. Recompute target.post_count (single source of truth) ──
+    new_count_stmt = select(func.count()).select_from(PostTag).where(
+        PostTag.tag_id == target.id
+    )
+    target_new_count = (await db.execute(new_count_stmt)).scalar() or 0
+    target.post_count = target_new_count
+
+    # ── 6. Delete source tag (post_count field is removed along with row) ──
     await db.delete(source)
-    await db.commit()
 
-    return {
-        "merged": True,
-        "source_tag": source.name,
-        "target_tag": target.name,
-        "posts_moved": moved,
-        "posts_skipped": skipped,
-    }
+    # ── 7. Single atomic commit ──
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.exception(
+            "merge_tags failed: source=%s target=%s", source.id, target.id
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Merge failed, transaction rolled back: {e}",
+        )
+
+    return TagMergeResponse(
+        merged=True,
+        source_tag_id=source.id,
+        source_tag_name=source.name,
+        target_tag_id=target.id,
+        target_tag_name=target.name,
+        posts_moved=len(to_move_ids),
+        posts_skipped=len(to_delete_ids),
+        target_new_post_count=target_new_count,
+        target_old_post_count=len(target_post_ids),
+    )
 
 
 @router.post("/reprocess")

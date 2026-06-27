@@ -2,6 +2,33 @@
 
 本文件记录项目的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.6.3] - 2026-06-27
+
+### 新增
+- **管理后台仪表盘** (`/admin?tab=dashboard`) — 4 张概览卡（作品总数 / 标签总数 / 关联总数 / 存储总量）+ 2 张分布图（来源 / 评级横向 bar）+ 2 张榜单（热门标签 TOP 10 / 最新作品 6 张缩略图）。默认 tab 改为 dashboard，进管理后台直接看到全站总览。
+  - `GET /api/admin/dashboard/` — admin only，单请求聚合 8 个指标（4 COUNT + 2 GROUP BY + 2 LIMIT）
+  - 4 个新 Pydantic schema（`OverviewStats` / `SourceBreakdownItem` / `RatingBreakdownItem` / `TopTagItem` / `RecentPostItem` / `DashboardResponse`）
+  - 纯 SQL 聚合，无缓存层（admin 专属低频访问）
+  - 空数据正常渲染（0 不崩溃）；匿名返回 401
+- **标签 ID 复制浮泡** — admin 标签列表中 UUID 列从「原生 title 提示」升级为「hover 200ms 显示完整 UUID + 点击复制按钮」。Clipboard API 优先，textarea + execCommand 降级。浮泡自身 `user-select: all` 作为终极降级（手动全选复制）。
+- **标签合并重写** — `POST /api/admin/tags/merge` 端点完全重写：
+  - `target.post_count` 改用 `SELECT COUNT(*) FROM post_tags WHERE tag_id = target` 重新计算，作为 single source of truth（替代旧的「累加 moved」方式）
+  - 2 次批量查询（source/target post_ids）替代 N+1 循环
+  - 行级锁 `with_for_update=True` 序列化并发合并
+  - 单次 commit，失败回滚整个事务
+  - 新增 `TagMergeResponse` schema：`target_old_post_count` / `target_new_post_count` 让 UI 能显示合并前后对比
+  - 删除死代码 `source.post_count = 0`（紧随 `db.delete(source)`，无意义）
+
+### 变更
+- **管理后台默认 tab** — 从「图片」改为「概览」。子标签「管理」组首位新增「概览」。
+- **合并确认弹窗** — 文案增强，显示源/目标 ID（防止误操作）。成功弹窗显示「合并前 / 合并后 post_count」对比，admin 可立即确认 `post_count` 是否真的对上了。
+- **前端合并 tags 类型** — `mergeTags` 响应类型从 `source_tag` / `target_tag` 改为 `source_tag_id` / `source_tag_name` / `target_tag_id` / `target_tag_name`（与新后端 schema 对齐）。
+- **管理后台 sub-tab 路由** — `admin/index.astro` `manageGroup` 内联 JS 数组加入 `dashboard`，子标签栏 visible 条件更新。
+- **`docs/architecture.md`** — API endpoints 表追加 `/api/admin/dashboard/`；`merge` 端点描述补「verified post_count」。
+
+### 修复
+- **标签合并 post_count 漂移** — 旧实现 `target.post_count = target.post_count + moved` 仅累加「新增」关联，未考虑被删除的重复项；多次串联合并后 `post_count` 会偏离真实关联数。新实现用 `COUNT(*)` 重算，与实际 `post_tags` 行数严格一致。
+
 ## [0.6.0] - 2026-06-26
 
 ### 新增

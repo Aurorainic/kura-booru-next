@@ -318,10 +318,14 @@ export async function updatePostTags(
 
 export async function mergeTags(sourceTagId: string, targetTagId: string): Promise<{
   merged: boolean;
-  source_tag: string;
-  target_tag: string;
+  source_tag_id: string;
+  source_tag_name: string;
+  target_tag_id: string;
+  target_tag_name: string;
   posts_moved: number;
   posts_skipped: number;
+  target_old_post_count: number;
+  target_new_post_count: number;
 }> {
   return fetchApi("/admin/tags/merge", undefined, {
     method: "POST",
@@ -340,6 +344,53 @@ export async function reprocessTags(force: boolean = false): Promise<{
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ force }),
   });
+}
+
+// === Admin Dashboard API ===
+
+export interface DashboardOverview {
+  total_posts: number;
+  total_tags: number;
+  total_post_tags: number;
+  total_file_size_bytes: number;
+}
+
+export interface SourceBreakdownItem {
+  source_site: SourceSite;
+  count: number;
+}
+
+export interface RatingBreakdownItem {
+  rating: Rating;
+  count: number;
+}
+
+export interface TopTagItem {
+  id: string;
+  name: string;
+  category: TagCategory;
+  post_count: number;
+}
+
+export interface RecentPostItem {
+  id: string;
+  thumb_key: string;
+  title: string | null;
+  rating: Rating;
+  source_site: SourceSite;
+  created_at: string;
+}
+
+export interface DashboardStats {
+  overview: DashboardOverview;
+  source_breakdown: SourceBreakdownItem[];
+  rating_breakdown: RatingBreakdownItem[];
+  top_tags: TopTagItem[];
+  recent_posts: RecentPostItem[];
+}
+
+export async function fetchDashboardStats(ssrCookie?: string): Promise<DashboardStats> {
+  return fetchApi<DashboardStats>("/admin/dashboard/", undefined, { ssrCookie });
 }
 
 // === Image URL Helpers ===

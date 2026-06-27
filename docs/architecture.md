@@ -345,9 +345,10 @@ Known keys: `site_title`, `site_description`, `announcement`, `head_inject`, `ma
 | GET | `/api/tasks/{task_id}` | Task status polling (requires X-Api-Key; used by browser extension) |
 | GET | `/api/admin/tags` | List all tags with pagination (admin only) |
 | PATCH | `/api/admin/tags/{id}` | Update tag (name, category, translation) (admin only) |
-| POST | `/api/admin/tags/merge` | Merge tags (admin only) |
+| POST | `/api/admin/tags/merge` | Merge tags (admin only; recomputes target post_count via COUNT(*), single atomic commit) |
 | POST | `/api/admin/tags/reprocess` | Re-run AI classification on tags (admin only) |
 | GET | `/api/admin/tags/knowledge` | List tag knowledge cache (admin only) |
+| GET | `/api/admin/dashboard/` | Dashboard aggregate stats (admin only; 4 overview counts + 2 breakdowns + top tags + recent posts) |
 | GET | `/api/auto-rating-rules` | List auto-rating rules (admin only) |
 | POST | `/api/auto-rating-rules` | Create auto-rating rule (admin only) |
 | DELETE | `/api/auto-rating-rules/{id}` | Delete auto-rating rule (admin only) |
