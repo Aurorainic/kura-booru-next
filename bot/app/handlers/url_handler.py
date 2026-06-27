@@ -20,6 +20,37 @@ router = Router()
 # selects a rating button before timeout.
 _countdown_tasks: dict[str, asyncio.Task] = {}
 
+# ── Per-chat processing queue ───────────────────────────────────────────────
+# Each chat gets its own queue so URLs are processed serially per user,
+# preventing backend overload from concurrent requests.
+_chat_queues: dict[int, asyncio.Queue[asyncio.Coroutine]] = {}
+_chat_workers: dict[int, asyncio.Task] = {}
+
+
+async def _get_chat_queue(chat_id: int) -> asyncio.Queue:
+    """Get or create the processing queue for a chat."""
+    if chat_id not in _chat_queues:
+        _chat_queues[chat_id] = asyncio.Queue()
+        _chat_workers[chat_id] = asyncio.create_task(
+            _chat_queue_worker(chat_id, _chat_queues[chat_id])
+        )
+    return _chat_queues[chat_id]
+
+
+async def _chat_queue_worker(chat_id: int, queue: asyncio.Queue) -> None:
+    """Worker that processes queued coroutines one at a time for a chat."""
+    while True:
+        try:
+            coro = await queue.get()
+            await coro
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.exception("chat_queue_worker error for chat %s", chat_id)
+        finally:
+            queue.task_done()
+
+
 # URL detection pattern — matches http(s) URLs in message text
 URL_PATTERN = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
 
@@ -148,14 +179,7 @@ async def _countdown_and_auto_confirm(
     source_id: str,
     auto_rating: str | None,
 ) -> None:
-    """10-second countdown: show timer, then auto-confirm if user hasn't selected.
-
-    If auto_rating was set by backend rules (e.g. tag matched a rule), use that.
-    Otherwise default to safe.
-
-    This task is tracked in _countdown_tasks so it can be canceled when the user
-    selects a rating button before timeout.
-    """
+    """10-second countdown: show timer, then auto-confirm if user hasn't selected."""
     final_rating = auto_rating or "safe"
     final_label = _RATING_LABELS.get(final_rating, final_rating)
     chat_id = processing_msg.chat.id
@@ -164,10 +188,9 @@ async def _countdown_and_auto_confirm(
     rule_hint = t(hint_key, lang)
 
     try:
-        # Countdown display
         for remaining in range(RATING_COUNTDOWN_SECONDS, 0, -1):
             if await _is_confirmed(post_id):
-                return  # User already selected
+                return
             try:
                 if auto_rating:
                     auto_label = _RATING_LABELS.get(auto_rating, auto_rating)
@@ -185,16 +208,14 @@ async def _countdown_and_auto_confirm(
                     ]),
                 )
             except Exception:
-                pass  # Message deleted or edit rate-limited
+                pass
             await asyncio.sleep(1)
 
-        # Countdown finished — auto-confirm
         if await _is_confirmed(post_id):
             return
 
         await _mark_confirmed(post_id)
 
-        # If the auto-rating differs from the post's current rating, update it
         post_url = f"{settings.FRONTEND_URL}/posts/{post_id}"
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=t("btn_view", lang), url=post_url)]
@@ -205,24 +226,20 @@ async def _countdown_and_auto_confirm(
                 reply_markup=keyboard,
             )
         except Exception:
-            pass  # Message deleted or too old
+            pass
     except asyncio.CancelledError:
-        # User selected a rating button — countdown is no longer needed.
-        # The callback handler will edit the message with the user's choice.
         return
     finally:
-        # Always clean up the task reference
         _countdown_tasks.pop(post_id, None)
 
 
 async def _poll_and_notify(
-    message: Message,
     processing_msg: Message,
     task_id: str,
     source_site: str,
     source_id: str,
 ) -> None:
-    """Background task: poll ARQ job and edit message on completion."""
+    """Poll ARQ job and edit message on completion. Awaits completion (blocking)."""
     chat_id = processing_msg.chat.id
     lang = await get_chat_lang(chat_id)
 
@@ -241,9 +258,8 @@ async def _poll_and_notify(
     status = result.get("status")
     if status == "success":
         post_id = result.get("post_id")
-        auto_rating = result.get("auto_rating")  # Set by backend auto-rating rules
+        auto_rating = result.get("auto_rating")
         if post_id:
-            # Show rating selection menu
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
                     InlineKeyboardButton(text=t("rating_safe", lang), callback_data=f"rate:{post_id}:safe"),
@@ -252,7 +268,6 @@ async def _poll_and_notify(
                 ]
             ])
 
-            # If auto-rating rule matched, hint the suggested rating
             if auto_rating:
                 auto_label = _RATING_LABELS.get(auto_rating, auto_rating)
                 prompt_text = t("rating_awaiting_auto", lang, site=source_site, source_id=source_id, auto_label=auto_label)
@@ -260,19 +275,16 @@ async def _poll_and_notify(
                 prompt_text = t("rating_awaiting", lang, remaining=RATING_COUNTDOWN_SECONDS, site=source_site, source_id=source_id)
 
             try:
-                await processing_msg.edit_text(
-                    prompt_text,
-                    reply_markup=keyboard,
-                )
+                await processing_msg.edit_text(prompt_text, reply_markup=keyboard)
             except Exception:
                 pass
-            # 10s countdown → auto-confirm
+            # Countdown runs in background (doesn't block the queue)
             countdown_task = asyncio.create_task(
-                _countdown_and_auto_confirm(
-                    processing_msg, post_id, source_site, source_id, auto_rating
-                )
+                _countdown_and_auto_confirm(processing_msg, post_id, source_site, source_id, auto_rating)
             )
             _countdown_tasks[post_id] = countdown_task
+            # Wait for countdown to finish (user selects rating or auto-confirms)
+            await countdown_task
         else:
             try:
                 await processing_msg.edit_text(
@@ -297,10 +309,7 @@ async def _poll_and_notify(
                     keyboard = InlineKeyboardMarkup(inline_keyboard=[
                         [InlineKeyboardButton(text=t("btn_view_existing", lang), url=post_url)]
                     ])
-                    await processing_msg.edit_text(
-                        t("url_duplicate", lang),
-                        reply_markup=keyboard,
-                    )
+                    await processing_msg.edit_text(t("url_duplicate", lang), reply_markup=keyboard)
                 else:
                     await processing_msg.edit_text(
                         t("url_duplicate", lang) + f"\nTask: `{task_id}`",
@@ -312,7 +321,7 @@ async def _poll_and_notify(
                     parse_mode="Markdown",
                 )
         except Exception:
-            pass  # Message deleted or too old
+            pass
     else:
         try:
             await processing_msg.edit_text(
@@ -323,8 +332,8 @@ async def _poll_and_notify(
             pass
 
 
-async def process_url(message: Message, url: str) -> None:
-    """Shared URL processing: identify source, dispatch task, poll and notify."""
+async def _process_one_url(message: Message, url: str) -> None:
+    """Process a single URL end-to-end: dispatch → poll → rating. Blocks until done."""
     source_info = identify_source(url)
     lang = await get_chat_lang(message.chat.id)
 
@@ -333,15 +342,10 @@ async def process_url(message: Message, url: str) -> None:
         return
 
     source_site, source_id = source_info
-
-    # Send "processing" reply
     processing_msg = await message.reply(t("url_downloading", lang))
 
-    # Dispatch to backend
     result = await create_process_task(
-        source_url=url,
-        source_site=source_site,
-        source_id=source_id,
+        source_url=url, source_site=source_site, source_id=source_id,
     )
 
     if result is None:
@@ -351,7 +355,6 @@ async def process_url(message: Message, url: str) -> None:
             pass
         return
 
-    # Start background polling
     task_id = result.get("task_id", "unknown")
     try:
         await processing_msg.edit_text(
@@ -361,87 +364,34 @@ async def process_url(message: Message, url: str) -> None:
     except Exception:
         pass
 
-    # Fire-and-forget background polling
-    asyncio.create_task(
-        _poll_and_notify(message, processing_msg, task_id, source_site, source_id)
-    )
+    # Await polling — blocks until this URL is fully processed
+    await _poll_and_notify(processing_msg, task_id, source_site, source_id)
 
 
 async def _process_urls_sequential(
     message: Message, urls: list[str], source_labels: list[str]
 ) -> None:
-    """Process multiple URLs one by one with status updates."""
+    """Process multiple URLs one by one, enqueuing each to the chat queue."""
     lang = await get_chat_lang(message.chat.id)
-    status_msg = await message.reply(
-        t("batch_found", lang, count=len(urls)) + "\n"
-        + "\n".join(f"  {i+1}. {label}" for i, label in enumerate(source_labels))
-    )
+    queue = await _get_chat_queue(message.chat.id)
+    queued = 0
 
-    succeeded = 0
-    failed = 0
     for url, label in zip(urls, source_labels):
-        processing_msg = await message.reply(t("batch_processing", lang, label=label))
-
         source_info = identify_source(url)
         if source_info is None:
-            try:
-                await processing_msg.edit_text(t("batch_skip_unrecognized", lang, label=label))
-            except Exception:
-                pass
-            failed += 1
             continue
+        await queue.put(_process_one_url(message, url))
+        queued += 1
 
-        source_site, source_id = source_info
-        result = await create_process_task(
-            source_url=url, source_site=source_site, source_id=source_id,
-        )
-        if result is None:
-            try:
-                await processing_msg.edit_text(t("batch_queue_failed", lang, label=label))
-            except Exception:
-                pass
-            failed += 1
-            continue
-
-        task_id = result.get("task_id", "unknown")
-        try:
-            await processing_msg.edit_text(
-                t("batch_queued", lang, label=label, task_id=task_id),
-                parse_mode="Markdown",
-            )
-        except Exception:
-            pass
-
-        asyncio.create_task(
-            _poll_and_notify(message, processing_msg, task_id, source_site, source_id)
-        )
-        succeeded += 1
-
-    try:
-        await status_msg.edit_text(
-            t("batch_done", lang, succeeded=succeeded, failed=failed, total=len(urls))
-        )
-    except Exception:
-        pass
+    if queued > 0:
+        await message.reply(t("batch_found", lang, count=queued))
 
 
-# ── Plain text filter (matches direct text messages + forwarded text-only) ──
-# F.text catches: (1) regular text messages, (2) forwarded/channel messages with
-# no photo (forward_origin type "channel" with text has .text set, not .caption).
-# Messages with photos (even forwarded) go to handle_photo_url → caption.
+# ── Plain text filter ──
 
 @router.message(F.text, ~F.text.startswith("/"), ~F.text.startswith("!"))
 async def handle_url_message(message: Message) -> None:
-    """Handle plain text messages that contain URLs (not commands).
-
-    Works for direct messages, forwarded channel posts, and forwarded user
-    messages — as long as the content is text-only (no photo attached).
-
-    Behavior:
-    - 0 recognized URLs → ignore silently
-    - 1 recognized URL → process directly
-    - 2+ recognized URLs → batch process all with progress updates
-    """
+    """Handle plain text messages that contain URLs (not commands)."""
     text = message.text
     if not text:
         return
@@ -451,15 +401,7 @@ async def handle_url_message(message: Message) -> None:
 
 @router.message(F.photo)
 async def handle_photo_url(message: Message) -> None:
-    """Handle messages with photos that contain a caption URL.
-
-    Telegram delivers forwarded channel posts with a photo as:
-    - message.photo is non-empty
-    - message.text is None
-    - message.caption contains the channel post text (with URLs)
-
-    This also handles direct messages that include both a photo and a caption URL.
-    """
+    """Handle messages with photos that contain a caption URL."""
     caption = message.caption
     if not caption:
         return
@@ -468,7 +410,7 @@ async def handle_photo_url(message: Message) -> None:
 
 
 async def _handle_urls_from_text(message: Message, text: str) -> None:
-    """Extract URLs from text, filter to image sources, and process."""
+    """Extract URLs from text, filter to image sources, and enqueue for processing."""
     all_urls = URL_PATTERN.findall(text)
 
     if not all_urls:
@@ -492,19 +434,16 @@ async def _handle_urls_from_text(message: Message, text: str) -> None:
             break
 
     if not recognized:
-        # No recognized image source URLs — ignore silently
         return
+
+    queue = await _get_chat_queue(message.chat.id)
 
     if len(recognized) == 1:
         url, site, sid = recognized[0]
         logger.info("URL message: single URL → %s/%s from %s", site, sid, url)
-        await process_url(message, url)
+        await queue.put(_process_one_url(message, url))
     else:
         urls = [r[0] for r in recognized]
         labels = [f"{r[1]}/{r[2]}" for r in recognized]
-        logger.info(
-            "URL message: %d URLs found → %s",
-            len(urls),
-            ", ".join(labels),
-        )
+        logger.info("URL message: %d URLs found → %s", len(urls), ", ".join(labels))
         await _process_urls_sequential(message, urls, labels)

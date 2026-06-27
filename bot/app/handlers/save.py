@@ -7,7 +7,8 @@ from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
 
-from app.handlers.url_handler import URL_PATTERN, process_url
+from app.handlers.url_handler import URL_PATTERN, _get_chat_queue, _process_one_url
+from app.i18n import t, get_chat_lang
 
 logger = logging.getLogger(__name__)
 
@@ -22,14 +23,12 @@ async def cmd_save(message: Message) -> None:
     Usage: /save <url> or !save <url>
     """
     text = message.text or ""
+    lang = await get_chat_lang(message.chat.id)
 
     # Extract the command arguments (everything after /save or !save)
     command_match = re.match(r"^(?:/save|!save)\s+(.+)", text, re.IGNORECASE)
     if not command_match:
-        await message.answer(
-            "用法 / Usage:\n`/save <url>` or `!save <url>`",
-            parse_mode="Markdown",
-        )
+        await message.answer(t("save_usage", lang), parse_mode="Markdown")
         return
 
     remaining = command_match.group(1).strip()
@@ -41,4 +40,5 @@ async def cmd_save(message: Message) -> None:
         return
 
     url = url_match.group(0)
-    await process_url(message, url)
+    queue = await _get_chat_queue(message.chat.id)
+    await queue.put(_process_one_url(message, url))
