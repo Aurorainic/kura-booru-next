@@ -20,35 +20,17 @@ router = Router()
 # selects a rating button before timeout.
 _countdown_tasks: dict[str, asyncio.Task] = {}
 
-# ── Per-chat processing queue ───────────────────────────────────────────────
-# Each chat gets its own queue so URLs are processed serially per user,
-# preventing backend overload from concurrent requests.
-_chat_queues: dict[int, asyncio.Queue[asyncio.Coroutine]] = {}
-_chat_workers: dict[int, asyncio.Task] = {}
+# ── Per-chat semaphore — limits concurrent dispatches per chat ───────────────
+# Prevents a single user from flooding the backend. Dispatch is throttled,
+# but polling/rating runs freely in the background.
+_MAX_CONCURRENT_PER_CHAT = 3
+_chat_semaphores: dict[int, asyncio.Semaphore] = {}
 
 
-async def _get_chat_queue(chat_id: int) -> asyncio.Queue:
-    """Get or create the processing queue for a chat."""
-    if chat_id not in _chat_queues:
-        _chat_queues[chat_id] = asyncio.Queue()
-        _chat_workers[chat_id] = asyncio.create_task(
-            _chat_queue_worker(chat_id, _chat_queues[chat_id])
-        )
-    return _chat_queues[chat_id]
-
-
-async def _chat_queue_worker(chat_id: int, queue: asyncio.Queue) -> None:
-    """Worker that processes queued coroutines one at a time for a chat."""
-    while True:
-        try:
-            coro = await queue.get()
-            await coro
-        except asyncio.CancelledError:
-            break
-        except Exception:
-            logger.exception("chat_queue_worker error for chat %s", chat_id)
-        finally:
-            queue.task_done()
+def _get_chat_semaphore(chat_id: int) -> asyncio.Semaphore:
+    if chat_id not in _chat_semaphores:
+        _chat_semaphores[chat_id] = asyncio.Semaphore(_MAX_CONCURRENT_PER_CHAT)
+    return _chat_semaphores[chat_id]
 
 
 # URL detection pattern — matches http(s) URLs in message text
@@ -78,75 +60,41 @@ async def _mark_confirmed(post_id: str) -> None:
 
 
 def cancel_countdown(post_id: str) -> bool:
-    """Cancel the countdown task for a post if one is running.
-
-    Returns True if a task was found and canceled, False otherwise.
-    Called from the callback handler when the user selects a rating button.
-    """
+    """Cancel the countdown task for a post if one is running."""
     task = _countdown_tasks.pop(post_id, None)
     if task is not None and not task.done():
         task.cancel()
         return True
     return False
 
-# Seconds to wait for manual rating before auto-confirming
 RATING_COUNTDOWN_SECONDS = 10
 
-# Rating priority: higher value = more restrictive
 _RATING_ORDER = {"safe": 0, "questionable": 1, "explicit": 2}
 _RATING_LABELS = {"safe": "🟢 公开", "questionable": "🟡 敏感", "explicit": "🔴 限制"}
 
-# ── URL patterns: MIRROR of backend/app/services/url_patterns.py — keep in sync ──
-# When updating patterns, update backend/app/services/url_patterns.py first,
-# then sync changes here. The bot is a separate Python package and cannot
-# import from the backend directly.
+# ── URL patterns: MIRROR of backend/app/services/url_patterns.py ──
 
-# Regex to normalize phixiv.net proxy URLs back to pixiv.net
-_PHIXIV_NORMALIZE = re.compile(
-    r"https?://(?:www\.)?phixiv\.net",
-    re.IGNORECASE,
-)
+_PHIXIV_NORMALIZE = re.compile(r"https?://(?:www\.)?phixiv\.net", re.IGNORECASE)
 
-# Source site detection patterns mapped to (site_name, id_capture_group)
 SOURCE_PATTERNS: list[tuple[re.Pattern, str]] = [
-    # Pixiv: https://www.pixiv.net/artworks/12345678
     (
-        re.compile(
-            r"(?:https?://)?(?:www\.)?pixiv\.net/(?:artworks|illust)/(\d+)",
-            re.IGNORECASE,
-        ),
+        re.compile(r"(?:https?://)?(?:www\.)?pixiv\.net/(?:artworks|illust)/(\d+)", re.IGNORECASE),
         "pixiv",
     ),
-    # Pixiv short: https://pixiv.net/i/12345678
     (
-        re.compile(
-            r"(?:https?://)?(?:www\.)?pixiv\.net/i/(\d+)",
-            re.IGNORECASE,
-        ),
+        re.compile(r"(?:https?://)?(?:www\.)?pixiv\.net/i/(\d+)", re.IGNORECASE),
         "pixiv",
     ),
-    # phixiv.net proxy → normalize to pixiv
     (
-        re.compile(
-            r"(?:https?://)?(?:www\.)?phixiv\.net/(?:artworks|illust)/(\d+)",
-            re.IGNORECASE,
-        ),
+        re.compile(r"(?:https?://)?(?:www\.)?phixiv\.net/(?:artworks|illust)/(\d+)", re.IGNORECASE),
         "pixiv",
     ),
-    # Twitter/X: https://twitter.com/user/status/12345 or https://x.com/user/status/12345
     (
-        re.compile(
-            r"(?:https?://)?(?:www\.)?(?:twitter\.com|x\.com)/\w+/status/(\d+)",
-            re.IGNORECASE,
-        ),
+        re.compile(r"(?:https?://)?(?:www\.)?(?:twitter\.com|x\.com)/\w+/status/(\d+)", re.IGNORECASE),
         "twitter",
     ),
-    # Danbooru: https://danbooru.donmai.us/posts/12345
     (
-        re.compile(
-            r"(?:https?://)?(?:www\.)?danbooru\.donmai\.us/posts/(\d+)",
-            re.IGNORECASE,
-        ),
+        re.compile(r"(?:https?://)?(?:www\.)?danbooru\.donmai\.us/posts/(\d+)", re.IGNORECASE),
         "danbooru",
     ),
 ]
@@ -155,20 +103,13 @@ SOURCE_PATTERNS: list[tuple[re.Pattern, str]] = [
 def identify_source(url: str) -> tuple[str, str] | None:
     """Identify the source site and extract the source ID from a URL.
 
-    Returns (source_site, source_id) or None if not recognized.
-    Also normalizes proxy URLs (e.g. phixiv.net → pixiv.net).
-
     MIRROR of backend/app/services/url_patterns.py:identify_source — keep in sync.
     """
-    # Normalize phixiv.net proxy URLs back to pixiv.net
     normalized = _PHIXIV_NORMALIZE.sub("https://www.pixiv.net", url)
-
     for pattern, site_name in SOURCE_PATTERNS:
         match = pattern.search(normalized)
         if match:
             return site_name, match.group(1)
-
-    # Unknown source — not processable
     return None
 
 
@@ -239,7 +180,7 @@ async def _poll_and_notify(
     source_site: str,
     source_id: str,
 ) -> None:
-    """Poll ARQ job and edit message on completion. Awaits completion (blocking)."""
+    """Poll ARQ job and edit message on completion. Runs in background (fire-and-forget)."""
     chat_id = processing_msg.chat.id
     lang = await get_chat_lang(chat_id)
 
@@ -303,13 +244,11 @@ async def _poll_and_notify(
                 await processing_msg.edit_text(prompt_text, reply_markup=keyboard)
             except Exception:
                 pass
-            # Countdown runs in background (doesn't block the queue)
+            # Countdown runs in background — does NOT block other URLs
             countdown_task = asyncio.create_task(
                 _countdown_and_auto_confirm(processing_msg, post_id, source_site, source_id, auto_rating)
             )
             _countdown_tasks[post_id] = countdown_task
-            # Wait for countdown to finish (user selects rating or auto-confirms)
-            await countdown_task
         else:
             try:
                 await processing_msg.edit_text(
@@ -357,8 +296,8 @@ async def _poll_and_notify(
             pass
 
 
-async def _process_one_url(message: Message, url: str) -> None:
-    """Process a single URL end-to-end: dispatch → poll → rating. Blocks until done."""
+async def _dispatch_and_poll(message: Message, url: str) -> None:
+    """Dispatch one URL to backend (throttled by semaphore), then poll in background."""
     source_info = identify_source(url)
     lang = await get_chat_lang(message.chat.id)
 
@@ -367,49 +306,35 @@ async def _process_one_url(message: Message, url: str) -> None:
         return
 
     source_site, source_id = source_info
-    processing_msg = await message.reply(t("url_downloading", lang))
+    sem = _get_chat_semaphore(message.chat.id)
 
-    result = await create_process_task(
-        source_url=url, source_site=source_site, source_id=source_id,
-    )
+    async with sem:
+        processing_msg = await message.reply(t("url_downloading", lang))
 
-    if result is None:
+        result = await create_process_task(
+            source_url=url, source_site=source_site, source_id=source_id,
+        )
+
+        if result is None:
+            try:
+                await processing_msg.edit_text(t("url_task_failed", lang))
+            except Exception:
+                pass
+            return
+
+        task_id = result.get("task_id", "unknown")
         try:
-            await processing_msg.edit_text(t("url_task_failed", lang))
+            await processing_msg.edit_text(
+                t("url_queued", lang, site=source_site, source_id=source_id, task_id=task_id),
+                parse_mode="Markdown",
+            )
         except Exception:
             pass
-        return
 
-    task_id = result.get("task_id", "unknown")
-    try:
-        await processing_msg.edit_text(
-            t("url_queued", lang, site=source_site, source_id=source_id, task_id=task_id),
-            parse_mode="Markdown",
+        # Poll in background — semaphore released, other URLs can dispatch
+        asyncio.create_task(
+            _poll_and_notify(processing_msg, task_id, source_site, source_id)
         )
-    except Exception:
-        pass
-
-    # Await polling — blocks until this URL is fully processed
-    await _poll_and_notify(processing_msg, task_id, source_site, source_id)
-
-
-async def _process_urls_sequential(
-    message: Message, urls: list[str], source_labels: list[str]
-) -> None:
-    """Process multiple URLs one by one, enqueuing each to the chat queue."""
-    lang = await get_chat_lang(message.chat.id)
-    queue = await _get_chat_queue(message.chat.id)
-    queued = 0
-
-    for url, label in zip(urls, source_labels):
-        source_info = identify_source(url)
-        if source_info is None:
-            continue
-        await queue.put(_process_one_url(message, url))
-        queued += 1
-
-    if queued > 0:
-        await message.reply(t("batch_found", lang, count=queued))
 
 
 # ── Plain text filter ──
@@ -420,7 +345,6 @@ async def handle_url_message(message: Message) -> None:
     text = message.text
     if not text:
         return
-
     await _handle_urls_from_text(message, text)
 
 
@@ -430,18 +354,16 @@ async def handle_photo_url(message: Message) -> None:
     caption = message.caption
     if not caption:
         return
-
     await _handle_urls_from_text(message, caption)
 
 
 async def _handle_urls_from_text(message: Message, text: str) -> None:
-    """Extract URLs from text, filter to image sources, and enqueue for processing."""
+    """Extract URLs from text, filter to image sources, dispatch each."""
     all_urls = URL_PATTERN.findall(text)
-
     if not all_urls:
         return
 
-    # Deduplicate while preserving order
+    # Deduplicate
     seen: set[str] = set()
     unique_urls: list[str] = []
     for u in all_urls:
@@ -449,8 +371,8 @@ async def _handle_urls_from_text(message: Message, text: str) -> None:
             seen.add(u)
             unique_urls.append(u)
 
-    # Filter to recognized image sources first, then cap at limit
-    recognized: list[tuple[str, str, str]] = []  # (url, site, id)
+    # Filter to recognized sources, cap at limit
+    recognized: list[tuple[str, str, str]] = []
     for url in unique_urls:
         info = identify_source(url)
         if info:
@@ -461,14 +383,7 @@ async def _handle_urls_from_text(message: Message, text: str) -> None:
     if not recognized:
         return
 
-    queue = await _get_chat_queue(message.chat.id)
-
-    if len(recognized) == 1:
-        url, site, sid = recognized[0]
-        logger.info("URL message: single URL → %s/%s from %s", site, sid, url)
-        await queue.put(_process_one_url(message, url))
-    else:
-        urls = [r[0] for r in recognized]
-        labels = [f"{r[1]}/{r[2]}" for r in recognized]
-        logger.info("URL message: %d URLs found → %s", len(urls), ", ".join(labels))
-        await _process_urls_sequential(message, urls, labels)
+    # Fire all dispatches — semaphore throttles to _MAX_CONCURRENT_PER_CHAT
+    for url, site, sid in recognized:
+        logger.info("URL message: %s/%s from %s", site, sid, url)
+        asyncio.create_task(_dispatch_and_poll(message, url))
