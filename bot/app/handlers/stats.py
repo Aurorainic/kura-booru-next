@@ -7,6 +7,7 @@ from aiogram.types import Message
 from aiogram.filters import Command
 
 from app.services.backend_api import get_dashboard_stats
+from app.i18n import t, get_chat_lang
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +18,10 @@ router = Router()
 @router.message(F.text.regexp(r"^!stats"))
 async def cmd_stats(message: Message) -> None:
     """Handle /stats or !stats — show gallery statistics."""
+    lang = await get_chat_lang(message.chat.id)
     stats = await get_dashboard_stats()
     if stats is None:
-        await message.answer("❌ 获取统计信息失败 / Failed to fetch stats.")
+        await message.answer(t("stats_failed", lang))
         return
 
     overview = stats.get("overview", {})
@@ -36,11 +38,8 @@ async def cmd_stats(message: Message) -> None:
     else:
         size_str = f"{total_size / 1_000:.1f} KB"
 
-    text = (
-        "📊 **Kura Booru Stats**\n"
-        f"🖼 Posts: {total_posts}\n"
-        f"🏷 Tags: {total_tags}\n"
-        f"🔗 Tag links: {total_post_tags}\n"
-        f"💾 Storage: {size_str}"
+    await message.answer(
+        t("stats_body", lang, total_posts=total_posts, total_tags=total_tags,
+          total_post_tags=total_post_tags, size=size_str),
+        parse_mode="Markdown",
     )
-    await message.answer(text, parse_mode="Markdown")

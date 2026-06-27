@@ -66,10 +66,15 @@ export function emptyPostsResponse(): PostsResponse {
 
 // === API Client ===
 
-const BASE_URL =
-  typeof import.meta.env.SSR !== "undefined" && import.meta.env.SSR
-    ? (import.meta.env.INTERNAL_API_URL || "http://backend:8000/api")
-    : (import.meta.env.PUBLIC_API_URL || "http://localhost:8000/api");
+// SSR uses process.env (runtime, not baked into build), client uses PUBLIC_API_URL (build-time)
+function getBaseUrl(): string {
+  if (typeof import.meta.env.SSR !== "undefined" && import.meta.env.SSR) {
+    const url = process.env.INTERNAL_API_URL;
+    if (!url) throw new Error("INTERNAL_API_URL env var is required for SSR");
+    return url;
+  }
+  return import.meta.env.PUBLIC_API_URL || "/api";
+}
 
 class ApiError extends Error {
   constructor(
@@ -95,7 +100,7 @@ async function fetchApi<T>(
   params?: Record<string, string | number | undefined>,
   options?: RequestInit & { ssrCookie?: string },
 ): Promise<T> {
-  const url = new URL(`${BASE_URL}${endpoint}`);
+  const url = new URL(`${getBaseUrl()}${endpoint}`);
 
   if (params) {
     Object.entries(params).forEach(([key, value]) => {

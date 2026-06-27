@@ -20,6 +20,13 @@ import type { MiddlewareResponseHandler } from "astro";
 
 const ADMIN_SESSION_COOKIE = "kura_admin_session";
 
+// Runtime backend URL — must be set via INTERNAL_API_URL env var (not baked into build)
+function getBackendUrl(): string {
+  const url = process.env.INTERNAL_API_URL;
+  if (!url) throw new Error("INTERNAL_API_URL env var is required for SSR");
+  return url;
+}
+
 // In-process cache for public settings — 30s TTL
 // Redis is fast but there's no need to make a network round-trip on every SSR request
 let _settingsCache: { data: { site_title: string; site_description: string; announcement: string; head_inject: string; maintenance_mode: string } | null; at: number } = { data: null, at: 0 };
@@ -43,8 +50,7 @@ export const onRequest: MiddlewareResponseHandler = async (context, next) => {
   // whether this visitor has a valid admin session.
   let isAdmin = false;
   try {
-    const backendUrl =
-      import.meta.env.INTERNAL_API_URL || "http://backend:8000/api";
+    const backendUrl = getBackendUrl();
     const resp = await fetch(`${backendUrl}/auth/status`, {
       headers: {
         Accept: "application/json",
@@ -69,8 +75,7 @@ export const onRequest: MiddlewareResponseHandler = async (context, next) => {
   const now = Date.now();
   if (now - _settingsCache.at > SETTINGS_CACHE_TTL) {
     try {
-      const backendUrl =
-        import.meta.env.INTERNAL_API_URL || "http://backend:8000/api";
+      const backendUrl = getBackendUrl();
       const resp = await fetch(`${backendUrl}/settings/public`, {
         headers: { Accept: "application/json" },
       });

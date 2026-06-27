@@ -18,8 +18,7 @@ import type { APIRoute } from "astro";
 
 export const POST: APIRoute = async ({ request, redirect }) => {
   const cookieHeader = request.headers.get("cookie") || "";
-  const backendUrl =
-    import.meta.env.INTERNAL_API_URL || "http://backend:8000/api";
+  const backendUrl = process.env.INTERNAL_API_URL || (() => { throw new Error("INTERNAL_API_URL env var is required"); })();
 
   try {
     const resp = await fetch(`${backendUrl}/auth/logout`, {

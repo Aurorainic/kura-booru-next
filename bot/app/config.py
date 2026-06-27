@@ -15,9 +15,9 @@ class Settings(BaseSettings):
     BOT_WEBHOOK_URL: str
     BOT_WEBHOOK_SECRET: str
     BOT_ADMIN_IDS: list[int]
-    FRONTEND_URL: str = "http://localhost:4321"  # Override via .env — must be HTTPS for Telegram inline buttons
+    FRONTEND_URL: str = ""  # Required — must be HTTPS for Telegram inline buttons
     BOT_PORT: int = 8080
-    BACKEND_API_URL: str = "http://backend:8000"
+    BACKEND_API_URL: str = ""  # Required — e.g. http://backend:8000 (Docker) or http://<internal-host>:8000 (Zeabur)
     # Shared secret sent as X-Api-Key to the backend on every request. Required
     # now that POST /api/tasks/ and POST /api/rebuild/ are gated by it.
     BACKEND_API_KEY: str = ""
