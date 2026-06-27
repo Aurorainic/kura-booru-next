@@ -10,6 +10,7 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from app.config import settings
 from app.services.backend_api import create_process_task, get_post, update_post_rating
 from app.services.arq_client import poll_job_result
+from app.i18n import t, get_chat_lang
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +158,10 @@ async def _countdown_and_auto_confirm(
     """
     final_rating = auto_rating or "safe"
     final_label = _RATING_LABELS.get(final_rating, final_rating)
-    rule_hint = f"（自动规则）" if auto_rating else "（默认）"
+    chat_id = processing_msg.chat.id
+    lang = await get_chat_lang(chat_id)
+    hint_key = "hint_auto_rule" if auto_rating else "hint_default"
+    rule_hint = t(hint_key, lang)
 
     try:
         # Countdown display
@@ -165,15 +169,18 @@ async def _countdown_and_auto_confirm(
             if await _is_confirmed(post_id):
                 return  # User already selected
             try:
+                if auto_rating:
+                    auto_label = _RATING_LABELS.get(auto_rating, auto_rating)
+                    prompt_text = t("rating_awaiting_auto", lang, site=source_site, source_id=source_id, auto_label=auto_label)
+                else:
+                    prompt_text = t("rating_awaiting", lang, remaining=remaining, site=source_site, source_id=source_id)
                 await processing_msg.edit_text(
-                    f"⏳ 等待评级 / Awaiting rating ({remaining}s)\n"
-                    f"Source: {source_site} | ID: {source_id}\n"
-                    f"请选择评级 / Select rating:",
+                    prompt_text,
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                         [
-                            InlineKeyboardButton(text="🟢 公开", callback_data=f"rate:{post_id}:safe"),
-                            InlineKeyboardButton(text="🟡 敏感", callback_data=f"rate:{post_id}:questionable"),
-                            InlineKeyboardButton(text="🔴 限制", callback_data=f"rate:{post_id}:explicit"),
+                            InlineKeyboardButton(text=t("rating_safe", lang), callback_data=f"rate:{post_id}:safe"),
+                            InlineKeyboardButton(text=t("rating_questionable", lang), callback_data=f"rate:{post_id}:questionable"),
+                            InlineKeyboardButton(text=t("rating_explicit", lang), callback_data=f"rate:{post_id}:explicit"),
                         ]
                     ]),
                 )
@@ -190,13 +197,11 @@ async def _countdown_and_auto_confirm(
         # If the auto-rating differs from the post's current rating, update it
         post_url = f"{settings.FRONTEND_URL}/posts/{post_id}"
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🖼 查看作品 / View", url=post_url)]
+            [InlineKeyboardButton(text=t("btn_view", lang), url=post_url)]
         ])
         try:
             await processing_msg.edit_text(
-                f"✅ 处理完成\n"
-                f"评级: {final_label} {rule_hint}\n"
-                f"Source: {source_site} | ID: {source_id}",
+                t("rating_confirmed", lang, label=final_label, hint=rule_hint, site=source_site, source_id=source_id),
                 reply_markup=keyboard,
             )
         except Exception:
@@ -218,13 +223,15 @@ async def _poll_and_notify(
     source_id: str,
 ) -> None:
     """Background task: poll ARQ job and edit message on completion."""
+    chat_id = processing_msg.chat.id
+    lang = await get_chat_lang(chat_id)
+
     result = await poll_job_result(task_id, timeout=300, poll_delay=3)
 
     if result is None:
         try:
             await processing_msg.edit_text(
-                f"⏰ 处理超时 / Processing timed out\n"
-                f"Task: `{task_id}`",
+                t("url_timeout", lang, task_id=task_id),
                 parse_mode="Markdown",
             )
         except Exception:
@@ -239,27 +246,18 @@ async def _poll_and_notify(
             # Show rating selection menu
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
-                    InlineKeyboardButton(text="🟢 公开", callback_data=f"rate:{post_id}:safe"),
-                    InlineKeyboardButton(text="🟡 敏感", callback_data=f"rate:{post_id}:questionable"),
-                    InlineKeyboardButton(text="🔴 限制", callback_data=f"rate:{post_id}:explicit"),
+                    InlineKeyboardButton(text=t("rating_safe", lang), callback_data=f"rate:{post_id}:safe"),
+                    InlineKeyboardButton(text=t("rating_questionable", lang), callback_data=f"rate:{post_id}:questionable"),
+                    InlineKeyboardButton(text=t("rating_explicit", lang), callback_data=f"rate:{post_id}:explicit"),
                 ]
             ])
 
             # If auto-rating rule matched, hint the suggested rating
             if auto_rating:
                 auto_label = _RATING_LABELS.get(auto_rating, auto_rating)
-                prompt_text = (
-                    f"⏳ 等待评级 / Awaiting rating\n"
-                    f"Source: {source_site} | ID: {source_id}\n"
-                    f"建议评级: {auto_label}（自动规则）\n"
-                    f"请选择评级 / Select rating:"
-                )
+                prompt_text = t("rating_awaiting_auto", lang, site=source_site, source_id=source_id, auto_label=auto_label)
             else:
-                prompt_text = (
-                    f"⏳ 等待评级 / Awaiting rating\n"
-                    f"Source: {source_site} | ID: {source_id}\n"
-                    f"请选择评级 / Select rating:"
-                )
+                prompt_text = t("rating_awaiting", lang, remaining=RATING_COUNTDOWN_SECONDS, site=source_site, source_id=source_id)
 
             try:
                 await processing_msg.edit_text(
@@ -278,9 +276,7 @@ async def _poll_and_notify(
         else:
             try:
                 await processing_msg.edit_text(
-                    f"✅ 处理完成 / Processing complete\n"
-                    f"Source: {source_site} | ID: {source_id}\n"
-                    f"Post ID: `{post_id}`",
+                    t("url_complete", lang, site=source_site, source_id=source_id),
                     parse_mode="Markdown",
                 )
             except Exception:
@@ -291,9 +287,7 @@ async def _poll_and_notify(
         try:
             if error == "image_too_large":
                 await processing_msg.edit_text(
-                    f"⚠️ 图片过大 / Image too large\n"
-                    f"{msg}\n"
-                    f"Task: `{task_id}`",
+                    t("url_too_large", lang, msg=msg, task_id=task_id),
                     parse_mode="Markdown",
                 )
             elif error == "duplicate":
@@ -301,24 +295,20 @@ async def _poll_and_notify(
                 if existing_id:
                     post_url = f"{settings.FRONTEND_URL}/posts/{existing_id}"
                     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text="🖼 查看已有作品", url=post_url)]
+                        [InlineKeyboardButton(text=t("btn_view_existing", lang), url=post_url)]
                     ])
                     await processing_msg.edit_text(
-                        f"⚠️ 重复图片 / Duplicate image",
+                        t("url_duplicate", lang),
                         reply_markup=keyboard,
                     )
                 else:
                     await processing_msg.edit_text(
-                        f"⚠️ 重复图片 / Duplicate image\n"
-                        f"Task: `{task_id}`",
+                        t("url_duplicate", lang) + f"\nTask: `{task_id}`",
                         parse_mode="Markdown",
                     )
             else:
                 await processing_msg.edit_text(
-                    f"❌ 处理失败 / Processing failed\n"
-                    f"Error: `{error}`\n"
-                    f"{msg}\n"
-                    f"Task: `{task_id}`",
+                    t("url_failed", lang, error=error, msg=msg, task_id=task_id),
                     parse_mode="Markdown",
                 )
         except Exception:
@@ -326,8 +316,7 @@ async def _poll_and_notify(
     else:
         try:
             await processing_msg.edit_text(
-                f"⚠️ 未知状态 / Unknown status: `{status}`\n"
-                f"Task: `{task_id}`",
+                t("url_unknown_status", lang, status=status, task_id=task_id),
                 parse_mode="Markdown",
             )
         except Exception:
@@ -337,15 +326,16 @@ async def _poll_and_notify(
 async def process_url(message: Message, url: str) -> None:
     """Shared URL processing: identify source, dispatch task, poll and notify."""
     source_info = identify_source(url)
+    lang = await get_chat_lang(message.chat.id)
 
     if source_info is None:
-        await message.answer("⚠️ 无法识别此链接的来源 / Unsupported URL source.")
+        await message.answer(t("url_unrecognized", lang))
         return
 
     source_site, source_id = source_info
 
     # Send "processing" reply
-    processing_msg = await message.reply("⏳ 正在下载... / Downloading...")
+    processing_msg = await message.reply(t("url_downloading", lang))
 
     # Dispatch to backend
     result = await create_process_task(
@@ -356,10 +346,7 @@ async def process_url(message: Message, url: str) -> None:
 
     if result is None:
         try:
-            await processing_msg.edit_text(
-                "❌ 下载失败 / Failed to create processing task.\n"
-                "Please try again later."
-            )
+            await processing_msg.edit_text(t("url_task_failed", lang))
         except Exception:
             pass
         return
@@ -368,10 +355,7 @@ async def process_url(message: Message, url: str) -> None:
     task_id = result.get("task_id", "unknown")
     try:
         await processing_msg.edit_text(
-            f"📥 已加入队列 / Queued for processing\n"
-            f"Source: {source_site} | ID: {source_id}\n"
-            f"Task: `{task_id}`\n"
-            f"⏳ 正在处理中...",
+            t("url_queued", lang, site=source_site, source_id=source_id, task_id=task_id),
             parse_mode="Markdown",
         )
     except Exception:
@@ -387,20 +371,21 @@ async def _process_urls_sequential(
     message: Message, urls: list[str], source_labels: list[str]
 ) -> None:
     """Process multiple URLs one by one with status updates."""
+    lang = await get_chat_lang(message.chat.id)
     status_msg = await message.reply(
-        f"🔗 找到 {len(urls)} 个链接，逐个处理中...\n"
+        t("batch_found", lang, count=len(urls)) + "\n"
         + "\n".join(f"  {i+1}. {label}" for i, label in enumerate(source_labels))
     )
 
     succeeded = 0
     failed = 0
     for url, label in zip(urls, source_labels):
-        processing_msg = await message.reply(f"⏳ 正在处理: {label}")
+        processing_msg = await message.reply(t("batch_processing", lang, label=label))
 
         source_info = identify_source(url)
         if source_info is None:
             try:
-                await processing_msg.edit_text(f"⚠️ 跳过（无法识别）: {label}")
+                await processing_msg.edit_text(t("batch_skip_unrecognized", lang, label=label))
             except Exception:
                 pass
             failed += 1
@@ -412,7 +397,7 @@ async def _process_urls_sequential(
         )
         if result is None:
             try:
-                await processing_msg.edit_text(f"❌ 队列失败: {label}")
+                await processing_msg.edit_text(t("batch_queue_failed", lang, label=label))
             except Exception:
                 pass
             failed += 1
@@ -421,7 +406,7 @@ async def _process_urls_sequential(
         task_id = result.get("task_id", "unknown")
         try:
             await processing_msg.edit_text(
-                f"📥 已入队: {label}\nTask: `{task_id}`",
+                t("batch_queued", lang, label=label, task_id=task_id),
                 parse_mode="Markdown",
             )
         except Exception:
@@ -434,7 +419,7 @@ async def _process_urls_sequential(
 
     try:
         await status_msg.edit_text(
-            f"✅ 处理完毕 / Done: 成功 {succeeded}, 失败 {failed}, 共 {len(urls)}"
+            t("batch_done", lang, succeeded=succeeded, failed=failed, total=len(urls))
         )
     except Exception:
         pass

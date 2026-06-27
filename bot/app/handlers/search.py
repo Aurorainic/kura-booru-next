@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from aiogram import Router, F
 from aiogram.types import (
@@ -12,6 +13,7 @@ from aiogram.types import (
 from aiogram.filters import Command
 
 from app.services.backend_api import search_posts
+from app.i18n import t, get_chat_lang
 
 logger = logging.getLogger(__name__)
 
@@ -83,43 +85,38 @@ async def cmd_search(message: Message) -> None:
     Usage: /search <query> or !search <query>
     """
     text = message.text or ""
+    lang = await get_chat_lang(message.chat.id)
 
     # Extract the query part
-    import re
-
     command_match = re.match(r"^(?:/search|!search)\s+(.+)", text, re.IGNORECASE)
     if not command_match:
-        await message.answer(
-            "用法 / Usage:\n`/search <tags>` or `!search <tags>`",
-            parse_mode="Markdown",
-        )
+        await message.answer(t("search_usage", lang), parse_mode="Markdown")
         return
 
     query = command_match.group(1).strip()
     if not query:
-        await message.answer("⚠️ 请输入搜索关键词 / Please enter search tags.")
+        await message.answer(t("search_empty_query", lang))
         return
 
     # Perform search
     result = await search_posts(query, page=1, per_page=RESULTS_PER_PAGE)
 
     if result is None:
-        await message.answer("❌ 搜索失败 / Search failed. Please try again later.")
+        await message.answer(t("search_failed", lang))
         return
 
     items = result.get("items", [])
     total = result.get("total", 0)
 
     if total == 0:
-        await message.answer(f"🔍 没有找到结果 / No results for: `{query}`", parse_mode="Markdown")
+        await message.answer(t("search_no_results", lang, query=query), parse_mode="Markdown")
         return
 
     total_pages = max(1, (total + RESULTS_PER_PAGE - 1) // RESULTS_PER_PAGE)
     keyboard = build_search_keyboard(items, page=1, total_pages=total_pages, query=query)
 
     await message.answer(
-        f"🔍 搜索结果 / Search results for: `{query}`\n"
-        f"Found {total} result(s)",
+        t("search_results", lang, query=query, total=total),
         parse_mode="Markdown",
         reply_markup=keyboard,
     )

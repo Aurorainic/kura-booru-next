@@ -9,6 +9,7 @@ from app.config import settings
 from app.handlers.info import format_post_info
 from app.handlers.url_handler import _is_confirmed, _mark_confirmed, _RATING_ORDER, _RATING_LABELS, cancel_countdown
 from app.services.backend_api import get_post, update_post_rating
+from app.i18n import t, get_chat_lang
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +35,10 @@ async def callback_rate_post(callback: CallbackQuery) -> None:
         return
 
     _, post_id, rating = parts
+    lang = await get_chat_lang(callback.from_user.id)
 
     if await _is_confirmed(post_id):
-        await callback.answer("已确认 / Already confirmed", show_alert=True)
+        await callback.answer(t("rating_already_confirmed", lang), show_alert=True)
         return
 
     # Cancel the countdown task so it doesn't overwrite our edit
@@ -46,13 +48,14 @@ async def callback_rate_post(callback: CallbackQuery) -> None:
     success = await update_post_rating(post_id, rating)
     logger.info("callback_rate_post: update_post_rating(%s, %s) = %s", post_id, rating, success)
 
+    rating_label = _RATING_LABELS.get(rating, rating)
+    post_url = f"{settings.FRONTEND_URL}/posts/{post_id}"
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=t("btn_view", lang), url=post_url)]
+    ])
+
     if success:
         await _mark_confirmed(post_id)
-        rating_label = _RATING_LABELS.get(rating, rating)
-        post_url = f"{settings.FRONTEND_URL}/posts/{post_id}"
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🖼 查看作品 / View", url=post_url)]
-        ])
         try:
             await callback.message.edit_text(  # type: ignore[union-attr]
                 f"✅ 处理完成\n"
@@ -62,25 +65,18 @@ async def callback_rate_post(callback: CallbackQuery) -> None:
             )
         except Exception as exc:
             logger.error("callback_rate_post: edit_text failed: %s", exc)
-        await callback.answer("✅ 已确认", show_alert=False)
+        await callback.answer(t("rating_manual_confirmed", lang), show_alert=False)
     else:
         # Even if backend update fails, still show "completed" state to unstick the UI
         logger.warning("callback_rate_post: rating update failed, showing completed state anyway")
-        rating_label = _RATING_LABELS.get(rating, rating)
-        post_url = f"{settings.FRONTEND_URL}/posts/{post_id}"
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🖼 查看作品 / View", url=post_url)]
-        ])
         try:
             await callback.message.edit_text(  # type: ignore[union-attr]
-                f"⚠️ 处理完成（评级更新可能失败）\n"
-                f"评级: {rating_label}\n"
-                f"Source ID: {post_id[:8]}…",
+                t("rating_update_may_have_failed", lang, label=rating_label),
                 reply_markup=keyboard,
             )
         except Exception as exc:
             logger.error("callback_rate_post: fallback edit_text failed: %s", exc)
-        await callback.answer("⚠️ 评级更新可能失败", show_alert=True)
+        await callback.answer(t("rating_update_failed_alert", lang), show_alert=True)
 
 
 @router.callback_query(F.data.startswith("post:"))
