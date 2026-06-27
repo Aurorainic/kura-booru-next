@@ -10,7 +10,7 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from app.config import settings
 from app.services.backend_api import create_process_task, get_post, update_post_rating
 from app.services.arq_client import poll_job_result
-from app.i18n import t, get_chat_lang
+from app.i18n import t, get_chat_lang, get_chat_autopass
 
 logger = logging.getLogger(__name__)
 
@@ -260,6 +260,31 @@ async def _poll_and_notify(
         post_id = result.get("post_id")
         auto_rating = result.get("auto_rating")
         if post_id:
+            # Check autopass mode — skip rating UI, confirm as safe immediately
+            autopass = await get_chat_autopass(chat_id)
+            if autopass:
+                final_rating = auto_rating or "safe"
+                if auto_rating and auto_rating != "safe":
+                    await update_post_rating(post_id, auto_rating)
+                elif auto_rating is None:
+                    await update_post_rating(post_id, "safe")
+                await _mark_confirmed(post_id)
+
+                final_label = _RATING_LABELS.get(final_rating, final_rating)
+                post_url = f"{settings.FRONTEND_URL}/posts/{post_id}"
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text=t("btn_view", lang), url=post_url)]
+                ])
+                try:
+                    await processing_msg.edit_text(
+                        t("rating_confirmed", lang, label=final_label, hint=t("hint_auto_rule", lang) if auto_rating else t("hint_default", lang), site=source_site, source_id=source_id),
+                        reply_markup=keyboard,
+                    )
+                except Exception:
+                    pass
+                return
+
+            # Normal mode — show rating selection UI
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
                     InlineKeyboardButton(text=t("rating_safe", lang), callback_data=f"rate:{post_id}:safe"),

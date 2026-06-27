@@ -20,6 +20,7 @@ _STRINGS: dict[str, dict[str, str]] = {
             "• `/random` — Show a random post\n"
             "• `/stats` — Gallery statistics\n"
             "• `/info <url>` — Post details\n"
+            "• `/autopass on` — Auto-confirm as public\n"
             "• `/lang zh` — 切换中文\n\n"
             "**Supported sites:** Pixiv, Twitter/X, Danbooru, and more!\n\n"
             "Just paste a URL and I'll handle the rest ✨"
@@ -33,6 +34,7 @@ _STRINGS: dict[str, dict[str, str]] = {
             "• `/random` — 随机作品\n"
             "• `/stats` — 画廊统计\n"
             "• `/info <url>` — 作品详情\n"
+            "• `/autopass on` — 自动确认为公开\n"
             "• `/lang en` — Switch to English\n\n"
             "**支持站点：** Pixiv、Twitter/X、Danbooru 等！\n\n"
             "直接粘贴链接即可 ✨"
@@ -187,6 +189,27 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "🔗 Found {count} link(s), processing...",
         "zh": "🔗 找到 {count} 个链接，逐个处理中...",
     },
+    # ── Autopass ──
+    "autopass_on": {
+        "en": "⚡ Autopass ON — new images auto-confirm as 🟢 Public.",
+        "zh": "⚡ 放行模式已开启 — 新图片自动确认为 🟢 公开。",
+    },
+    "autopass_off": {
+        "en": "🔒 Autopass OFF — rating selection restored.",
+        "zh": "🔒 放行模式已关闭 — 恢复评级选择。",
+    },
+    "autopass_status_on": {
+        "en": "⚡ Autopass is ON. Use /autopass off to disable.",
+        "zh": "⚡ 放行模式已开启。使用 /autopass off 关闭。",
+    },
+    "autopass_status_off": {
+        "en": "🔒 Autopass is OFF. Use /autopass on to enable.",
+        "zh": "🔒 放行模式已关闭。使用 /autopass on 开启。",
+    },
+    "autopass_usage": {
+        "en": "Usage: `/autopass on` or `/autopass off`",
+        "zh": "用法：`/autopass on` 或 `/autopass off`",
+    },
     "batch_processing": {
         "en": "⏳ Processing: {label}",
         "zh": "⏳ 正在处理: {label}",
@@ -241,3 +264,27 @@ async def set_chat_lang(chat_id: int, lang: Lang) -> None:
     from app.services.arq_client import get_arq_pool
     pool = await get_arq_pool()
     await pool.setex(f"kura:bot_lang:{chat_id}", _LANG_TTL, lang)
+
+
+# ── Per-chat autopass mode (Redis, no TTL — persists until changed) ──────────
+
+_AUTO_PASS_KEY = "kura:bot_autopass:{chat_id}"
+
+
+async def get_chat_autopass(chat_id: int) -> bool:
+    """Get the autopass mode for a chat. Defaults to BOT_AUTOPASS_DEFAULT from config."""
+    from app.services.arq_client import get_arq_pool
+    from app.config import settings
+    pool = await get_arq_pool()
+    val = await pool.get(_AUTO_PASS_KEY.format(chat_id=chat_id))
+    if val is None:
+        return settings.BOT_AUTOPASS_DEFAULT
+    decoded = val.decode() if isinstance(val, bytes) else val
+    return decoded == "1"
+
+
+async def set_chat_autopass(chat_id: int, enabled: bool) -> None:
+    """Set the autopass mode for a chat."""
+    from app.services.arq_client import get_arq_pool
+    pool = await get_arq_pool()
+    await pool.set(_AUTO_PASS_KEY.format(chat_id=chat_id), "1" if enabled else "0")

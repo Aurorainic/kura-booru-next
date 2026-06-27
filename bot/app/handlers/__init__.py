@@ -10,15 +10,17 @@ from app.handlers.info import router as info_router
 from app.handlers.callback import router as callback_router
 from app.handlers.random import router as random_router
 from app.handlers.stats import router as stats_router
+from app.handlers.autopass import router as autopass_router
 
 
 def register_all_handlers(dp: Dispatcher) -> None:
     """Register all handler routers on the dispatcher."""
     dp.include_router(start_router)
+    dp.include_router(autopass_router)
     dp.include_router(url_handler_router)
     dp.include_router(save_router)
     dp.include_router(search_router)
     dp.include_router(info_router)
-    dp.include_router(callback_router)
     dp.include_router(random_router)
     dp.include_router(stats_router)
+    dp.include_router(callback_router)  # Must be last — uses broad F.data filter

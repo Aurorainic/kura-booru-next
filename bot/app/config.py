@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # now that POST /api/tasks/ and POST /api/rebuild/ are gated by it.
     BACKEND_API_KEY: str = ""
     REDIS_URL: str = "redis://redis:6379/0"
+    # When true, skip rating selection UI — auto-confirm as safe immediately.
+    # Set via /autopass on/off in chat, stored in Redis.
+    BOT_AUTOPASS_DEFAULT: bool = False
 
     @field_validator("FRONTEND_URL", mode="after")
     @classmethod
