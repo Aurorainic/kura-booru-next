@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 const COOKIE_KEY = "kura-accent-hue";
 const STORAGE_KEY = "kura-accent-hue";
 const DEFAULT_HUE = 175;
+const HUE_EVENT = "kura-accent-change";
 
 function applyHue(hue: number) {
   document.documentElement.style.setProperty("--accent-hue", String(hue));
@@ -47,6 +48,17 @@ export default function AccentPicker() {
       setHue(stored);
       applyHue(stored);
     }
+
+    function handleHueChange(event: Event) {
+      const next = Number((event as CustomEvent<number>).detail);
+      if (Number.isNaN(next)) return;
+      setHue(next);
+      applyHue(next);
+    }
+
+    window.addEventListener(HUE_EVENT, handleHueChange as EventListener);
+    return () =>
+      window.removeEventListener(HUE_EVENT, handleHueChange as EventListener);
   }, []);
 
   useEffect(() => {
@@ -64,6 +76,7 @@ export default function AccentPicker() {
     const val = parseInt(e.target.value, 10);
     setHue(val);
     applyHue(val);
+    window.dispatchEvent(new CustomEvent<number>(HUE_EVENT, { detail: val }));
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       persistHue(val);

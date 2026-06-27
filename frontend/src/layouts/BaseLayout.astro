@@ -140,7 +140,10 @@ const mutedPart = titleParts.slice(1).join(" ");
                 登录
               </a>
             )}
-            <div class="w-px h-5 bg-[var(--border-color)]" />
+          </div>
+
+          <!-- Theme controls — always visible on all screen sizes -->
+          <div class="flex items-center gap-1">
             <AccentPicker client:load />
             <ThemeToggle client:load />
           </div>

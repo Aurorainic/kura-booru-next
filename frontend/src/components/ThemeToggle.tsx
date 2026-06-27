@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 type ThemePreference = "auto" | "light" | "dark";
 
 const STORAGE_KEY = "kura-theme-preference";
+const THEME_EVENT = "kura-theme-change";
 
 function getSystemTheme(): "light" | "dark" {
   if (typeof window === "undefined") return "dark";
@@ -33,6 +34,17 @@ export default function ThemeToggle() {
     const initial: ThemePreference = stored || "auto";
     setPreference(initial);
     applyTheme(initial);
+
+    const handleThemeChange = (event: Event) => {
+      const next = (event as CustomEvent<ThemePreference>).detail;
+      if (!next) return;
+      setPreference(next);
+      applyTheme(next);
+    };
+
+    window.addEventListener(THEME_EVENT, handleThemeChange as EventListener);
+    return () =>
+      window.removeEventListener(THEME_EVENT, handleThemeChange as EventListener);
   }, []);
 
   useEffect(() => {
@@ -50,6 +62,7 @@ export default function ThemeToggle() {
     setPreference(next);
     localStorage.setItem(STORAGE_KEY, next);
     applyTheme(next);
+    window.dispatchEvent(new CustomEvent<ThemePreference>(THEME_EVENT, { detail: next }));
 
     // Spin animation
     setSpinning(true);
