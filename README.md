@@ -8,11 +8,9 @@
 
 甩链接 → 自动下载 → 存 S3 → 浏览，一气呵成。
 
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://python.org)
 [![Node](https://img.shields.io/badge/Node-22-339933?logo=node.js&logoColor=white)](https://nodejs.org)
-[![Astro](https://img.shields.io/badge/Astro-5-FF5D01?logo=astro&logoColor=white)](https://astro.build)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![Docker](https://img.shields.io/badge/Docker_Compose-v2-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![Nuxt](https://img.shields.io/badge/Nuxt-4-00DC82?logo=nuxt&logoColor=white)](https://nuxt.com)
+[![Docker](https://img.shields.io/badge/Docker_Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 
 ![✨ AIGC生成](https://img.shields.io/badge/✨-AIGC生成-8B5CF6?style=flat-square)
 ![🧪 实验性](https://img.shields.io/badge/🧪-实验性项目-2563EB?style=flat-square)
@@ -42,10 +40,10 @@
 ## 🚀 快速开始
 
 1. **配置环境变量** — `cp infra/.env.example .env` 并填入真实值（详见 [部署文档](docs/deployment.md)）
-2. **启动服务** — `cd infra && docker compose -f docker-compose.dev.yml up`
-3. **初始化数据库** — `docker compose exec backend alembic upgrade head`
-4. **配置 Caddy** — 详见 [部署文档](docs/deployment.md)
-5. **设置 Telegram Webhook** — 详见 [部署文档](docs/deployment.md)
+2. **启动服务** — `cd infra && docker compose up -d --force-recreate`
+3. **初始化数据库** — `npx drizzle-kit push`
+4. **配置反向代理（可选）** — 详见 [部署文档](docs/deployment.md)
+5. **设置 Telegram Webhook** — Bot 启动时自动设置，确保 `SITE_URL` 正确
 
 ### 浏览器扩展工作流
 
@@ -58,7 +56,6 @@
 
 | 文档 | 说明 |
 |---|---|
-| [docs/README.md](docs/README.md) | 文档入口 |
 | [docs/architecture.md](docs/architecture.md) | 架构、技术栈、数据模型、API |
 | [docs/deployment.md](docs/deployment.md) | 部署配置、环境变量 |
 | [docs/development.md](docs/development.md) | 本地开发指南 |

@@ -18,15 +18,12 @@ jobs:
     strategy:
       matrix:
         include:
-          - image: kura-booru-next-backend
-            context: backend
-            dockerfile: backend/Dockerfile
-          - image: kura-booru-next-bot
-            context: bot
-            dockerfile: bot/Dockerfile
-          - image: kura-booru-next-frontend
-            context: frontend
-            dockerfile: frontend/Dockerfile
+          - image: kura-booru-web
+            context: .
+            dockerfile: Dockerfile
+          - image: kura-booru-worker
+            context: sidecar
+            dockerfile: sidecar/Dockerfile
 
     steps:
       - name: Checkout
@@ -55,10 +52,9 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
-          target: ""                        # use default (production) stage
           push: true
           build-args: |
-            PUBLIC_GIT_TAG=${{ steps.meta.outputs.version }}
+            KURA_VERSION=${{ steps.meta.outputs.version }}
           tags: |
             ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner_lower }}/${{ matrix.image }}:${{ steps.meta.outputs.version }}
             ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner_lower }}/${{ matrix.image }}:latest
@@ -73,13 +69,12 @@ jobs:
     permissions:
       contents: read
       packages: write
-    
+
     strategy:
       matrix:
         image:
-          - kura-booru-next-backend
-          - kura-booru-next-bot
-          - kura-booru-next-frontend
+          - kura-booru-web
+          - kura-booru-worker
 
     steps:
       - name: Delete old image versions

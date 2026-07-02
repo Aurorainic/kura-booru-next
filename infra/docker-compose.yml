@@ -1,27 +1,29 @@
 # =============================================================================
-# Kura Booru Next — Production Docker Compose
+# Kura Booru — Production Docker Compose (4 containers)
 # =============================================================================
-# Minimal production configuration — no MinIO, no exposed ports.
-# Caddy runs on the HOST machine and reverse-proxies into this Docker network.
+# Web: Nitro SSR + REST API + Bot webhook (single Node process)
+# Worker: Python gallery-dl + imagehash phash (Redis queue)
+# PostgreSQL: Primary database (with pg_trgm)
+# Redis: Queue (bare LPUSH/BRPOP) + Cache
 #
-# Usage:
-#   docker compose -f infra/docker-compose.yml up -d
+# Deployment:
+#   cd infra && docker compose up -d --force-recreate
 #
-# Required environment variables (must be set in ../.env):
-#   POSTGRES_PASSWORD — no default, will fail if not set
-#   All other vars should be configured in .env (see .env.example)
+# Versioning:
+#   All images use :latest tag. Rebuild → retag :latest → force-recreate up.
+#   KURA_VERSION in .env tracks the current version label.
 # =============================================================================
 
 services:
   # ---------------------------------------------------------------------------
-  # Backend — FastAPI REST API
+  # Web — SSR + REST API + Bot webhook (single Node process)
   # ---------------------------------------------------------------------------
-  backend:
-    image: kura-booru-next-backend:v0.6.2-fix2
-    container_name: kura-backend
+  web:
+    image: kura-booru-web:latest
+    container_name: kura-web
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:3000:3000"
     env_file:
       - ../.env
     depends_on:
@@ -32,77 +34,27 @@ services:
     networks:
       - kura-internal
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))\""]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
   # ---------------------------------------------------------------------------
-  # Worker — ARQ background task processor
+  # Worker — Python (gallery-dl + imagehash phash)
+  # BRPOP kura:jobs → download + phash → LPUSH kura:results:{id}
   # ---------------------------------------------------------------------------
   worker:
-    image: kura-booru-next-backend:v0.6.2-fix2
+    image: kura-booru-worker:latest
     container_name: kura-worker
     restart: unless-stopped
     env_file:
       - ../.env
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     networks:
       - kura-internal
-    command: ["arq", "app.tasks.worker.WorkerSettings"]
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://backend:8000/health')\" || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
-  # ---------------------------------------------------------------------------
-  # Bot — aiogram 3.x Telegram Bot (webhook mode)
-  # ---------------------------------------------------------------------------
-  bot:
-    image: kura-booru-next-bot:v0.6.2-fix2
-    container_name: kura-bot
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8080:8080"
-    env_file:
-      - ../.env
-    depends_on:
-      backend:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - kura-internal
-
-  # ---------------------------------------------------------------------------
-  # Frontend — Astro SSR
-  # ---------------------------------------------------------------------------
-  frontend:
-    image: kura-booru-next-frontend:v0.6.3
-    container_name: kura-frontend
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:4321:4321"
-    env_file:
-      - ../.env
-    depends_on:
-      backend:
-        condition: service_healthy
-    networks:
-      - kura-internal
-    healthcheck:
-      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:4321/').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))\""]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
 
   # ---------------------------------------------------------------------------
   # PostgreSQL 18 — Primary database
@@ -127,7 +79,7 @@ services:
       start_period: 10s
 
   # ---------------------------------------------------------------------------
-  # Redis 7 — Task queue (ARQ) + Cache
+  # Redis 8 — Queue (bare LPUSH/BRPOP) + Cache
   # ---------------------------------------------------------------------------
   redis:
     image: redis:8-alpine
@@ -157,7 +109,7 @@ volumes:
     driver: local
 
 # =============================================================================
-# Network — Internal communication (Caddy on host proxies into this network)
+# Network — Internal communication (reverse proxy on host forwards into this network)
 # =============================================================================
 networks:
   kura-internal:

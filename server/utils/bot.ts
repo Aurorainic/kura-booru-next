@@ -1,0 +1,552 @@
+import { Bot } from 'grammy'
+import type { PipelineResult } from './queue'
+
+const BOT_TOKEN = process.env.BOT_TOKEN || ''
+const BOT_ADMIN_IDS = (process.env.BOT_ADMIN_IDS || '').split(',').map(Number).filter(Boolean)
+const SITE_URL = process.env.SITE_URL || ''
+
+// URL extraction pattern (from url-patterns.ts + generic)
+const URL_PATTERN = /https?:\/\/[^\s<>"']+/gi
+
+if (!BOT_TOKEN) {
+  console.warn('[bot] BOT_TOKEN not set, bot disabled')
+}
+
+export const bot = new Bot(BOT_TOKEN)
+
+// Lazy-init
+let _botReady: Promise<void> | null = null
+export function ensureBotReady() {
+  if (!_botReady) _botReady = bot.init()
+  return _botReady
+}
+
+// ── Auth middleware (T-P0-4: reject non-admins) ──
+bot.use(async (ctx, next) => {
+  const userId = ctx.from?.id
+
+  // Handle forwarded channel messages (negative ID)
+  const effectiveUserId = (ctx.chat?.type === 'private' && userId && userId < 0)
+    ? ctx.chat?.id : userId
+
+  const isAdmin = effectiveUserId ? BOT_ADMIN_IDS.includes(effectiveUserId) : false
+  ctx.config = { isAdmin, lang: 'zh' }
+
+  if (!isAdmin) {
+    try { await ctx.reply(t('unauthorized', ctx.config.lang)) } catch { /* ignore */ }
+    return // don't propagate to handlers
+  }
+  await next()
+})
+
+// ── Per-chat language from Redis ──
+bot.use(async (ctx, next) => {
+  if (!ctx.config.isAdmin) return // already rejected above, but guard
+  const chatId = ctx.chat?.id?.toString()
+  if (chatId) {
+    // Try new key, fall back to old key (T-P2-1 migration)
+    let lang = await redis.get(`kura:bot:lang:${chatId}`)
+    if (!lang) {
+      lang = await redis.get(`kura:bot_lang:${chatId}`)
+      if (lang) await redis.set(`kura:bot:lang:${chatId}`, lang)
+      else lang = 'en' // default to en (old default)
+    }
+    ctx.config.lang = lang
+  }
+  await next()
+})
+
+// ── Per-chat concurrency semaphore (T-P3-3: only wrap enqueueJob, not entire handler) ──
+const chatSemaphores = new Map<string, { count: number; max: number; queue: (() => void)[] }>()
+function getSemaphore(chatId: string, max = 3) {
+  if (!chatSemaphores.has(chatId)) {
+    chatSemaphores.set(chatId, { count: 0, max, queue: [] })
+  }
+  return chatSemaphores.get(chatId)!
+}
+
+async function acquireSemaphore(chatId: string): Promise<void> {
+  const sem = getSemaphore(chatId)
+  if (sem.count >= sem.max) {
+    await new Promise<void>(resolve => sem.queue.push(resolve))
+  }
+  sem.count++
+}
+
+function releaseSemaphore(chatId: string) {
+  const sem = chatSemaphores.get(chatId)
+  if (!sem) return
+  sem.count--
+  const next = sem.queue.shift()
+  if (next) next()
+}
+
+// ── i18n helpers (T-P3-4: centralized) ──
+const T = {
+  zh: {
+    welcome: '👋 你好！发送图片链接来保存到图库。\n\n命令：\n/search 标签名 — 搜索\n/random — 随机图片\n/stats — 统计\n/autopass — 自动标记为公开\n/lang — 切换语言',
+    noResults: '未找到结果',
+    noPosts: '暂无图片',
+    queued: (jobId: string) => `📥 已加入下载队列\n任务ID：${jobId.slice(0, 8)}…`,
+    downloading: '⏳ 下载中...',
+    timeout: '⏰ 下载超时',
+    duplicate: (postId: string) => `⚠️ 重复图片，已有作品: ${SITE_URL}/posts/${postId}`,
+    tooLarge: '⚠️ 图片过大，已跳过',
+    failed: '❌ 下载失败',
+    success: (postId: string, autoRating?: string) => `✅ 处理完成\n${autoRating ? `自动评级建议: ${autoRating}\n` : ''}⏳ 等待评级 (10s)`,
+    ratingConfirmed: (rating: string, label: string) => {
+      const emoji: Record<string, string> = { safe: '🟢', questionable: '🟡', explicit: '🔴' }
+      const name: Record<string, string> = { safe: '公开', questionable: '敏感', explicit: '限制' }
+      return `✅ 处理完成\n评级: ${emoji[rating] || ''} ${name[rating] || rating} ${label}`
+    },
+    stats: (posts: number, tags: number, postTags: number, storage: string) => `📊 统计\n图片：${posts}\n标签：${tags}\n关联：${postTags}\n存储：${storage}`,
+    autopassOn: '✅ 自动通过已开启',
+    autopassOff: '❌ 自动通过已关闭',
+    langSwitched: '🌐 语言已切换为中文',
+    langUsage: () => `用法: /lang en 或 /lang zh\n当前: 中文`,
+    langCurrent: '中文',
+    usageSearch: '用法: /search <标签>',
+    usageInfo: '用法: /info <url>',
+    noSource: '未识别来源',
+    notFound: '未找到作品',
+    adminOnly: '仅管理员可用',
+    unauthorized: '⛔ 未授权',
+    searchResults: (query: string, count: number) => `🔍 "${query}" — ${count} 个结果`,
+    randomCaption: (title: string) => `🎲 ${title || '(无标题)'}`,
+    untitled: '(无标题)',
+    multiQueued: (count: number) => `📥 已入队 ${count} 个任务`,
+  },
+  en: {
+    welcome: '👋 Hello! Send an image URL to save to the gallery.\n\nCommands:\n/search tag — Search\n/random — Random image\n/stats — Statistics\n/autopass — Auto-mark as safe\n/lang — Switch language',
+    noResults: 'No results',
+    noPosts: 'No posts',
+    queued: (jobId: string) => `📥 Queued for download\nTask: ${jobId.slice(0, 8)}…`,
+    downloading: '⏳ Downloading...',
+    timeout: '⏰ Download timed out',
+    duplicate: (postId: string) => `⚠️ Duplicate, existing post: ${SITE_URL}/posts/${postId}`,
+    tooLarge: '⚠️ Image too large, skipped',
+    failed: '❌ Download failed',
+    success: (postId: string, autoRating?: string) => `✅ Processing complete\n${autoRating ? `Auto-rating: ${autoRating}\n` : ''}⏳ Waiting for rating (10s)`,
+    ratingConfirmed: (rating: string, label: string) => {
+      const emoji: Record<string, string> = { safe: '🟢', questionable: '🟡', explicit: '🔴' }
+      return `✅ Processing complete\nRating: ${emoji[rating] || ''} ${rating} ${label}`
+    },
+    stats: (posts: number, tags: number, postTags: number, storage: string) => `📊 Stats\nPosts: ${posts}\nTags: ${tags}\nTag links: ${postTags}\nStorage: ${storage}`,
+    autopassOn: '✅ Autopass enabled',
+    autopassOff: '❌ Autopass disabled',
+    langSwitched: '🌐 Language switched to English',
+    langUsage: () => `Usage: /lang en or /lang zh\nCurrent: English`,
+    langCurrent: 'English',
+    usageSearch: 'Usage: /search <tag>',
+    usageInfo: 'Usage: /info <url>',
+    noSource: 'Unrecognized source',
+    notFound: 'Post not found',
+    adminOnly: 'Admin only',
+    unauthorized: '⛔ Unauthorized',
+    searchResults: (query: string, count: number) => `🔍 "${query}" — ${count} results`,
+    randomCaption: (title: string) => `🎲 ${title || 'Untitled'}`,
+    untitled: 'Untitled',
+    multiQueued: (count: number) => `📥 ${count} tasks queued`,
+  },
+}
+
+export function t(key: string, lang: string, ...args: any[]): string {
+  const strings: Record<string, any> = lang === 'zh' ? T.zh : T.en
+  const val = strings[key]
+  return typeof val === 'function' ? val(...args) : (val || key)
+}
+
+export const i18nLabels = {
+  zh: {
+    processingComplete: '处理完成',
+    waitingRating: '等待评级',
+    rating: '评级',
+    autoRule: '自动规则',
+    default: '默认',
+    manual: '手动',
+    auto: '自动',
+  },
+  en: {
+    processingComplete: 'Processing complete',
+    waitingRating: 'Waiting for rating',
+    rating: 'Rating',
+    autoRule: 'Auto-rating',
+    default: 'default',
+    manual: 'manual',
+    auto: 'auto',
+  },
+}
+
+// ── Commands ──
+
+bot.command('start', async (ctx) => {
+  try {
+    const keyboard = {
+      inline_keyboard: [[
+        { text: '🌐 Open Gallery', web_app: { url: SITE_URL } },
+      ]],
+    }
+    await ctx.reply(t('welcome', ctx.config.lang), { reply_markup: keyboard }).catch(() => {})
+  } catch (err) { console.error('[bot] start error:', err) }
+})
+
+bot.command('search', async (ctx) => {
+  try {
+    const query = ctx.message?.text?.split(' ').slice(1).join(' ')
+    if (!query) { await ctx.reply(t('usageSearch', ctx.config.lang)).catch(() => {}); return }
+
+    const results = await searchPosts(query, { perPage: 5, isAdmin: true })
+    if (!results.items.length) { await ctx.reply(t('noResults', ctx.config.lang)).catch(() => {}); return }
+
+    const keyboard = {
+      inline_keyboard: [
+        ...results.items.map((p: any) => [{
+          text: p.title || `#${p.id.slice(0, 8)}`,
+          callback_data: `post:${p.id}`,
+        }]),
+      ],
+    }
+    await ctx.reply(
+      t('searchResults', ctx.config.lang, query, results.total),
+      { reply_markup: keyboard },
+    ).catch(() => {})
+  } catch (err) { console.error('[bot] search error:', err) }
+})
+
+bot.command('random', async (ctx) => {
+  try {
+    const post = await getRandomPost(true)
+    if (!post) { await ctx.reply(t('noPosts', ctx.config.lang)).catch(() => {}); return }
+
+    const previewUrl = post.preview_key
+      ? `${process.env.S3_EXTERNAL_URL || ''}/${post.preview_key}`
+      : null
+
+    const caption = `${t('randomCaption', ctx.config.lang, post.title || '')}\n${SITE_URL}/posts/${post.id}`
+    const keyboard = {
+      inline_keyboard: [[
+        { text: '🔗 View', url: `${SITE_URL}/posts/${post.id}` },
+        { text: '🎲 Another', callback_data: 'random:another' },
+      ]],
+    }
+
+    if (previewUrl) {
+      try {
+        await ctx.replyWithPhoto(previewUrl, { caption, reply_markup: keyboard })
+        return
+      } catch { /* fallback to text */ }
+    }
+    await ctx.reply(caption, { reply_markup: keyboard }).catch(() => {})
+  } catch (err) { console.error('[bot] random error:', err) }
+})
+
+bot.command('stats', async (ctx) => {
+  try {
+    const [pc, tc, ptc, sc] = await Promise.all([
+      db.select({ count: sql`count(*)` }).from(posts),
+      db.select({ count: sql`count(*)` }).from(tags),
+      db.select({ count: sql`count(*)` }).from(postTags),
+      db.select({ total: sql`COALESCE(SUM(file_size), 0)` }).from(posts),
+    ])
+    const totalSize = Number(sc[0].total)
+    const sizeStr = totalSize >= 1073741824
+      ? (totalSize / 1073741824).toFixed(1) + ' GB'
+      : totalSize >= 1048576
+        ? (totalSize / 1048576).toFixed(1) + ' MB'
+        : (totalSize / 1024).toFixed(1) + ' KB'
+    await ctx.reply(t('stats', ctx.config.lang, Number(pc[0].count), Number(tc[0].count), Number(ptc[0].count), sizeStr)).catch(() => {})
+  } catch (err) { console.error('[bot] stats error:', err) }
+})
+
+bot.command('autopass', async (ctx) => {
+  try {
+    const chatId = ctx.chat?.id?.toString()
+    if (!chatId) return
+
+    const current = await redis.get(`kura:bot:autopass:${chatId}`)
+    const newVal = current === '1' ? '0' : '1'
+    await redis.set(`kura:bot:autopass:${chatId}`, newVal)
+
+    await ctx.reply(newVal === '1' ? t('autopassOn', ctx.config.lang) : t('autopassOff', ctx.config.lang)).catch(() => {})
+  } catch (err) { console.error('[bot] autopass error:', err) }
+})
+
+bot.command('lang', async (ctx) => {
+  try {
+    const chatId = ctx.chat?.id?.toString()
+    if (!chatId) return
+
+    const arg = ctx.message?.text?.split(' ')[1]
+    if (arg === 'en' || arg === 'zh') {
+      await redis.set(`kura:bot:lang:${chatId}`, arg, 'EX', 30 * 86400) // 30d TTL
+      ctx.config.lang = arg
+      await ctx.reply(t('langSwitched', arg)).catch(() => {})
+    } else {
+      const current = ctx.config.lang
+      await ctx.reply(t('langUsage', ctx.config.lang)).catch(() => {})
+    }
+  } catch (err) { console.error('[bot] lang error:', err) }
+})
+
+bot.command('info', async (ctx) => {
+  try {
+    const url = ctx.message?.text?.split(' ').slice(1).join(' ')
+    if (!url) { await ctx.reply(t('usageInfo', ctx.config.lang)).catch(() => {}); return }
+
+    const source = identifySource(url)
+    if (!source) { await ctx.reply(t('noSource', ctx.config.lang)).catch(() => {}); return }
+
+    const post = await getPostBySource(source.site, source.id, true)
+    if (!post) { await ctx.reply(t('notFound', ctx.config.lang)).catch(() => {}); return }
+
+    const ratingEmoji: Record<string, string> = { safe: '🟢', questionable: '🟡', explicit: '🔴' }
+    await ctx.reply(
+      `📌 ${post.title || t('untitled', ctx.config.lang)}\n` +
+      `🔗 ${SITE_URL}/posts/${post.id}\n` +
+      `📐 ${post.width}x${post.height}\n` +
+      `🏷 ${ratingEmoji[post.rating] || ''} ${post.rating}\n` +
+      `📅 ${post.created_at}\n` +
+      `🏷 Tags: ${(post.tags || []).map((t: any) => t.name).join(', ')}`,
+    ).catch(() => {})
+  } catch (err) { console.error('[bot] info error:', err) }
+})
+
+bot.command('save', async (ctx) => {
+  try {
+    const url = ctx.message?.text?.split(' ').slice(1).join(' ')
+    if (!url) { await ctx.reply(t('usageInfo', ctx.config.lang)).catch(() => {}); return }
+    // Process same as URL handler — extract and enqueue
+    const source = identifySource(url) || resolveSourceOrOther(url)
+    const chatId = ctx.chat?.id?.toString() || 'unknown'
+    const jobId = await enqueueJob({ url, source_site: source.site, source_id: source.id })
+    const msg = await ctx.reply(t('downloading', ctx.config.lang))
+    pollAndNotify(ctx.api, chatId, msg.message_id, jobId, ctx.config.lang).catch(
+      err => console.error('[bot] poll error:', err),
+    )
+  } catch (err) { console.error('[bot] save error:', err) }
+})
+
+// ! aliases (T-P1-2)
+bot.hears(/^!save\b/, async (ctx) => {
+  try {
+    const url = ctx.message?.text?.replace(/^!save\s*/, '').trim()
+    if (!url) return
+    const source = identifySource(url) || resolveSourceOrOther(url)
+    const chatId = ctx.chat?.id?.toString() || 'unknown'
+    const jobId = await enqueueJob({ url, source_site: source.site, source_id: source.id })
+    const msg = await ctx.reply(t('downloading', ctx.config.lang))
+    pollAndNotify(ctx.api, chatId, msg.message_id, jobId, ctx.config.lang).catch(
+      err => console.error('[bot] poll error:', err),
+    )
+  } catch (err) { console.error('[bot] !save error:', err) }
+})
+
+bot.hears(/^!search\b/, async (ctx) => {
+  try {
+    const query = ctx.message?.text?.replace(/^!search\s*/, '').trim()
+    if (!query) return
+    const results = await searchPosts(query, { perPage: 5, isAdmin: true })
+    if (!results.items.length) { await ctx.reply(t('noResults', ctx.config.lang)).catch(() => {}); return }
+    for (const post of results.items.slice(0, 5)) {
+      await ctx.reply(`${post.title || t('untitled', ctx.config.lang)}\n${SITE_URL}/posts/${post.id}`).catch(() => {})
+    }
+  } catch (err) { console.error('[bot] !search error:', err) }
+})
+
+bot.hears(/^!random$/, async (ctx) => {
+  try {
+    const post = await getRandomPost(true)
+    if (!post) { await ctx.reply(t('noPosts', ctx.config.lang)).catch(() => {}); return }
+    await ctx.reply(`${t('randomCaption', ctx.config.lang, post.title || '')}\n${SITE_URL}/posts/${post.id}`).catch(() => {})
+  } catch (err) { console.error('[bot] !random error:', err) }
+})
+
+bot.hears(/^!info\b/, async (ctx) => {
+  try {
+    const url = ctx.message?.text?.replace(/^!info\s*/, '').trim()
+    if (!url) return
+    const source = identifySource(url)
+    if (!source) { await ctx.reply(t('noSource', ctx.config.lang)).catch(() => {}); return }
+    const post = await getPostBySource(source.site, source.id, true)
+    if (!post) { await ctx.reply(t('notFound', ctx.config.lang)).catch(() => {}); return }
+    await ctx.reply(`${post.title || t('untitled', ctx.config.lang)}\n${SITE_URL}/posts/${post.id}`).catch(() => {})
+  } catch (err) { console.error('[bot] !info error:', err) }
+})
+
+// ── URL detection handler (T-P0-1: extract URLs from text) ──
+bot.on('message:text', async (ctx) => {
+  try {
+    const text = ctx.message.text
+
+    // Extract URLs from message text (not whole text as URL)
+    const urls = [...new Set(text.match(URL_PATTERN) || [])]
+    if (urls.length === 0) return
+
+    const chatId = ctx.chat?.id?.toString() || 'unknown'
+
+    // Process each URL (cap at 10)
+    const toProcess = urls.slice(0, 10)
+    const results: string[] = []
+
+    for (const url of toProcess) {
+      const source = identifySource(url) || resolveSourceOrOther(url)
+
+      // Acquire semaphore only for enqueue (T-P3-3)
+      await acquireSemaphore(chatId)
+      try {
+        const jobId = await enqueueJob({ url, source_site: source.site, source_id: source.id })
+        results.push(jobId)
+
+        // Reply with queue status
+        const msg = await ctx.reply(t('downloading', ctx.config.lang))
+
+        // Fire-and-forget polling (T-P0-2)
+        pollAndNotify(ctx.api, chatId, msg.message_id, jobId, ctx.config.lang).catch(
+          err => console.error('[bot] poll error:', err),
+        )
+      } finally {
+        releaseSemaphore(chatId)
+      }
+    }
+
+    if (toProcess.length > 1) {
+      await ctx.reply(t('multiQueued', ctx.config.lang, toProcess.length)).catch(() => {})
+    }
+  } catch (err) { console.error('[bot] URL handler error:', err) }
+})
+
+// ── Photo caption handler (T-P1-6) ──
+bot.on('message:photo', async (ctx) => {
+  try {
+    const caption = ctx.message.caption || ''
+    const urls = [...new Set(caption.match(URL_PATTERN) || [])]
+    if (urls.length === 0) return
+
+    const chatId = ctx.chat?.id?.toString() || 'unknown'
+    for (const url of urls.slice(0, 10)) {
+      const source = identifySource(url) || resolveSourceOrOther(url)
+      await acquireSemaphore(chatId)
+      try {
+        const jobId = await enqueueJob({ url, source_site: source.site, source_id: source.id })
+        const msg = await ctx.reply(t('downloading', ctx.config.lang))
+        pollAndNotify(ctx.api, chatId, msg.message_id, jobId, ctx.config.lang).catch(
+          err => console.error('[bot] poll error:', err),
+        )
+      } finally {
+        releaseSemaphore(chatId)
+      }
+    }
+  } catch (err) { console.error('[bot] photo handler error:', err) }
+})
+
+// ── Callback query handler (T-P0-3: rating buttons + search pagination + random) ──
+bot.on('callback_query', async (ctx) => {
+  const data = ctx.callbackQuery.data
+  const chatId = ctx.chat?.id?.toString()
+  if (!chatId) return
+
+  try {
+    if (data.startsWith('rate:')) {
+      const [, postId, rating] = data.split(':')
+      // Cancel countdown if user manually selected
+      const timer = ratingCountdowns.get(postId)
+      if (timer) { clearInterval(timer); ratingCountdowns.delete(postId) }
+      await confirmRating(ctx.api, chatId, ctx.callbackQuery.message?.message_id!, postId, rating, ctx.config.lang, ctx.config.lang === 'zh' ? '（手动）' : '(manual)')
+    } else if (data.startsWith('random:another')) {
+      const post = await getRandomPost(true)
+      if (!post) return ctx.answerCallbackQuery({ text: t('noPosts', ctx.config.lang) })
+      const previewUrl = post.preview_key ? `${process.env.S3_EXTERNAL_URL || ''}/${post.preview_key}` : null
+      const caption = `${t('randomCaption', ctx.config.lang, post.title || '')}\n${SITE_URL}/posts/${post.id}`
+      const keyboard = {
+        inline_keyboard: [[
+          { text: '🔗 View', url: `${SITE_URL}/posts/${post.id}` },
+          { text: '🎲 Another', callback_data: 'random:another' },
+        ]],
+      }
+      if (previewUrl) {
+        try {
+          await ctx.editMessageMedia(
+            { type: 'photo', media: previewUrl, caption },
+            { reply_markup: keyboard },
+          )
+        } catch { /* ignore */ }
+      }
+    } else if (data.startsWith('post:')) {
+      const postId = data.slice(5)
+      await ctx.answerCallbackQuery({ url: `${SITE_URL}/posts/${postId}` })
+    }
+  } catch (err: any) {
+    if (!err.message?.includes('message is not modified')) {
+      console.error('[bot] callback error:', err)
+    }
+  }
+
+  await ctx.answerCallbackQuery().catch(() => {})
+})
+
+// ── Poll and notify (T-P0-2) ──
+async function pollAndNotify(
+  api: any,
+  chatId: string,
+  messageId: number,
+  jobId: string,
+  lang: string,
+) {
+  const result = await pollJobResult(jobId, 300_000) // 5 min timeout
+  if (!result) {
+    await api.editMessageText(chatId, messageId, t('timeout', lang)).catch(() => {})
+    return
+  }
+
+  switch (result.status) {
+    case 'success': {
+      const postId = result.post_id!
+      const autopass = await redis.get(`kura:bot:autopass:${chatId}`)
+      if (autopass === '1') {
+        const rating = result.auto_rating || 'safe'
+        await confirmRating(api, chatId, messageId, postId, rating, lang, lang === 'zh' ? '（自动）' : '(auto)')
+      } else {
+        await showRatingMenu(api, chatId, messageId, postId, result.auto_rating, lang)
+      }
+      break
+    }
+    case 'duplicate':
+      await api.editMessageText(chatId, messageId, t('duplicate', lang, result.existing_post_id || '?')).catch(() => {})
+      break
+    case 'too_large':
+      await api.editMessageText(chatId, messageId, t('tooLarge', lang)).catch(() => {})
+      break
+    case 'failed':
+      await api.editMessageText(chatId, messageId, t('failed', lang)).catch(() => {})
+      break
+  }
+}
+
+// ── Rating menu (T-P0-3) ──
+async function showRatingMenu(
+  api: any,
+  chatId: string,
+  messageId: number,
+  postId: string,
+  autoRating: string | undefined,
+  lang: string,
+) {
+  const keyboard = {
+    inline_keyboard: [[
+      { text: '🟢 Safe', callback_data: `rate:${postId}:safe` },
+      { text: '🟡 Questionable', callback_data: `rate:${postId}:questionable` },
+      { text: '🔴 Explicit', callback_data: `rate:${postId}:explicit` },
+    ]],
+  }
+
+  const autoNote = autoRating ? `\n${lang === 'zh' ? '自动规则建议' : 'Auto-rating'}: ${autoRating}` : ''
+
+  await api.editMessageText(
+    chatId, messageId,
+    t('success', lang, postId, autoRating),
+    { reply_markup: keyboard },
+  ).catch(() => {})
+
+  // Start 10s countdown
+  startCountdown(api, chatId, messageId, postId, autoRating, lang, ratingCountdowns)
+}

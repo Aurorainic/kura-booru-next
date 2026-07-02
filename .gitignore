@@ -1,57 +1,30 @@
-# =============================================================================
-# Kura Booru Next — Git Ignore
-# =============================================================================
+# Nuxt dev/build outputs
+.output
+.data
+.nuxt
+.nitro
+.cache
+dist
 
-# Environment files (contain secrets!)
-.env
-.env.local
-.env.*.local
-
-# Database dumps
-infra/dumps/
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.egg-info/
-dist/
-build/
-*.egg
-.venv/
-venv/
-
-# gallery-dl (auto-generated, not source code)
-backend/gallery-dl/
-
-# Node / Frontend
-node_modules/
-frontend/node_modules/
-frontend/.astro/
-frontend/dist/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Serena MCP
-.serena/
-
-# OS
-.DS_Store
-Thumbs.db
-nul
-
-# Docker volumes (local dev data)
-postgres_data/
-redis_data/
-minio_data/
+# Node dependencies
+node_modules
 
 # Logs
+logs
 *.log
 
-# Other
-.temp/
+# Misc
+.DS_Store
+.fleet
+.idea
+
+# Serena memories (local only)
+.serena/
+
+# Claude Code (local only)
+.claude/
+
+# Local env files
+.env
+.env.*
+!.env.example

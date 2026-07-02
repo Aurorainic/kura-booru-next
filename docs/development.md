@@ -2,19 +2,29 @@
 
 ## Development Environment
 
-### Start Dev Compose (with MinIO + hot-reload)
+### Prerequisites
+
+- Node.js 22+
+- Python 3.12+ (for sidecar)
+- Docker + Docker Compose
+
+### Start Dev Server (without Docker)
 
 ```bash
-docker compose -f infra/docker-compose.dev.yml up
+cd .
+npm install
+npm run dev          # Nuxt dev server at http://localhost:3000
 ```
 
-Start and rebuild images:
+The sidecar and PostgreSQL/Redis need to be running separately (via Docker or local install).
+
+### Start Dev Compose
 
 ```bash
-docker compose -f infra/docker-compose.dev.yml up --build
+cd infra && docker compose up
 ```
 
-The dev compose includes MinIO (local S3), volume mounts for hot-reload, and targets the `dev` Dockerfile stage.
+This starts all 4 containers (nuxt, sidecar, postgres, redis). The nuxt container uses the `dev` Dockerfile stage with hot-reload.
 
 ### Environment Variable Validation
 
@@ -27,116 +37,87 @@ cd infra && ./scripts/validate-env.sh prod   # Check production config (strict)
 
 ## Database
 
-### Running Migrations
+### Running Migrations (Drizzle)
 
 ```bash
-cd backend
-alembic upgrade head                                 # Apply all pending migrations
-alembic revision --autogenerate -m "description"     # Create a new migration
+cd .
+npm run db:generate     # Generate migration from schema changes
+npm run db:migrate      # Apply migrations
+npm run db:push         # Push schema directly (dev only — no migration files)
+npm run db:studio       # Open Drizzle Studio (visual DB browser)
 ```
 
-### Dev → Production Database Migration
+### Dev → Production Database
 
-```bash
-cd infra && ./scripts/migrate-db.sh --dump-only                     # Export dev database only
-cd infra && ./scripts/migrate-db.sh --import-only dumps/xxx.sql     # Import to production only
-cd infra && ./scripts/migrate-db.sh                                  # Interactive mode
-```
+The stack connects to the same PostgreSQL as v1. Existing data is reused — no data migration needed. The Drizzle schema matches the existing table structure.
 
 ---
 
 ## Running Services Locally (without Docker)
 
 ```bash
-# Backend (API)
-cd backend && uvicorn app.main:app --reload
+# Nuxt (SSR + API + Bot webhook)
+cd . cd . &&cd . && npm run dev
 
-# ARQ Worker (process image tasks)
-cd backend && arq app.tasks.worker.WorkerSettings
-
-# Bot
-cd bot && python -m app.main
-
-# Frontend dev server
-cd frontend && npm run dev
+# Python sidecar (gallery-dl + phash)
+cd ./sidecar && python sidecar.py
 ```
+
+PostgreSQL and Redis must be running and accessible via `DATABASE_URL` and `REDIS_URL` env vars.
 
 ---
 
-## Docker Stages
+## Docker Stages (Dockerfile)
 
-All Dockerfiles have 3 stages:
+1. **`deps`** — `npm ci` (cached dependency layer)
+2. **`build`** — `npm run build` (Nuxt build → `.output/`)
+3. **`dev`** — Hot-reload, volume mounts. Used for development.
+4. **`production`** — Minimal image with only `.output/`. `NODE_ENV=production`, `HOST=0.0.0.0`, `PORT=3000`.
 
-1. **`dev`** — Hot-reload, volume mounts, debug tools. Used by `docker-compose.dev.yml`.
-2. **`builder`** — Installs dependencies, builds frontend assets.
-3. **`runner`** — Minimal production image with only runtime dependencies.
+---
+
+## Key Development Notes
+
+### Nitro Auto-Imports
+
+Everything under `server/utils/` is auto-imported by Nitro. Do NOT add explicit `import` statements for `db`, `redis`, `getIsAdmin`, `enqueueJob`, `serializePost`, etc. Schema tables are auto-imported via `server/utils/schema.ts` re-export.
+
+### Route File Convention
+
+Each HTTP method is a separate file: `index.get.ts`, `index.post.ts`, `[id].patch.ts`, `[id].delete.ts`. Combined-method files (`.get.post.ts`) are NOT supported and will 404.
+
+### Client-Side Fetch
+
+`fetchApi()` in `app/composables/api.ts` uses string concat + `URLSearchParams` for URL construction. Never use `new URL()` with relative paths — it throws `TypeError: Invalid URL` in the browser.
+
+### useAsyncData Keys
+
+Keys must include route parameters (page, query, perPage) to prevent stale cache hits during client-side navigation. Example: `` `posts-${page}-${perPage}-${rating || 'all'}` ``
+
+### CSS
+
+Tailwind v4 is configured via `@tailwindcss/vite` in `nuxt.config.ts`. Design tokens (colors, spacing, animations) are defined in `assets/css/main.css` using `@theme {}`. Component classes (`.filter-pill`, `.masonry-item`, `.card`, etc.) are defined in the same file.
+
+**Caution**: CSS minifiers may strip `0` from `filter: blur(0)` → `filter: blur()` (invalid). Use `filter: none` instead of `filter: blur(0)` / `filter: brightness(1)`.
 
 ---
 
 ## Testing & Verification
 
-1. **Bot flow**: Send a Pixiv link → receive "downloading" → receive "saved" → visible on frontend immediately
-2. **Web import**: Paste URLs → click import → each URL shows real-time SSE progress (⏳→✅/⚠️/❌) → done summary
+1. **Bot flow**: Send a Pixiv link → receive "downloading" → receive "saved" → visible on frontend
+2. **Web import**: Paste URLs → click import → real-time SSE progress → done summary
 3. **Delete flow**: Admin panel click delete → confirm → DB record gone + S3 files deleted + tag count decremented
 4. **Auto-rating**: Add rule "nsfw → explicit" → import image with that tag → auto-marked as explicit
-5. **AI tag processing**: Set `ENABLE_AI_TAG_PROCESSING=true` → import image → tags auto-classified + translated → visible in tag knowledge cache
-6. **Tag visibility**: Anonymous visitors can't see tags that only belong to non-safe posts; admin sees all
-7. **Frontend performance**: Caddy cache hit TTFB < 10ms, list page zero-JS first paint
-8. **Pagination**: Switching pages and per-page count works, URLs are shareable
-9. **S3 direct**: Images load directly from S3/CDN, not via backend
-10. **Size limit**: Oversized images rejected, Bot replies with reason
-11. **Dedup**: Sending the same image again shows "already exists"
-12. **Theme toggle**: 3-state toggle works, system preference auto-matched
-13. **Rating visibility**: Anonymous sees only safe; non-safe returns 404; admin sees all
-14. **Admin login/logout**: `/login` → homepage shows "admin mode" → click logout → back to normal
-15. **Pixiv multi-image**: Multi-image Pixiv post → only first image downloaded and stored
-16. **Dashboard load**: Login as admin → visit `/admin` (default = dashboard) → see 4 overview cards + 2 distribution charts + 2 leaderboards; numbers match DB
-17. **Sub-tab switching**: Click 图片/标签 etc. → switch back to 概览 → numbers consistent (no duplicate requests)
-18. **Empty dashboard**: Empty DB → dashboard still renders (shows 0, no crash)
-19. **Anon dashboard access**: `/api/admin/dashboard/` returns 401/403 when not logged in (`get_current_admin` rejects)
-20. **Merge — duplicates**: Create tags A and B both linked to the same post → merge A→B → B.post_count unchanged (not +1)
-21. **Merge — new**: A links post X, B does not → merge A→B → B.post_count += 1
-22. **Merge — mixed**: A links 5 posts (3 already in B + 2 new) → merge A→B → response `posts_moved=2, posts_skipped=3, target_new_post_count = B_old+2`
-23. **Merge — self-merge protection**: merge A→A → returns 400
-24. **Merge — missing tag**: source_id or target_id nonexistent → returns 404
-25. **Merge — atomicity**: kill DB connection mid-merge (`docker kill postgres`) → DB has no残留 data
-26. **Tag ID tooltip — display**: hover a tag row cell 200ms → tooltip appears with full UUID
-27. **Tag ID tooltip — copy**: click "复制" button → clipboard contains full UUID, button changes to "✓ 已复制"
-28. **Tag ID tooltip — fallback**: disable Clipboard API (DevTools) → still copies via textarea fallback
-29. **View Transitions**: navigate between pages → smooth SPA-like transitions; footer, announcement banner, ThemeToggle, AccentPicker, mobile menu persist without re-render (transition:persist)
-30. **Bot /random**: send `/random` → bot replies with a random post image + link
-31. **Bot /stats**: send `/stats` → bot replies with dashboard stats (post count, tag count, etc.)
-32. **Settings cache TTL**: change a setting in admin → refresh frontend within 10s → new value visible (frontend middleware TTL 10s, backend Redis TTL 60s)
-33. **Mobile responsive**: touch targets ≥ 44px; safe-area insets respected on notched devices; tag overlay works on touch
-
----
-
-## Browser Extension Development
-
-### Load Unpacked in Dev Mode
-
-1. Generate icons: `pip install cairosvg && python3 -c "import cairosvg; [cairosvg.svg2png(url='logo.svg', write_to=f'extension/icons/icon{s}.png', output_width=s, output_height=s) for s in [16,48,128]]"`
-2. Open `chrome://extensions/`, enable Developer mode
-3. Click "Load unpacked", select the `extension/` directory
-4. Navigate to a Pixiv artwork page to test the import button
-
-### Debugging
-
-- **Content script**: Open DevTools on the Pixiv page → Console/Elements tab. Content script logs appear in the page console.
-- **Service worker**: Go to `chrome://extensions/` → click "Inspect views: service worker" under the extension. This opens a dedicated DevTools for the background script.
-- **Popup**: Right-click the extension icon → "Inspect popup" to debug popup.html/popup.js.
-- **Storage**: In service worker DevTools → Application tab → Chrome Extension Storage to inspect saved settings.
-
-### Extension Code Constraints
-
-Content scripts, service worker, and popup scripts must be plain ES5 JavaScript:
-- No TypeScript, no arrow functions, no template literals, no `const`/`let` (use `var`)
-- This matches the Astro `is:inline` script constraint in the frontend
-
-### Verification Steps
-
-1. **Import flow**: Click "导入到 Kura" → button shows "导入中..." with spinner → "排队中..." → "处理中..." → "已导入！" (bounce + checkmark)
-2. **Duplicate detection**: Import same artwork twice → second attempt shows "重复" (amber pulse)
-3. **Error handling**: Enter wrong API key → button shows "API 密钥无效" (shake)
-4. **Settings persistence**: Set server URL + API key → close popup → reopen → values persist
-5. **Not configured**: Click import without setting server URL → shows "未配置"
+5. **AI tag processing**: Set `ENABLE_AI_TAG_PROCESSING=true` → import image → tags auto-classified + translated
+6. **Tag visibility**: Anonymous visitors see only tags with safe posts; admin sees all
+7. **Pagination**: Switching pages and per-page count works, URLs are shareable
+8. **Image loading**: Images load via `/i/{key}` proxy → S3_EXTERNAL_URL
+9. **Dedup**: Sending the same image again shows "already exists"
+10. **Theme toggle**: 3-state toggle works, system preference auto-matched, no FOUC
+11. **Rating visibility**: Anonymous sees only safe; non-safe returns 404; admin sees all
+12. **Admin login/logout**: `/login` → homepage shows admin controls → logout → back to normal
+13. **Client-side navigation**: Click a post → content loads → click back → content loads (no blank page)
+14. **Dashboard load**: Login as admin → `/admin` → see overview cards + breakdowns
+15. **Merge tags**: Merge A→B → B.post_count recomputed via COUNT(*)
+16. **Settings hot reload**: Change a setting in admin → refresh within 10s → new value visible
+17. **Mobile responsive**: Bottom tab bar, touch targets, safe-area insets

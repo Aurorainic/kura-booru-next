@@ -29,7 +29,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Configuration
-DEV_PG_CONTAINER="${DEV_PG_CONTAINER:-kura-postgres-dev}"
+DEV_PG_CONTAINER="${DEV_PG_CONTAINER:-kura-postgres}"
 POSTGRES_DB="${POSTGRES_DB:-kurabooru}"
 POSTGRES_USER="${POSTGRES_USER:-kura}"
 PROD_DATABASE_URL="${PROD_DATABASE_URL:-}"
@@ -60,7 +60,7 @@ dump_database() {
     # Check if container is running
     if ! docker ps --format '{{.Names}}' | grep -q "^${DEV_PG_CONTAINER}$"; then
         log_error "Dev PostgreSQL container '${DEV_PG_CONTAINER}' is not running"
-        log_info "Start it with: docker compose -f infra/docker-compose.dev.yml up -d postgres"
+        log_info "Start it with: cd infra && docker compose up -d postgres"
         exit 1
     fi
 

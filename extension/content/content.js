@@ -45,7 +45,14 @@
     );
   });
 
-  function pollStatus(taskId) {
+  function pollStatus(taskId, attempt) {
+    attempt = attempt || 0;
+    if (attempt > 60) {
+      btn.textContent = "超时";
+      btn.className = "kura-error";
+      resetButton();
+      return;
+    }
     chrome.runtime.sendMessage(
       { type: "CHECK_STATUS", taskId: taskId },
       function (response) {
@@ -79,10 +86,9 @@
           btn.textContent = "处理中...";
           btn.className = "kura-processing";
           setTimeout(function () {
-            pollStatus(taskId);
+            pollStatus(taskId, attempt + 1);
           }, 2000);
         } else {
-          // not_found or unknown
           btn.textContent = "任务丢失";
           btn.className = "kura-error";
           resetButton();

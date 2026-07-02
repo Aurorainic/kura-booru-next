@@ -4,89 +4,59 @@
 
 ### Tag Strategy
 
-Uses **latest + versioned** dual tags:
-
-- **`latest`** — Always points to the current stable version
-- **`v0.6.2`, ...** — Versioned tags for rollback and audit
-
-Tag lifecycle:
-1. **Build**: Each release tags both `latest` and `v0.2.x`
-2. **Push**: Both tags pushed to registry
-3. **Deploy**: Production uses `latest` tag
-4. **Rollback**: Specify a versioned tag (e.g., `v0.6.2`)
+All custom images use **`:latest` only**. No version-pinned tags. Version history lives in git commits + `KURA_VERSION` in `.env`.
 
 ### Building Images
 
-Using the unified build script:
-
 ```bash
-./infra/scripts/build.sh v0.6.2
-```
+# Nuxt (SSR + API + Bot webhook)
+docker build -t kura-booru-web:latest .
 
-Or manually per service:
-
-```bash
-# Backend (API + Worker share this image)
-docker build -t kura-booru-next-backend:v0.6.2 -t kura-booru-next-backend:latest ./backend
-
-# Bot (aiogram 3, webhook mode)
-docker build -t kura-booru-next-bot:v0.6.2 -t kura-booru-next-bot:latest ./bot
-
-# Frontend (Astro SSR, Node.js runtime)
-docker build -t kura-booru-next-frontend:v0.6.2 -t kura-booru-next-frontend:latest ./frontend
-```
-
-### Local Test Run
-
-```bash
-docker run -p 8000:8000 --env-file .env kura-booru-next-backend:v0.6.2
-docker run --env-file .env kura-booru-next-backend:v0.6.2 arq app.tasks.worker.WorkerSettings
-docker run -p 8080:8080 --env-file .env kura-booru-next-bot:v0.6.2
-docker run -p 4321:4321 --env-file .env kura-booru-next-frontend:v0.6.2
+# Sidecar (Python gallery-dl + phash)
+cd sidecar && docker build -t kura-booru-worker:latest .
 ```
 
 ### Production Deployment
 
 ```bash
-# On the production server
-cd infra/
-docker compose pull
-docker compose up -d
+# Build new images, then deploy (always use --force-recreate)
+docker build -t kura-booru-web:latest .
+cd sidecar && docker build -t kura-booru-worker:latest .
+cd infra && docker compose up -d --force-recreate
 ```
+
+`--force-recreate` is mandatory — without it, Docker may reuse cached containers even when the `:latest` image changed.
 
 ### Rollback
 
+Since there are no version-pinned tags, rollback is via git: checkout the previous commit, rebuild, and redeploy.
+
 ```bash
-# Edit docker-compose.yml to pin a specific version
-# e.g., image: kura-booru-next-backend:v0.6.2
-docker compose up -d
+git checkout <previous-commit>
+docker build -t kura-booru-web:latest .
+cd infra && docker compose up -d --force-recreate
 ```
 
 ### Cleanup Old Images
 
 ```bash
-# View all kura-booru images
-docker images | grep kura-booru
-
-# Delete specific old versions
-docker rmi kura-booru-next-backend:v0.6.2
-
-# Batch delete (keep latest and current)
-CURRENT_VERSION="v0.6.2"
-docker images --format "{{.Repository}}:{{.Tag}}" | grep kura-booru | grep -v latest | grep -v ${CURRENT_VERSION} | xargs docker rmi -f
+docker image prune -f    # Remove dangling images
 ```
 
 ---
 
+## Container Overview
+
+| Container | Image | Purpose |
+|---|---|---|
+| `kura-web` | `kura-booru-web:latest` | SSR + REST API + Bot webhook (single Node process) |
+| `kura-worker` | `kura-booru-worker:latest` | Python gallery-dl + imagehash phash worker |
+| `kura-postgres` | `postgres:18-alpine` | Primary database |
+| `kura-redis` | `redis:8-alpine` | Job queue + cache |
+
+---
+
 ## Scripts
-
-### build.sh
-
-```bash
-./infra/scripts/build.sh v0.6.2
-```
-
-Unified Docker image build script. Injects `PUBLIC_GIT_TAG` build arg into the frontend for version display in the footer. Builds all three images with both `latest` and versioned tags.
 
 ### validate-env.sh
 
@@ -95,17 +65,31 @@ Unified Docker image build script. Injects `PUBLIC_GIT_TAG` build arg into the f
 ./infra/scripts/validate-env.sh prod   # Production mode (strict)
 ```
 
-Validates that all required environment variables are set. Production mode requires all critical vars; development mode warns but doesn't fail.
+---
 
-### migrate-db.sh
+## Admin Password Management
 
-```bash
-./infra/scripts/migrate-db.sh --dump-only                     # Export dev database only
-./infra/scripts/migrate-db.sh --import-only dumps/xxx.sql     # Import to production only
-./infra/scripts/migrate-db.sh                                 # Interactive mode
-```
+### Change Admin Password
 
-Migrates the database from a development environment to production. Supports dump-only, import-only, and interactive modes.
+1. Update `ADMIN_PASSWORD` in `.env`
+2. Generate bcrypt hash:
+   ```bash
+   node -e "console.log(require('bcryptjs').hashSync(process.env.ADMIN_PASSWORD || 'newpassword', 12))"
+   ```
+3. Update the database:
+   ```bash
+   docker compose exec postgres psql -U kura -d kurabooru -c "UPDATE admins SET password_hash = '<hash>', password_changed_at = NOW() WHERE username = 'admin';"
+   ```
+4. Update Redis password epoch (invalidates all existing sessions):
+   ```bash
+   docker compose exec redis redis-cli SET kura:password_epoch "$(date +%s)000"
+   ```
+5. Restart the nuxt container:
+   ```bash
+   cd infra && docker compose up -d --force-recreate nuxt
+   ```
+
+The `seed-admin.ts` plugin will NOT overwrite an existing admin — it only creates one if none exists.
 
 ---
 
@@ -114,58 +98,82 @@ Migrates the database from a development environment to production. Supports dum
 ### Before Release
 - [ ] Code merged to main branch
 - [ ] CHANGELOG.md updated
-- [ ] All docker-compose.yml image tags updated
+- [ ] `KURA_VERSION` in `.env` updated
+- [ ] `.env` has all required production variables
 
-### Build & Push
-- [ ] Build three images (backend, bot, frontend) with both latest + versioned tags
-- [ ] Push to registry (latest + versioned)
-- [ ] Verify registry image tags
-- [ ] Extension zip built and uploaded as CI artifact (build-extension.yml)
-
-### Deploy & Verify
-- [ ] Production server pulls latest images
-- [ ] Restart all containers: `docker compose up -d`
-- [ ] Health check passes: `curl http://localhost:8000/health`
-- [ ] Core functionality verified
-- [ ] Git tag created and pushed
+### Build & Deploy
+- [ ] Build nuxt image: `docker build -t kura-booru-web:latest .`
+- [ ] Build sidecar image (if sidecar changed): `cd sidecar && docker build -t kura-booru-worker:latest .`
+- [ ] Deploy: `cd infra && docker compose up -d --force-recreate`
+- [ ] Health check: `docker compose ps` (all healthy)
+- [ ] Core functionality verified (homepage, login, admin, image loading)
 
 ### After Release
-- [ ] Clean up old version local images
-- [ ] Update documentation if needed
+- [ ] Git tag created and pushed
+- [ ] Clean up old images: `docker image prune -f`
 
 ---
 
-## China Build Notes
+## Docker Compose Notes
 
-Docker builds in China require mirror overrides due to network restrictions:
+- Port bindings use `127.0.0.1:PORT:PORT` — the reverse proxy runs on the **host**, not in Docker, so containers expose ports to localhost only
+- Redis `--requirepass` with empty password breaks docker-compose parsing. Remove the line entirely when password is empty
+- PG 18+ volume mount: use `/var/lib/postgresql` (not `/var/lib/postgresql/data`) — PG 18 changed its data directory layout
 
-- **Python base images** use `deb.debian.org`, not the host's apt source. Add Aliyun mirror replacement in every Dockerfile stage that runs `apt-get`:
-  ```dockerfile
-  RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources 2>/dev/null || true \
-      && sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources 2>/dev/null || true
-  ```
-- **`pip install`** needs `-i https://mirrors.aliyun.com/pypi/simple/` for PyPI in China
-- **`npm ci`** needs `npm config set registry https://registry.npmmirror.com` for npmmirror
+---
 
+## Reverse Proxy Configuration
 
-### Docker Compose Notes
+The reverse proxy runs on the **host machine**, not in Docker Compose. It proxies all traffic to the Nuxt container at `127.0.0.1:3000`.
 
-- Production compose needs `ports: 127.0.0.1:PORT:PORT` bindings — Caddy runs on the **host**, not in Docker
-- Redis command with empty `${REDIS_PASSWORD:-}` breaks parsing. Remove `--requirepass` line entirely when password is empty
-- `schemas/__init__.py` must only import classes that actually exist — stale imports crash uvicorn at startup
+### Caddy
 
-### Caddy `/i/*` Image Proxy
+```
+your-domain.example.com {
+    reverse_proxy 127.0.0.1:3000
+}
+```
 
-- Frontend renders `/i/originals/...`, `/i/thumbs/...`, `/i/previews/...` paths
-- Caddy MUST have a `handle /i/*` block with `uri strip_prefix /i` + `reverse_proxy` to S3/CDN
-- R2 API endpoint (`*.r2.cloudflarestorage.com`) requires S3 auth headers — use the public CDN domain (e.g., `images.your-domain.com`) as upstream instead
+### nginx
 
-### Caddy SSE (Server-Sent Events)
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name your-domain.example.com;
 
-- The web import page uses SSE for real-time progress updates
-- Caddy **must** have `flush_interval -1` in the `/api/*` reverse_proxy block, otherwise SSE responses are buffered and the browser never receives events
-- This is already set in the provided Caddyfile template — do not remove it
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;   # Required for SSE
+        proxy_cache off;
+        client_max_body_size 50m;
+    }
+}
+```
 
-### Extension API Key Rotation
+### Traefik
 
-When rotating `BACKEND_API_KEY`, notify all extension users — they must manually update the API Key in their extension popup settings. The old key stops working immediately upon backend restart.
+Add a router/service in your dynamic config pointing to `http://127.0.0.1:3000`. SSE works out of the box.
+
+### SSE Note
+
+The web import page uses SSE (`GET /api/tasks/web-import/stream`). Your reverse proxy must not buffer SSE responses:
+
+| Proxy | Configuration |
+|---|---|
+| **Caddy** | `flush_interval -1` in the `reverse_proxy` block |
+| **nginx** | `proxy_buffering off; proxy_cache off;` in the `location /` block |
+| **Traefik** | Works out of the box (no buffering by default) |
+
+### `/i/*` Image Proxy
+
+The Nuxt server handles `/i/*` internally (proxying to `S3_EXTERNAL_URL`). The reverse proxy does not need a separate `/i/*` block — all traffic goes to the Nuxt container.
+
+---
+
+## Extension API Key Rotation
+
+When rotating `BACKEND_API_KEY`, notify all extension users — they must manually update the API Key in their extension popup settings. The old key stops working immediately upon nuxt container restart.

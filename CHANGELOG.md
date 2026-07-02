@@ -2,7 +2,42 @@
 
 本文件记录项目的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [0.6.2] - 2026-06-27
+## [0.7.0] - 2026-07-02
+
+### 新增
+- **Nitro/Nuxt 4 全栈重写** — 替代 Astro (前端) + FastAPI (后端) + aiogram (Bot) 三进程架构为单一 Node 进程。SSR + REST API + Bot webhook 由 Nitro 同进程处理。Python 仅保留 sidecar（gallery-dl + phash）。
+- **Telegram Bot 重写** — aiogram (Python) → grammy (TypeScript)，webhook 模式在 Nitro 进程内运行。i18n 中/英双语，/search /random /stats /autopass /lang /info /save 命令，inline keyboard 评级选择 + 10s 倒计时自动确认。
+- **管理后台仪表盘** — 环形图（来源分布）+ 分段色条（评级分布）+ 热门标签云 + 系统状态实时轮询。6 个子标签页全部 Material Design 风格重设计。
+- **字体统一** — `system-ui` + `PingFang SC` + `Microsoft YaHei` + `Hiragino Sans GB` 单一系统栈，零外部加载。
+- **Docker 镜像版本刻入** — `KURA_VERSION` build arg 在构建时写入 Nuxt runtimeConfig，footer 永远显示正确版本号。
+- **SSRF 防护** — sidecar URL 校验（scheme + IP 黑名单）+ IPv4-mapped IPv6 归一化 + redirect hop 重校验 + max-redirects 限制。
+- **公告横幅** — 铃铛图标 + 行高对齐优化，Markdown 内联渲染，sessionStorage 关闭记忆。
+
+### 变更
+- **项目目录扁平化** — `nuxt-app/*` → 根目录。删除 `backend/` `frontend/` `bot/` 旧版代码。
+- **容器重命名** — `kura-nuxt` → `kura-web`，`kura-sidecar` → `kura-worker`。删除 `docker-compose.dev.yml`。
+- **清除所有 "v2" 字眼** — 镜像名、环境变量、文档、注释。`DATABASE_URL_V2` → `DATABASE_URL`。
+- **README 恢复** — 居中 logo + badges + 特性列表样式。
+- **主题切换 auto 图标** — 虚线圆 → 显示器图标（🖥），清晰表达"跟随系统"。
+- **调色按钮图标** — 纯色圆点 → 调色盘 SVG。
+
+### 修复
+- **grammy API**: `bot.hear` → `bot.hears`
+- **redis v6**: Proxy 命令名小写 → 大写（`LPUSH`/`BRPOP`/`GET`）
+- **gallery-dl 1.32**: `config.set()` tuple → 3-arg；`DownloadJob` 移至 `gallery_dl.job`；metadata 从 `pathfmt.kwdict` 读取
+- **BRPOP 死锁**: pipeline worker 独立 Redis 连接，避免阻塞共享连接导致登录后 SSR 挂起
+- **Head inject 响应式**: `useHead(() => ...)` getter 模式，设置变更后自动生效
+- **pie/bar chart 渲染**: `count` 字符串→数字转换；SVG `fill="var(--bg-*)"` → `style`
+- **`.claude/` `.serena/`**: 加入 `.gitignore`
+
+### 移除
+- 旧版 Python backend（FastAPI + SQLAlchemy + ARQ）
+- 旧版 Python bot（aiogram）
+- 旧版 Astro frontend（React islands + shadcn/ui）
+- `docker-compose.dev.yml`
+- `docker-compose.v2-dev.yml`
+
+## [0.6.3] - 2026-06-27
 
 ### 新增
 - **Astro ClientRouter (View Transitions)** — 全站页面切换过渡动效。导航不再全页重载，改为 SPA 式平滑 cross-fade + 轻量 pageIn 入口动画。

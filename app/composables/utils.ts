@@ -1,0 +1,102 @@
+import type { Post, PostsResponse, Tag, PaginatedResponse, AuthStatus, Rating, TagCategory, AutoRatingRule, SiteSettings, DashboardStats } from '~/types'
+
+export const ALLOWED_PER_PAGE = new Set([20, 40, 100])
+export const DEFAULT_PER_PAGE = 40
+export const MAX_PER_PAGE = 100
+
+export function clampPerPage(value: number): number {
+  if (ALLOWED_PER_PAGE.has(value)) return value
+  if (value < 20) return 20
+  if (value > 100) return 100
+  return [...ALLOWED_PER_PAGE].reduce((prev, curr) =>
+    Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev
+  )
+}
+
+export function emptyPostsResponse(): PostsResponse {
+  return { items: [], total: 0, page: 1, per_page: DEFAULT_PER_PAGE, total_pages: 0 }
+}
+
+export function getImageUrl(key: string): string {
+  return `/i/${key}`
+}
+
+export function getThumbUrl(post: Post): string {
+  return getImageUrl(post.thumb_key)
+}
+
+export function getPreviewUrl(post: Post): string {
+  return getImageUrl(post.preview_key)
+}
+
+export function getOriginalUrl(post: Post): string {
+  return getImageUrl(post.s3_key)
+}
+
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+export function formatDate(dateString: string): string {
+  const date = new Date(dateString)
+  return date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+export function getRatingLabel(rating: Rating): string {
+  const labels: Record<Rating, string> = { safe: '公开', questionable: '敏感', explicit: '限制' }
+  return labels[rating] || rating
+}
+
+export function getRatingColorClass(rating: Rating): string {
+  const classes: Record<Rating, string> = { safe: 'rating-safe', questionable: 'rating-questionable', explicit: 'rating-explicit' }
+  return classes[rating] || 'rating-safe'
+}
+
+export function getTagCategoryColor(category: TagCategory): string {
+  const colors: Record<TagCategory, string> = {
+    artist: 'tag-artist', character: 'tag-character', copyright: 'tag-copyright', general: 'tag-general', meta: 'tag-meta',
+  }
+  return colors[category] || 'tag-general'
+}
+
+export function getTagCategoryLabel(category: TagCategory): string {
+  const labels: Record<TagCategory, string> = {
+    artist: '画师', character: '角色', copyright: '作品', general: '通用', meta: '元信息',
+  }
+  return labels[category] || category
+}
+
+export function getTagCategoryBg(category: TagCategory): string {
+  const bgVars: Record<TagCategory, string> = {
+    artist: '#fef3c7',
+    character: '#dbeafe',
+    copyright: '#fce7f3',
+    general: '#e5e7eb',
+    meta: '#e0e7ff',
+  }
+  return bgVars[category] || '#e5e7eb'
+}
+
+export function getTagCategoryVar(category: TagCategory): string {
+  const vars: Record<TagCategory, string> = {
+    artist: 'var(--color-tag-artist)',
+    character: 'var(--color-tag-character)',
+    copyright: 'var(--color-tag-copyright)',
+    general: 'var(--color-tag-general)',
+    meta: 'var(--color-tag-meta)',
+  }
+  return vars[category] || 'var(--color-tag-general)'
+}
+
+export function getSourceSiteLabel(site: string): string {
+  const labels: Record<string, string> = { pixiv: 'Pixiv', twitter: 'Twitter/X', danbooru: 'Danbooru', other: '其他' }
+  return labels[site] || site
+}

@@ -2,9 +2,9 @@
 
 ## Prerequisites
 
-- Docker + Docker Compose v2
-- Caddy 2.x (on host machine, with Souin cache plugin optional)
+- Docker + Docker Compose
 - S3-compatible storage (Cloudflare R2 / MinIO / AWS S3)
+- Caddy 2.x / nginx / Traefik **optional** since v0.7.0 — see Deployment Modes below
 
 ---
 
@@ -22,13 +22,12 @@ For the complete list of all variables with descriptions and defaults, see [`inf
 
 | Variable | Description |
 |---|---|
-| `APP_URL` / `APP_DOMAIN` | Your domain (e.g., `https://kura-booru.example.com`) |
+| `SITE_URL` | Your public site URL (e.g., `https://kura-booru.example.com`) |
 | `SECRET_KEY` | Generate with: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `POSTGRES_PASSWORD` | Database password |
 | `S3_ENDPOINT` / `S3_EXTERNAL_URL` | S3 storage endpoint (see S3 Configuration below) |
 | `S3_ACCESS_KEY` / `S3_SECRET_KEY` | S3 credentials |
 | `BOT_TOKEN` | Telegram Bot Token (from @BotFather) |
-| `BOT_WEBHOOK_URL` | `https://<domain>/bot/webhook` |
 | `BOT_WEBHOOK_SECRET` | Webhook verification secret |
 | `BOT_ADMIN_IDS` | Comma-separated Telegram user IDs allowed to use the bot |
 
@@ -36,19 +35,17 @@ For the complete list of all variables with descriptions and defaults, see [`inf
 
 | Category | Key Variables |
 |---|---|
-| Application | `APP_URL`, `APP_DOMAIN` (Caddy/Astro only, not read by backend) |
-| Secret | `SECRET_KEY` |
-| Admin Auth | `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_SESSION_MAX_AGE`, `BACKEND_API_KEY` |
-| S3 Storage | `S3_ENDPOINT`, `S3_EXTERNAL_URL`, `PUBLIC_S3_EXTERNAL_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET_NAME`, `S3_REGION` |
-| Database | `DATABASE_URL`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` |
-| Redis | `REDIS_URL` (password included in URL if needed; `REDIS_PASSWORD` alone is unused by code) |
+| Application | `SITE_URL` (required), `KURA_VERSION` |
+| Secret | `SECRET_KEY`, `SESSION_SECRET` |
+| Admin Auth | `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `BACKEND_API_KEY` |
+| S3 Storage | `S3_ENDPOINT`, `S3_EXTERNAL_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION` |
+| Database | `DATABASE_URL` (postgres-js format: `postgres://...`), `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` |
+| Redis | `REDIS_URL` (password included in URL if needed) |
 | AI Tag Processing | `ENABLE_AI_TAG_PROCESSING`, `AI_PROVIDER_API_KEY`, `AI_PROVIDER_ENDPOINT`, `AI_PROVIDER_MODEL` |
-| Bot | `BOT_TOKEN`, `BOT_WEBHOOK_URL`, `BOT_WEBHOOK_SECRET`, `BOT_ADMIN_IDS`, `BOT_PORT`, `FRONTEND_URL` |
+| Bot | `BOT_TOKEN`, `BOT_WEBHOOK_SECRET`, `BOT_ADMIN_IDS` |
 | Image Processing | `MAX_IMAGE_SIZE`, `THUMB_SIZE`, `PREVIEW_SIZE` |
 | gallery-dl Auth | `PIXIV_REFRESH_TOKEN`, `PIXIV_PHPSESSID` |
-| Frontend | `PUBLIC_GIT_TAG`, `PUBLIC_API_URL`, `PUBLIC_S3_EXTERNAL_URL`, `INTERNAL_API_URL` |
-| Caddy (host-side) | `BACKEND_HOST`, `BACKEND_PORT`, `BOT_HOST`, `BOT_PORT`, `FRONTEND_HOST`, `FRONTEND_PORT`, `S3_PROXY_UPSTREAM` |
-| Migration | `DEV_PG_CONTAINER`, `PROD_DATABASE_URL` |
+| Frontend | `INTERNAL_API_URL` (default: `http://127.0.0.1:3000/api` — in-process) |
 
 ### Validate Environment
 
@@ -59,9 +56,46 @@ cd infra && ./scripts/validate-env.sh dev    # Relaxed: warns but doesn't fail
 
 ---
 
+## Deployment Modes
+
+### Standalone Mode (Simplest)
+
+No reverse proxy needed. The Nuxt/Nitro server handles SSR, API, Bot webhook, and `/i/*` image proxy all in one process.
+
+```bash
+# Only 1 address variable required:
+#   SITE_URL=https://kura-booru.example.com
+cd infra && docker compose up -d --force-recreate
+```
+
+The browser talks directly to the Nuxt server (`:3000`), which handles SSR and proxies image requests to S3 internally.
+
+### Reverse Proxy Optimized Mode (Production)
+
+Use any reverse proxy for HTTPS termination, compression, and static asset caching. The proxy forwards all traffic to the Nuxt container.
+
+```bash
+# Start all services
+cd infra && docker compose up -d --force-recreate
+
+# Deploy reverse proxy config (on the host machine)
+# Caddy:
+cp infra/caddy/Caddyfile /etc/caddy/Caddyfile
+systemctl reload caddy
+
+# nginx:
+cp infra/nginx/kura-booru.conf /etc/nginx/sites-available/
+ln -sf /etc/nginx/sites-available/kura-booru.conf /etc/nginx/sites-enabled/
+systemctl reload nginx
+
+# Traefik: add the router/service to your traefik.yml or dynamic config
+```
+
+---
+
 ## S3 Configuration
 
-The S3 layer works with **any** S3-compatible storage. Images are served **directly from S3/CDN** (not via Caddy proxy). Switch providers by changing env vars only — no code changes needed.
+The S3 layer works with **any** S3-compatible storage. Images are served **directly from S3/CDN** (not via reverse proxy). Switch providers by changing env vars only — no code changes needed.
 
 | Variable | Cloudflare R2 (Production) | MinIO (Development) | AWS S3 |
 |---|---|---|---|
@@ -70,8 +104,7 @@ The S3 layer works with **any** S3-compatible storage. Images are served **direc
 | `S3_REGION` | `auto` | `us-east-1` | `<region>` |
 
 - `S3_ENDPOINT`: Internal endpoint for backend uploads (S3 API)
-- `S3_EXTERNAL_URL`: Backend public URL prefix (used in API responses)
-- `PUBLIC_S3_EXTERNAL_URL`: Frontend public URL prefix (browser → S3/CDN directly)
+- `S3_EXTERNAL_URL`: Backend public URL prefix (used in API responses; in Standalone mode, images are served via `/i/*` proxy)
 
 ---
 
@@ -87,67 +120,83 @@ cp infra/.env.example .env
 ### 2. Start Services
 
 ```bash
-cd infra && docker compose up -d
+cd infra && docker compose up -d --force-recreate
 ```
 
-Production compose requires external S3 (R2/AWS S3). For development with MinIO, use the dev compose override (see [development.md](development.md)).
+Always use `--force-recreate` to pick up new `:latest` images. See [versioning.md](versioning.md).
 
 ### 3. Initialize Database
 
+The stack uses the same PostgreSQL as v1. Existing tables and data are reused. If starting fresh:
+
 ```bash
-cd infra && docker compose exec backend alembic upgrade head
+npm run db:push   # Push Drizzle schema to database
 ```
 
-### 4. Configure Caddy
+### 4. Configure Reverse Proxy (Reverse Proxy Optimized mode only)
 
-Deploy the Caddyfile template to the host machine:
+Deploy the reverse proxy config to the host machine. The proxy forwards all traffic to the Nuxt container at `127.0.0.1:3000`.
+
+**Caddy** — see [`infra/caddy/Caddyfile`](../infra/caddy/Caddyfile) for an example:
 
 ```bash
 cp infra/caddy/Caddyfile /etc/caddy/Caddyfile
+# Edit the Caddyfile: replace the site domain with your actual domain
 systemctl reload caddy
 ```
 
-The Caddyfile uses `{$VAR}` syntax for environment variable substitution. Key variables:
-- `{$APP_DOMAIN}` — your domain
-- `{$BACKEND_HOST}:{$BACKEND_PORT}` — backend address
-- `{$BOT_HOST}:{$BOT_PORT}` — bot address
-- `{$FRONTEND_HOST}:{$FRONTEND_PORT}` — frontend address
+**nginx** — minimal config:
 
-**Important**: The Caddyfile is a template — replace `{APP_DOMAIN}` and the S3 upstream URL with your actual values before deploying.
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name kura-booru.example.com;
+
+    ssl_certificate     /etc/ssl/certs/your-cert.pem;
+    ssl_certificate_key /etc/ssl/private/your-key.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Required for SSE (web import progress)
+        proxy_buffering off;
+        proxy_cache off;
+
+        client_max_body_size 50m;
+    }
+}
+```
+
+**Traefik** — add a router/service in your dynamic config pointing to `http://127.0.0.1:3000`.
 
 ### 5. Set Telegram Webhook
 
-The bot automatically sets the webhook on startup. Ensure `BOT_WEBHOOK_URL` points to your domain: `https://<domain>/bot/webhook`.
+The bot automatically sets the webhook on startup. Ensure `SITE_URL` is set correctly — the webhook URL is derived as `{SITE_URL}/bot/webhook`.
 
-### 6. First Admin Login
+### First Admin Login
 
-On first startup, the system auto-creates a default admin account. The randomly-generated password is printed to server logs:
-
-```bash
-docker compose logs backend | grep "DEFAULT ADMIN CREATED"
-```
-
-After logging in at `/login`, change the password at `/admin/password`.
+The `seed-admin.ts` plugin auto-creates a default admin account on first startup using `ADMIN_USERNAME` and `ADMIN_PASSWORD` from `.env`. Log in at `/login` with those credentials.
 
 ---
 
 ## Production Docker Compose Notes
 
-- Port bindings use `127.0.0.1:PORT:PORT` — Caddy runs on the **host machine**, not in Docker, so containers expose ports to localhost only
+- Port bindings use `127.0.0.1:PORT:PORT` — the reverse proxy runs on the **host machine** (in Reverse Proxy Optimized mode), not in Docker, so containers expose ports to localhost only
 - Redis `--requirepass` with empty password breaks docker-compose parsing. Remove the line entirely when password is empty
-- Backend and Worker share the same Docker image (`kura-booru-next-backend`); the Worker overrides the command to `arq app.tasks.worker.WorkerSettings`
+- PG 18+ volume mount: use `/var/lib/postgresql` (not `/var/lib/postgresql/data`) — PG 18 changed its data directory layout
+- **4 containers**: nuxt, sidecar, postgres, redis. See `infra/docker-compose.yml`
 
 ---
 
-## Caddy `/i/*` Image Proxy
+## `/i/*` Image Proxy
 
-The Caddyfile includes a `handle /i/*` block that proxies image requests to S3-compatible storage:
+In, the Nuxt server handles `/i/*` internally via `server/routes/i/[...].ts`, which proxies to `S3_EXTERNAL_URL/{key}`. The reverse proxy does not need a separate `/i/*` block — all traffic goes to the Nuxt container.
 
-- **Cloudflare R2**: Use the public CDN domain (e.g., `https://images.your-domain.com`) as upstream — the R2 API endpoint requires S3 auth headers
-- **MinIO**: Use `http://localhost:9000/<bucket>`
-- **AWS S3**: Use `https://<bucket>.s3.<region>.amazonaws.com`
-
-This proxy is only needed when `PUBLIC_S3_EXTERNAL_URL` is set to `/i` (Caddy proxy mode). When using direct S3/CDN URLs (recommended), images bypass Caddy entirely.
+When using direct S3/CDN URLs (recommended for production), set `S3_EXTERNAL_URL` to the CDN domain and images bypass the Nuxt proxy entirely.
 
 ---
 
@@ -170,9 +219,15 @@ When `ENABLE_AI_TAG_PROCESSING=true`, newly imported images are automatically cl
 
 All three are required when `ENABLE_AI_TAG_PROCESSING=true`. When disabled (default), these variables are ignored.
 
-### Caddy SSE Note
+### SSE Note
 
-The web import page uses SSE (`GET /api/tasks/web-import/stream`) for real-time progress. Caddy must have `flush_interval -1` in the `/api/*` reverse_proxy block, otherwise SSE responses are buffered and the browser never receives updates. This is already set in the provided Caddyfile template.
+The web import page uses SSE (`GET /api/tasks/web-import/stream`) for real-time progress. Your reverse proxy must **not buffer** SSE responses:
+
+| Proxy | Configuration |
+|---|---|
+| **Caddy** | `flush_interval -1` in the `reverse_proxy` block |
+| **nginx** | `proxy_buffering off; proxy_cache off;` in the `location /` block |
+| **Traefik** | Works out of the box (no buffering by default) |
 
 ---
 

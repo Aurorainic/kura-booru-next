@@ -1,0 +1,48 @@
+{
+  "env": {
+    "browser": true,
+    "webextensions": true
+  },
+  "globals": {
+    "chrome": "readonly"
+  },
+  "parserOptions": {
+    "ecmaVersion": 5
+  },
+  "rules": {
+    "no-var": "off",
+    "prefer-const": "off",
+    "prefer-arrow-callback": "off",
+    "arrow-body-style": "off",
+    "no-template-curly-in-string": "off",
+    "prefer-template": "off",
+    "prefer-destructuring": "off",
+    "object-shorthand": "off",
+    "prefer-spread": "off",
+    "prefer-rest-params": "off",
+    "no-useless-constructor": "off",
+    "no-class-assign": "off",
+    "no-new-symbol": "off",
+    "no-constant-condition": "warn",
+    "no-dupe-keys": "error",
+    "no-duplicate-case": "error",
+    "no-empty": "warn",
+    "no-ex-assign": "error",
+    "no-extra-semi": "error",
+    "no-func-assign": "error",
+    "no-irregular-whitespace": "error",
+    "no-sparse-arrays": "warn",
+    "no-unreachable": "error",
+    "valid-typeof": "error",
+    "curly": "warn",
+    "eqeqeq": "warn",
+    "no-alert": "off",
+    "no-eval": "error",
+    "no-implied-eval": "error",
+    "no-extend-native": "error",
+    "no-global-assign": "error",
+    "no-unsafe-negation": "error",
+    "no-unused-vars": "warn",
+    "no-use-before-define": "warn"
+  }
+}

@@ -1,21 +1,13 @@
-# Caddyfile for Kura Booru Next — placed on HOST machine at /etc/caddy/Caddyfile
+# =============================================================================
+# Kura Booru v2 — Example Caddy Configuration
+# =============================================================================
+# Replace "your-domain.example.com" with your actual domain.
+# Caddy auto-provisions HTTPS certificates via Let's Encrypt.
 #
-# ⚠️  THIS IS A TEMPLATE — DO NOT USE AS-IS IN PRODUCTION ⚠️
-#
-# You MUST edit the values below before deploying:
-#   1. Replace {APP_DOMAIN} with YOUR domain (e.g., kura-booru.example.com)
-#   2. Replace the S3 image proxy upstream (handle /i/*) with your S3/CDN domain
-#   3. Remove unrelated blocks (gitea, astrbot, etc.) — they are just examples
-#
-# The /i/* block proxies image requests to your S3-compatible storage (R2/MinIO/AWS S3).
-# - Cloudflare R2:  use your public CDN domain (e.g., https://images.your-domain.com)
-# - MinIO:          use http://localhost:9000/<bucket>
-# - AWS S3:         use https://<bucket>.s3.<region>.amazonaws.com
-#
-# See infra/.env.example for the full list of environment variables.
-# ──────────────────────────────────────────────────────────────────────
+# For other reverse proxies (nginx, Traefik), see docs/deployment.md.
+# =============================================================================
 
-{APP_DOMAIN} {
+your-domain.example.com {
 	encode zstd gzip
 
 	header {
@@ -24,41 +16,16 @@
 		Referrer-Policy "strict-origin-when-cross-origin"
 	}
 
-	# API routes — NO CACHE, proxy to FastAPI backend
-	handle /api/* {
-		reverse_proxy 127.0.0.1:8000 {
-			fail_duration 30s
-			max_fails 3
-			flush_interval -1
-		}
-		request_body {
-			max_size 50MB
-		}
+	reverse_proxy 127.0.0.1:3000 {
+		fail_duration 30s
+		max_fails 3
+		flush_interval -1
 	}
 
-	# Telegram Bot webhook — NO CACHE, proxy to bot container
-	handle /bot/webhook {
-		reverse_proxy 127.0.0.1:8080
+	request_body {
+		max_size 50MB
 	}
 
-	# S3 image proxy — /i/* serves images from S3/CDN
-	# IMPORTANT: Replace the upstream URL below with YOUR S3/CDN public URL
-	# - R2:      https://images.your-domain.com
-	# - MinIO:   http://localhost:9000/your-bucket
-	# - AWS S3:  https://your-bucket.s3.region.amazonaws.com
-	handle /i/* {
-		uri strip_prefix /i
-		reverse_proxy https://images.{APP_DOMAIN} {
-			header_up Host images.{APP_DOMAIN}
-		}
-	}
-
-	# Frontend SSR (Astro) — default route
-	handle {
-		reverse_proxy 127.0.0.1:4321
-	}
-
-	# Cache-Control: immutable for hashed assets
 	@hashedAssets {
 		path *.js *.css *.woff2 *.woff *.png *.jpg *.svg *.ico *.webp *.avif
 	}

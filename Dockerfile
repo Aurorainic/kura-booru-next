@@ -1,0 +1,42 @@
+# =============================================================================
+# Kura Booru — Nuxt/Nitro multi-stage Dockerfile
+# =============================================================================
+# Build:
+#   docker build -t kura-booru-web:latest --build-arg KURA_VERSION=v0.7.0 .
+#   docker build -t kura-booru-web:latest --target dev .           # hot-reload
+# =============================================================================
+
+# ── Stage 1: deps ──
+FROM node:22-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# ── Stage 2: build ──
+FROM node:22-alpine AS build
+ARG KURA_VERSION
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+ENV KURA_VERSION=${KURA_VERSION}
+RUN npm run build
+
+# ── Stage 3: production ──
+FROM node:22-alpine AS production
+WORKDIR /app
+COPY --from=build /app/.output ./.output
+EXPOSE 3000
+ENV HOST=0.0.0.0
+ENV PORT=3000
+ENV NODE_ENV=production
+ARG KURA_VERSION
+ENV KURA_VERSION=${KURA_VERSION}
+CMD ["node", ".output/server/index.mjs"]
+
+# ── Stage 4: dev (hot-reload, for local dev only) ──
+FROM node:22-alpine AS dev
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+EXPOSE 3000
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

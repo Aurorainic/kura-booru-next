@@ -57,16 +57,15 @@ set +a
 
 # Required variables for production
 PROD_REQUIRED_VARS=(
-    "APP_URL"
-    "APP_DOMAIN"
+    "SITE_URL"
     "SECRET_KEY"
-    "ADMIN_SESSION_MAX_AGE"
+    "SESSION_SECRET"
     "BACKEND_API_KEY"
     "S3_ENDPOINT"
     "S3_EXTERNAL_URL"
     "S3_ACCESS_KEY"
     "S3_SECRET_KEY"
-    "S3_BUCKET_NAME"
+    "S3_BUCKET"
     "S3_REGION"
     "DATABASE_URL"
     "POSTGRES_USER"
@@ -74,16 +73,7 @@ PROD_REQUIRED_VARS=(
     "POSTGRES_DB"
     "REDIS_URL"
     "BOT_TOKEN"
-    "BOT_WEBHOOK_URL"
-    "BOT_WEBHOOK_SECRET"
     "BOT_ADMIN_IDS"
-    "BOT_PORT"
-    "FRONTEND_URL"
-    "PIXIV_REFRESH_TOKEN"
-    "PIXIV_PHPSESSID"
-    "PUBLIC_API_URL"
-    "PUBLIC_S3_EXTERNAL_URL"
-    "INTERNAL_API_URL"
 )
 
 # Check a variable is set and not empty
@@ -168,7 +158,6 @@ validate_dev() {
     # In dev mode, only check truly critical variables
     local dev_critical_vars=(
         "BOT_TOKEN"
-        "BOT_WEBHOOK_SECRET"
     )
 
     for var in "${dev_critical_vars[@]}"; do
