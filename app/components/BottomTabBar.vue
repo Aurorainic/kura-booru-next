@@ -17,11 +17,18 @@ function toggleMenu() {
   showMenu.value = !showMenu.value
 }
 
+let clickOutsideHandler: ((e: MouseEvent) => void) | null = null
+
 onMounted(() => {
-  document.addEventListener('click', (e) => {
+  clickOutsideHandler = (e: MouseEvent) => {
     const target = e.target as HTMLElement
     if (!target.closest('[data-menu-tab]')) showMenu.value = false
-  })
+  }
+  document.addEventListener('click', clickOutsideHandler)
+})
+
+onUnmounted(() => {
+  if (clickOutsideHandler) document.removeEventListener('click', clickOutsideHandler)
 })
 </script>
 

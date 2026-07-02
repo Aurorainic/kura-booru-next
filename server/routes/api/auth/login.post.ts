@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
-    maxAge: 60 * 60 * 24 * 30, // 30 days
+    maxAge: SESSION_MAX_AGE, // keep cookie lifetime in sync with session token MAX_AGE
   })
 
   return { ok: true, is_admin: true }

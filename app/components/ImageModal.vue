@@ -35,6 +35,9 @@ function onMouseDown(e: MouseEvent) {
   isDragging.value = true
   startX = e.clientX - translateX.value
   startY = e.clientY - translateY.value
+  // Attach to window so dragging continues outside the image
+  window.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('mouseup', onMouseUp)
 }
 
 function onMouseMove(e: MouseEvent) {
@@ -45,6 +48,8 @@ function onMouseMove(e: MouseEvent) {
 
 function onMouseUp() {
   isDragging.value = false
+  window.removeEventListener('mousemove', onMouseMove)
+  window.removeEventListener('mouseup', onMouseUp)
 }
 
 function onDoubleClick() {
@@ -77,6 +82,9 @@ defineExpose({ open, close })
     id="image-modal"
     class="fixed inset-0 z-50 flex items-center justify-center p-4"
     style="background: oklch(0% 0 0 / 0.9);"
+    role="dialog"
+    aria-modal="true"
+    :aria-label="alt || '图片预览'"
     @click.self="close"
   >
     <img
@@ -90,9 +98,6 @@ defineExpose({ open, close })
       }"
       @wheel.prevent="onWheel"
       @mousedown="onMouseDown"
-      @mousemove="onMouseMove"
-      @mouseup="onMouseUp"
-      @mouseleave="onMouseUp"
       @dblclick="onDoubleClick"
       @click.stop
     />

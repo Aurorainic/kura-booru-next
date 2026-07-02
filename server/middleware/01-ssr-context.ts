@@ -51,4 +51,12 @@ export default defineEventHandler(async (event) => {
       })
     }
   }
+
+  // Maintenance off → bounce visitors off /maintenance back to home
+  if (!maintenanceMode && path === '/maintenance') {
+    return new Response(null, {
+      status: 302,
+      headers: { Location: '/', 'Cache-Control': 'private, no-store' },
+    })
+  }
 })

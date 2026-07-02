@@ -39,13 +39,7 @@ export async function updateSettings(updates: Record<string, string>) {
 
 /** SSRF prevention: check if hostname resolves to private/internal IP */
 export async function isPrivateHost(hostname: string): Promise<boolean> {
-  const { resolve } = await import('dns/promises')
-  let addresses: string[]
-  try {
-    addresses = await resolve(hostname)
-  } catch {
-    return true // can't resolve = suspicious, reject
-  }
+  const addresses = await dnsLookupAll(hostname)
   if (!addresses.length) return true
 
   const { isIP } = await import('node:net')
@@ -71,6 +65,22 @@ export async function isPrivateHost(hostname: string): Promise<boolean> {
     // IPv4
     return isPrivateIPv4(ip)
   })
+}
+
+/** Resolve hostname to first IP — used to pin DNS at validation time (rebinding SSRF). */
+export async function dnsLookup(hostname: string): Promise<string> {
+  const addresses = await dnsLookupAll(hostname)
+  if (!addresses.length) throw new Error(`DNS lookup failed for ${hostname}`)
+  return addresses[0]
+}
+
+async function dnsLookupAll(hostname: string): Promise<string[]> {
+  const { resolve } = await import('dns/promises')
+  try {
+    return await resolve(hostname)
+  } catch {
+    return []
+  }
 }
 
 function isPrivateIPv4(ip: string): boolean {

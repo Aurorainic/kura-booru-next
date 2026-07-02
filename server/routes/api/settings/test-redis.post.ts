@@ -24,8 +24,13 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
+    // ponytail: pin DNS to resolved IP to prevent rebinding SSRF.
+    const parsed = new URL(url)
+    const resolved = await dnsLookup(parsed.hostname)
+    const pinnedUrl = new URL(url)
+    pinnedUrl.hostname = resolved
     const { createClient } = await import('redis')
-    const testClient = createClient({ url, socket: { connectTimeout: 5000 } })
+    const testClient = createClient({ url: pinnedUrl.toString(), socket: { connectTimeout: 5000 } })
     await testClient.connect()
     await testClient.ping()
     await testClient.quit()

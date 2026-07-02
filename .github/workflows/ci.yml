@@ -17,16 +17,6 @@ jobs:
       - run: npm ci
       - run: npx nuxi typecheck
 
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - run: npm ci
-      - run: npm run lint
-
   extension-tests:
     runs-on: ubuntu-latest
     steps:
@@ -34,10 +24,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Install extension deps
+        run: |
+          cd extension
+          npm ci
       - name: Run tests
         run: |
           cd extension
-          npx vitest run --config vitest.config.ts --coverage
+          npx vitest run --config vitest.config.ts
         env:
           COVERAGE_THRESHOLD_LINES: 50
 

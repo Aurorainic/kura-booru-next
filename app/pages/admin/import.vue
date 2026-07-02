@@ -49,6 +49,9 @@ async function startImport() {
       eventSource.close()
       importing.value = false
     })
+
+    // ponytail: close on unmount so navigation away mid-import doesn't leak the SSE connection
+    onUnmounted(() => eventSource.close())
   } catch {
     importing.value = false
   }

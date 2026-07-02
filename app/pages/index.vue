@@ -10,26 +10,24 @@ const page = computed(() => Math.max(1, parseInt(route.query.page as string || '
 const ratingParam = computed(() => route.query.rating as Rating | null)
 const rating = computed(() => isAdmin.value && ratingParam.value ? ratingParam.value : undefined)
 
-const perPageParam = route.query.per_page as string
 const perPageCookie = useCookie('kura-per-page')
-let perPage: number
-if (perPageParam) {
-  perPage = clampPerPage(parseInt(perPageParam))
-} else {
+const perPage = computed(() => {
+  const param = route.query.per_page as string
+  if (param) return clampPerPage(parseInt(param))
   const parsed = perPageCookie.value ? clampPerPage(parseInt(perPageCookie.value)) : NaN
-  perPage = isNaN(parsed) ? 40 : parsed
-}
+  return isNaN(parsed) ? 40 : parsed
+})
 
 const { data, error } = await useAsyncData(
-  () => `posts-${page.value}-${perPage}-${rating.value || 'all'}`,
+  () => `posts-${page.value}-${perPage.value}-${rating.value || 'all'}`,
   async () => {
     try {
-      return await fetchPosts(page.value, perPage, rating.value, ssrCookie.value)
+      return await fetchPosts(page.value, perPage.value, rating.value, ssrCookie.value)
     } catch {
       return emptyPostsResponse()
     }
   },
-  { watch: [page, rating] }
+  { watch: [page, rating, perPage] }
 )
 
 const posts = computed(() => data.value?.items || [])

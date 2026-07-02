@@ -7,19 +7,23 @@ export default defineEventHandler(async (event) => {
   const origin = getRequestHeader(event, 'origin')
   const siteUrl = process.env.SITE_URL || ''
 
-  const allowed = origin && (
-    origin === siteUrl ||
+  // ponytail: extension origins allowed without credentials — they use X-Api-Key.
+  // Only the site origin gets Allow-Credentials (cookie auth).
+  const isSiteOrigin = origin === siteUrl
+  const isExtOrigin = origin && (
     origin.startsWith('chrome-extension://') ||
     origin.startsWith('moz-extension://')
   )
 
-  if (allowed) {
-    setResponseHeaders(event, {
+  if (isSiteOrigin || isExtOrigin) {
+    const headers: Record<string, string> = {
       'Access-Control-Allow-Origin': origin!,
-      'Access-Control-Allow-Credentials': 'true',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, X-Api-Key, Cookie',
-    })
+    }
+    // Only the site origin gets Allow-Credentials — extensions authenticate via X-Api-Key.
+    if (isSiteOrigin) headers['Access-Control-Allow-Credentials'] = 'true'
+    setResponseHeaders(event, headers)
   }
 
   // Handle preflight

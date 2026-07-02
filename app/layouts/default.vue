@@ -34,7 +34,9 @@ const mutedPart = computed(() => titleParts.value.slice(1).join(' '))
 
 useHead({
   htmlAttrs: {
-    class: 'dark',
+    // ponytail: theme class is set by the anti-flash inline script before paint;
+    // setting it here would conflict with client-side theme detection and cause
+    // a dark→light flash for light-theme users.
     style: `--accent-hue: ${accentHue}; --accent-hue-end: ${accentHueEnd};`,
   },
   title: siteTitle,

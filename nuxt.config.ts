@@ -3,7 +3,9 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
-  devtools: { enabled: true },
+  // ponytail: devtools 静态配置不随 NODE_ENV 自动关闭，prod 构建仍会打进客户端产物，
+  // 手机端 viewport 窄反而触发浮窗显示。按环境显式关闭。
+  devtools: { enabled: process.env.NODE_ENV !== 'production' },
 
   css: ['~/../assets/css/main.css'],
 

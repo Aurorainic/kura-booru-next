@@ -19,6 +19,10 @@ export default defineEventHandler(async (event) => {
   if (!allowed.includes(body.rating)) throw createError({ statusCode: 400, statusMessage: 'Invalid rating' })
 
   await db.update(posts).set({ rating: body.rating as any }).where(eq(posts.id, id))
-  const updated = await db.select().from(posts).where(eq(posts.id, id)).limit(1)
-  return serializePost(updated[0])
+  const [updated] = await db.update(posts)
+    .set({ rating: body.rating as any })
+    .where(eq(posts.id, id))
+    .returning()
+  if (!updated) throw createError({ statusCode: 404, statusMessage: 'Post not found' })
+  return serializePost(updated)
 })

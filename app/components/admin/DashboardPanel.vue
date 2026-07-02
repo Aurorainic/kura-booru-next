@@ -11,17 +11,20 @@ const { data: stats } = await useAsyncData('dashboard', async () => {
 // System status polling (F-P0-3)
 const systemStatus = ref<{ queue_depth: number } | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | null = null
+let alive = true
 
 onMounted(() => {
-  fetchSystemStatus().then(s => systemStatus.value = s).catch(() => {})
+  alive = true
+  fetchSystemStatus().then(s => { if (alive) systemStatus.value = s }).catch(() => {})
   pollTimer = setInterval(async () => {
-    if (document.visibilityState === 'visible') {
+    if (alive && document.visibilityState === 'visible') {
       try { systemStatus.value = await fetchSystemStatus() } catch { /* ignore */ }
     }
   }, 5000)
 })
 
 onUnmounted(() => {
+  alive = false
   if (pollTimer) clearInterval(pollTimer)
 })
 
@@ -176,8 +179,8 @@ const RATING_COLORS: Record<string, string> = { safe: '#22c55e', questionable: '
           :to="`/tags/${encodeURIComponent(tag.name)}`"
           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200 hover:-translate-y-px"
           :style="{ borderColor: 'var(--border-color)', color: 'var(--text-primary)' }"
-          @mouseenter="($el as HTMLElement).style.borderColor = `var(--accent-color)`; ($el as HTMLElement).style.background = `var(--accent-subtle)`"
-          @mouseleave="($el as HTMLElement).style.borderColor = `var(--border-color)`; ($el as HTMLElement).style.background = ``"
+          @mouseenter="(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-color)'; (e.currentTarget as HTMLElement).style.background = 'var(--accent-subtle)' }"
+          @mouseleave="(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-color)'; (e.currentTarget as HTMLElement).style.background = '' }"
         >
           <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" :style="{ background: getTagCategoryVar(tag.category) }" />
           <span>{{ tag.name }}</span>

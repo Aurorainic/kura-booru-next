@@ -21,11 +21,19 @@ function onSliderChange(e: Event) {
   }, 150)
 }
 
+let clickOutsideHandler: ((e: MouseEvent) => void) | null = null
+
 onMounted(() => {
-  document.addEventListener('click', (e) => {
+  clickOutsideHandler = (e: MouseEvent) => {
     const target = e.target as HTMLElement
     if (!target.closest('[data-accent-picker]')) showSlider.value = false
-  })
+  }
+  document.addEventListener('click', clickOutsideHandler)
+})
+
+onUnmounted(() => {
+  if (clickOutsideHandler) document.removeEventListener('click', clickOutsideHandler)
+  if (persistTimer) clearTimeout(persistTimer)
 })
 </script>
 

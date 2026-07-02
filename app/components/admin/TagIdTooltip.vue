@@ -24,11 +24,18 @@ async function onClick() {
   try {
     await navigator.clipboard.writeText(props.tagId)
     copied.value = true
-    setTimeout(() => { copied.value = false }, 1500)
+    copyTimer = setTimeout(() => { copied.value = false }, 1500)
   } catch {
     // clipboard write failed silently
   }
 }
+
+let copyTimer: ReturnType<typeof setTimeout> | null = null
+
+onUnmounted(() => {
+  if (hoverTimer) clearTimeout(hoverTimer)
+  if (copyTimer) clearTimeout(copyTimer)
+})
 </script>
 
 <template>

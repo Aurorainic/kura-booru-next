@@ -6,6 +6,11 @@ export default defineEventHandler(async (event) => {
   // T-P0-5: Verify webhook secret token
   const secret = getRequestHeader(event, 'x-telegram-bot-api-secret-token')
   const expectedSecret = process.env.BOT_WEBHOOK_SECRET
+
+  // In production, require the secret — reject if unset or mismatched.
+  if (process.env.NODE_ENV === 'production' && !expectedSecret) {
+    throw createError({ statusCode: 500, statusMessage: 'Webhook secret not configured' })
+  }
   if (expectedSecret && secret !== expectedSecret) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }

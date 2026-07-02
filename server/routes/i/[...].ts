@@ -9,8 +9,9 @@ export default defineEventHandler(async (event) => {
   try {
     const resp = await fetch(targetUrl)
     if (!resp.ok) return new Response('S3 error', { status: resp.status })
-    const body = await resp.arrayBuffer()
-    return new Response(body, {
+    // ponytail: stream the body instead of buffering into RAM — large images
+    // could OOM the Node process under concurrent load.
+    return new Response(resp.body, {
       status: resp.status,
       headers: {
         'content-type': resp.headers.get('content-type') || 'application/octet-stream',

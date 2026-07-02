@@ -94,6 +94,10 @@ function onFocus() {
 function onBlur() {
   setTimeout(() => { showSuggestions.value = false }, 150)
 }
+
+onUnmounted(() => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+})
 </script>
 
 <template>

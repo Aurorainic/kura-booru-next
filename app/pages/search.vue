@@ -7,26 +7,24 @@ const query = computed(() => route.query.q as string || '')
 const source = computed(() => route.query.source as string || '')
 const page = computed(() => Math.max(1, parseInt(route.query.page as string || '1')))
 const perPageCookie = useCookie('kura-per-page')
-const perPageParam = route.query.per_page as string
-let perPage: number
-if (perPageParam) {
-  perPage = clampPerPage(parseInt(perPageParam))
-} else {
+const perPage = computed(() => {
+  const param = route.query.per_page as string
+  if (param) return clampPerPage(parseInt(param))
   const parsed = perPageCookie.value ? clampPerPage(parseInt(perPageCookie.value)) : NaN
-  perPage = isNaN(parsed) ? 40 : parsed
-}
+  return isNaN(parsed) ? 40 : parsed
+})
 
 const { data } = await useAsyncData(
-  () => `search-${query.value}-${source.value}-${page.value}-${perPage}`,
+  () => `search-${query.value}-${source.value}-${page.value}-${perPage.value}`,
   async () => {
     if (!query.value) return emptyPostsResponse()
     try {
-      return await fetchSearch(query.value, page.value, perPage, ssrCookie.value, source.value || undefined)
+      return await fetchSearch(query.value, page.value, perPage.value, ssrCookie.value, source.value || undefined)
     } catch {
       return emptyPostsResponse()
     }
   },
-  { watch: [query, source, page] }
+  { watch: [query, source, page, perPage] }
 )
 
 const posts = computed(() => data.value?.items || [])

@@ -13,7 +13,7 @@ const newRating = ref<Rating>('questionable')
 // Tag autocomplete
 const suggestions = ref<Tag[]>([])
 const showSuggestions = ref(false)
-let debounceTimer: ReturnType<typeof setTimeout>
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 async function onTagInput() {
   if (debounceTimer) clearTimeout(debounceTimer)
@@ -53,6 +53,10 @@ async function removeRule(id: string, tagName: string, targetRating: string) {
     alert('删除失败')
   }
 }
+
+onUnmounted(() => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+})
 </script>
 
 <template>

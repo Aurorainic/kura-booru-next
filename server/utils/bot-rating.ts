@@ -76,9 +76,12 @@ export async function confirmRating(
 ) {
   try {
     const baseUrl = process.env.INTERNAL_API_URL || `http://localhost:${process.env.PORT || 3000}`
+    const apiKey = process.env.BACKEND_API_KEY
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (apiKey) headers['x-api-key'] = apiKey
     const resp = await fetch(`${baseUrl}/api/posts/${postId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ rating }),
     })
     if (!resp.ok) console.error('[bot-rating] PATCH failed:', resp.status)

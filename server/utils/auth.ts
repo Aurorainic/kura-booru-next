@@ -87,8 +87,8 @@ export async function getIsAdmin(cookieHeader: string): Promise<boolean> {
       epochCache.changedAt = cached ? Number(cached) : null
       epochCache.at = now
     } catch {
-      // Redis down → fail-open (allow session), per CLAUDE.md
-      adminCache.set(cacheKey, { result: true, at: Date.now() })
+      // Redis down → fail-open (allow session), per CLAUDE.md.
+      // ponytail: don't cache fail-open — retry Redis on next request so recovery is fast.
       return true
     }
   }
@@ -124,6 +124,14 @@ export async function verifyAdminLogin(username: string, password: string) {
 export function createSession(adminId: string): string {
   return sign(adminId)
 }
+
+// Exported so other handlers can extract adminId without duplicating crypto logic.
+// Returns null on invalid/expired tokens.
+export function parseSession(token: string): { value: string; iat: number } | null {
+  return unsign(token)
+}
+
+export const SESSION_MAX_AGE = MAX_AGE
 
 export async function changeAdminPassword(adminId: string, newPassword: string) {
   if (newPassword.length < 6) {

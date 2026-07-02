@@ -22,7 +22,9 @@ export default defineEventHandler(async (event) => {
         for (let i = taskIds.length - 1; i >= 0; i--) {
           const raw = await redis.get(`kura:results:${taskIds[i]}`)
           if (raw) {
-            const parsed = JSON.parse(raw)
+            let parsed: any
+            try { parsed = JSON.parse(raw) }
+            catch { parsed = { status: 'error', error: 'malformed result data' } }
             await redis.del(`kura:results:${taskIds[i]}`)
 
             let status: string, detail: string
