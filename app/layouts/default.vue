@@ -76,7 +76,7 @@ const headInjectEntries = computed(() => {
       scripts.push(attrs)
     } else {
       // Inline script: extract content between <script>...</script>
-      const endIdx = html.indexOf('</script>', m.index + m[0].length)
+      const endIdx = html.indexOf('<' + '/script>', m.index + m[0].length)
       const content = endIdx > 0 ? html.slice(m.index + m[0].length, endIdx) : ''
       scripts.push({ innerHTML: content, ...(attrs.type ? { type: attrs.type } : {}) })
     }
