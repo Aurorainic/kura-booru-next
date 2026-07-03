@@ -52,11 +52,39 @@ useHead({
   ],
 })
 
-// Inject head_inject — always register so it reacts to changes
-useHead(() => {
-  if (!headInject.value) return {}
-  return { script: [{ innerHTML: headInject.value, tagPosition: 'head' }] }
+// Inject head_inject — parse the HTML string into proper useHead entries.
+// ponytail: innerHTML wraps content in a <script> tag, but head_inject is already
+// a complete <script ...></script>. Using innerHTML produces <script><script ...>
+// which browsers can't parse. Instead, extract attrs from the HTML and pass them
+// as proper script props so unhead renders the tag correctly.
+const headInjectEntries = computed(() => {
+  const html = headInject.value
+  if (!html) return {}
+  const scripts: Record<string, string>[] = []
+  // Match <script ...> opening tags — extract their attributes
+  const scriptRe = /<script\b([^>]*)>/gi
+  let m
+  while ((m = scriptRe.exec(html)) !== null) {
+    const attrs: Record<string, string> = {}
+    const attrRe = /(\w[\w-]*)=(?:"([^"]*)"|'([^']*)'|(\S+))/g
+    let am
+    while ((am = attrRe.exec(m[1]!)) !== null) {
+      attrs[am[1]!] = am[2] ?? am[3] ?? am[4] ?? ''
+    }
+    if (attrs.src) {
+      // External script: pass attrs directly (defer, async, src, data-*, etc.)
+      scripts.push(attrs)
+    } else {
+      // Inline script: extract content between <script>...</script>
+      const endIdx = html.indexOf('</script>', m.index + m[0].length)
+      const content = endIdx > 0 ? html.slice(m.index + m[0].length, endIdx) : ''
+      scripts.push({ innerHTML: content, ...(attrs.type ? { type: attrs.type } : {}) })
+    }
+  }
+  return scripts.length ? { script: scripts } : {}
 })
+
+useHead(headInjectEntries)
 </script>
 
 <template>

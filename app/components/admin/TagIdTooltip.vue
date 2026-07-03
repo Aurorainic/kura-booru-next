@@ -1,26 +1,12 @@
 <script setup lang="ts">
-const props = withDefaults(defineProps<{
+const props = defineProps<{
   tagId: string
-  label?: string
-}>(), {
-  label: 'ID',
-})
+}>()
 
-const tooltipVisible = ref(false)
 const copied = ref(false)
-let hoverTimer: ReturnType<typeof setTimeout> | null = null
+let copyTimer: ReturnType<typeof setTimeout> | null = null
 
-function onMouseEnter() {
-  hoverTimer = setTimeout(() => { tooltipVisible.value = true }, 200)
-}
-
-function onMouseLeave() {
-  if (hoverTimer) clearTimeout(hoverTimer)
-  hoverTimer = null
-  tooltipVisible.value = false
-}
-
-async function onClick() {
+async function copyId() {
   try {
     await navigator.clipboard.writeText(props.tagId)
     copied.value = true
@@ -30,48 +16,20 @@ async function onClick() {
   }
 }
 
-let copyTimer: ReturnType<typeof setTimeout> | null = null
-
 onUnmounted(() => {
-  if (hoverTimer) clearTimeout(hoverTimer)
   if (copyTimer) clearTimeout(copyTimer)
 })
 </script>
 
 <template>
-  <span
-    class="relative inline-flex items-center cursor-pointer select-none group"
-    @mouseenter="onMouseEnter"
-    @mouseleave="onMouseLeave"
-    @click="onClick"
+  <button
+    type="button"
+    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.625rem] font-mono text-[var(--text-muted)] hover:text-[var(--accent-color)] hover:bg-[var(--accent-subtle)] transition-all select-none"
+    :title="tagId"
+    @click="copyId"
   >
-    <span class="text-[0.75rem] text-[var(--text-muted)] font-mono underline decoration-dotted decoration-[var(--border-color)] underline-offset-2 hover:text-[var(--accent-color)] transition-colors">{{ label }}</span>
-    <Transition name="tooltip-fade">
-      <span
-        v-if="tooltipVisible && !copied"
-        class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[var(--radius-sm)] bg-[var(--bg-surface)] border border-[var(--border-color)] text-[0.6875rem] text-[var(--text-primary)] font-mono whitespace-nowrap shadow-md z-50"
-      >
-        {{ tagId }}
-      </span>
-    </Transition>
-    <Transition name="tooltip-fade">
-      <span
-        v-if="copied"
-        class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[var(--radius-sm)] bg-[var(--color-success)] text-white text-[0.6875rem] whitespace-nowrap shadow-md z-50"
-      >
-        已复制
-      </span>
-    </Transition>
-  </span>
+    <svg v-if="!copied" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9.75a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" /></svg>
+    <svg v-else class="w-3 h-3 text-[var(--color-success)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+    <span>{{ copied ? '已复制' : 'ID' }}</span>
+  </button>
 </template>
-
-<style scoped>
-.tooltip-fade-enter-active,
-.tooltip-fade-leave-active {
-  transition: opacity 0.15s ease-out;
-}
-.tooltip-fade-enter-from,
-.tooltip-fade-leave-to {
-  opacity: 0;
-}
-</style>

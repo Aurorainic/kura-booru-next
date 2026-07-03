@@ -56,6 +56,9 @@ async function fetchApi<T>(
     throw new ApiError(response.status, `API error: ${response.status} ${response.statusText}`)
   }
 
+  // ponytail: 204 No Content has no body — .json() would throw SyntaxError
+  if (response.status === 204) return undefined as T
+
   return response.json() as Promise<T>
 }
 

@@ -171,7 +171,7 @@ const categoryOptions = [
             <td class="px-4 py-2.5">
               <div class="flex items-center gap-2">
                 <span class="font-medium text-sm text-[var(--text-primary)]">{{ tag.name }}</span>
-                <TagIdTooltip :id="tag.id" />
+                <TagIdTooltip :tag-id="tag.id" />
               </div>
             </td>
             <!-- Category (inline editable) -->
