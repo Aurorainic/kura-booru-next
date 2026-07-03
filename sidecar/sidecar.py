@@ -169,9 +169,13 @@ def download_with_gallery_dl(url: str) -> tuple[bytes, dict]:
                 else:
                     tag_names = []
 
-                # Artist info: gallery-dl 1.32 stores in 'user' dict
+                # Artist info: gallery-dl stores screen_name in 'name', display name in 'nick'
                 user = data.get("user", {})
-                artist_name = user.get("name", "") if isinstance(user, dict) else ""
+                if isinstance(user, dict):
+                    # 'nick' is the display name (崎白bubai), 'name' is the handle (@226083260Bubai)
+                    artist_name = user.get("nick") or user.get("name", "")
+                else:
+                    artist_name = ""
 
                 metadata = {
                     "title": data.get("title", ""),
