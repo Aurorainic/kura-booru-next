@@ -300,14 +300,22 @@ bot.command('info', async (ctx) => {
     if (!post) { await ctx.reply(t('notFound', ctx.config.lang)).catch(() => {}); return }
 
     const ratingEmoji: Record<string, string> = { safe: '🟢', questionable: '🟡', explicit: '🔴' }
-    await ctx.reply(
-      `📌 ${post.title || t('untitled', ctx.config.lang)}\n` +
+    let baseInfo = `📌 ${post.title || t('untitled', ctx.config.lang)}\n` +
       `🔗 ${SITE_URL}/posts/${post.id}\n` +
       `📐 ${post.width}x${post.height}\n` +
       `🏷 ${ratingEmoji[post.rating] || ''} ${post.rating}\n` +
       `📅 ${post.created_at}\n` +
-      `🏷 Tags: ${(post.tags || []).map((t: any) => t.name).join(', ')}`,
-    ).catch(() => {})
+      `🏷 Tags: ${(post.tags || []).map((t: any) => t.name).join(', ')}`
+
+    // AI summary (non-blocking)
+    if (process.env.ENABLE_AI_TAG_PROCESSING === 'true') {
+      try {
+        const summary = await generatePostSummary(post)
+        if (summary) baseInfo += `\n\n✨ AI: ${summary}`
+      } catch { /* non-blocking */ }
+    }
+
+    await ctx.reply(baseInfo.slice(0, 4096)).catch(() => {})
   } catch (err) { console.error('[bot] info error:', err) }
 })
 
@@ -369,8 +377,74 @@ bot.hears(/^!info\b/, async (ctx) => {
     if (!source) { await ctx.reply(t('noSource', ctx.config.lang)).catch(() => {}); return }
     const post = await getPostBySource(source.site, source.id, true)
     if (!post) { await ctx.reply(t('notFound', ctx.config.lang)).catch(() => {}); return }
-    await ctx.reply(`${post.title || t('untitled', ctx.config.lang)}\n${SITE_URL}/posts/${post.id}`).catch(() => {})
+    const ratingEmoji: Record<string, string> = { safe: '🟢', questionable: '🟡', explicit: '🔴' }
+    let reply = `${post.title || t('untitled', ctx.config.lang)}\n${SITE_URL}/posts/${post.id}\n${ratingEmoji[post.rating] || ''} ${post.rating}`
+    if (process.env.ENABLE_AI_TAG_PROCESSING === 'true') {
+      try { const summary = await generatePostSummary(post); if (summary) reply += `\n✨ ${summary}` } catch { /* non-blocking */ }
+    }
+    await ctx.reply(reply.slice(0, 4096)).catch(() => {})
   } catch (err) { console.error('[bot] !info error:', err) }
+})
+
+// ── /aitags command (AI capability ⑦) ──
+bot.command('aitags', async (ctx) => {
+  try {
+    const modeArg = ctx.message?.text?.split(' ')[1]
+    const mode = (modeArg === 'all' ? 'all' : 'unprocessed') as 'unprocessed' | 'all'
+    const lang = ctx.config.lang
+    if (process.env.ENABLE_AI_TAG_PROCESSING !== 'true') {
+      await ctx.reply(lang === 'zh' ? 'AI 处理未启用' : 'AI processing not enabled').catch(() => {})
+      return
+    }
+    const processingMsg = await ctx.reply('⏳ AI 标签处理中…').catch(() => {})
+    const result = await reprocessTags(mode)
+    const text = lang === 'zh'
+      ? `✅ 处理完成: ${result.processed} 成功, ${result.failed} 失败`
+      : `✅ Done: ${result.processed} processed, ${result.failed} failed`
+    if (processingMsg) {
+      await ctx.api.editMessageText(ctx.chat!.id, processingMsg.message_id, text).catch(() => {})
+    } else {
+      await ctx.reply(text).catch(() => {})
+    }
+  } catch (err) { console.error('[bot] /aitags error:', err) }
+})
+
+// ── /ai command (AI capability ⑧) ──
+bot.command('ai', async (ctx) => {
+  try {
+    const query = ctx.message?.text?.split(' ').slice(1).join(' ')
+    if (!query) {
+      await ctx.reply(ctx.config.lang === 'zh' ? '用法: /ai <问题>' : 'Usage: /ai <question>').catch(() => {})
+      return
+    }
+    if (process.env.ENABLE_AI_TAG_PROCESSING !== 'true') {
+      await ctx.reply(ctx.config.lang === 'zh' ? 'AI 未启用' : 'AI not enabled').catch(() => {})
+      return
+    }
+    const thinkingMsg = await ctx.reply('🤔 思考中…').catch(() => {})
+    const reply = await adminAssistantChat(query, { source: 'bot', lang: ctx.config.lang })
+    const keyboard = reply.suggestions?.length
+      ? { inline_keyboard: reply.suggestions.slice(0, 8).map(s => [{ text: s.label.slice(0, 64), callback_data: s.callback_data.slice(0, 64) }]) }
+      : undefined
+    if (thinkingMsg) {
+      await ctx.api.editMessageText(ctx.chat!.id, thinkingMsg.message_id, reply.text.slice(0, 4096), keyboard ? { reply_markup: keyboard } : undefined).catch(() => {})
+    } else {
+      await ctx.reply(reply.text.slice(0, 4096), keyboard ? { reply_markup: keyboard } : undefined).catch(() => {})
+    }
+  } catch (err) { console.error('[bot] /ai error:', err) }
+})
+
+bot.hears(/^!ai\b/, async (ctx) => {
+  try {
+    const query = ctx.message?.text?.replace(/^!ai\s*/, '').trim()
+    if (!query) return
+    if (process.env.ENABLE_AI_TAG_PROCESSING !== 'true') return
+    const thinkingMsg = await ctx.reply('🤔…').catch(() => {})
+    const reply = await adminAssistantChat(query, { source: 'bot', lang: ctx.config.lang })
+    if (thinkingMsg) {
+      await ctx.api.editMessageText(ctx.chat!.id, thinkingMsg.message_id, reply.text.slice(0, 4096)).catch(() => {})
+    }
+  } catch (err) { console.error('[bot] !ai error:', err) }
 })
 
 // ── URL detection handler (T-P0-1: extract URLs from text) ──
@@ -502,11 +576,17 @@ async function pollAndNotify(
     case 'success': {
       const postId = result.post_id!
       const autopass = await redis.get(`kura:bot:autopass:${chatId}`)
+      // AI rating suggestion (non-blocking)
+      let aiSuggestion: { rating: string; confidence: number } | null = null
+      if (process.env.ENABLE_AI_TAG_PROCESSING === 'true') {
+        try { const s = await suggestRatingForPost(postId); if (s) aiSuggestion = { rating: s.rating, confidence: s.confidence } }
+        catch { /* non-blocking */ }
+      }
       if (autopass === '1') {
-        const rating = result.auto_rating || 'safe'
+        const rating = result.auto_rating || aiSuggestion?.rating || 'safe'
         await confirmRating(api, chatId, messageId, postId, rating, lang, lang === 'zh' ? '（自动）' : '(auto)')
       } else {
-        await showRatingMenu(api, chatId, messageId, postId, result.auto_rating, lang)
+        await showRatingMenu(api, chatId, messageId, postId, result.auto_rating, aiSuggestion, lang)
       }
       break
     }
@@ -529,6 +609,7 @@ async function showRatingMenu(
   messageId: number,
   postId: string,
   autoRating: string | undefined,
+  aiSuggestion: { rating: string; confidence: number } | null | undefined,
   lang: string,
 ) {
   const keyboard = {
@@ -540,10 +621,11 @@ async function showRatingMenu(
   }
 
   const autoNote = autoRating ? `\n${lang === 'zh' ? '自动规则建议' : 'Auto-rating'}: ${autoRating}` : ''
+  const aiNote = aiSuggestion ? `\n✨ AI ${lang === 'zh' ? '建议' : 'suggest'}: ${aiSuggestion.rating} (${Math.round(aiSuggestion.confidence * 100)}%)` : ''
 
   await api.editMessageText(
     chatId, messageId,
-    t('success', lang, postId, autoRating),
+    t('success', lang, postId, autoRating) + aiNote,
     { reply_markup: keyboard },
   ).catch(() => {})
 

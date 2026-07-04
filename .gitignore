@@ -24,6 +24,9 @@ logs
 # Claude Code (local only)
 .claude/
 
+# Mimocode (local only)
+.mimocode/
+
 # Local env files
 .env
 .env.*

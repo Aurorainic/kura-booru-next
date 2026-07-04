@@ -13,6 +13,7 @@ const tabs = [
   { key: 'posts', label: '图片' },
   { key: 'tags', label: '标签' },
   { key: 'auto-rating', label: '自动评级' },
+  { key: 'ai', label: 'AI 助手' },
   { key: 'settings', label: '设置' },
   { key: 'password', label: '密码' },
 ]
@@ -28,6 +29,7 @@ const DashboardPanel = defineAsyncComponent(() => import('~/components/admin/Das
 const PostsPanel = defineAsyncComponent(() => import('~/components/admin/PostsPanel.vue'))
 const TagsPanel = defineAsyncComponent(() => import('~/components/admin/TagsPanel.vue'))
 const AutoRatingPanel = defineAsyncComponent(() => import('~/components/admin/AutoRatingPanel.vue'))
+const AiAssistantPanel = defineAsyncComponent(() => import('~/components/admin/AiAssistantPanel.vue'))
 const SettingsPanel = defineAsyncComponent(() => import('~/components/admin/SettingsPanel.vue'))
 const PasswordPanel = defineAsyncComponent(() => import('~/components/admin/PasswordPanel.vue'))
 </script>
@@ -53,6 +55,7 @@ const PasswordPanel = defineAsyncComponent(() => import('~/components/admin/Pass
       <PostsPanel v-else-if="currentTab === 'posts'" />
       <TagsPanel v-else-if="currentTab === 'tags'" />
       <AutoRatingPanel v-else-if="currentTab === 'auto-rating'" />
+      <AiAssistantPanel v-else-if="currentTab === 'ai'" />
       <SettingsPanel v-else-if="currentTab === 'settings'" />
       <PasswordPanel v-else-if="currentTab === 'password'" />
     </div>

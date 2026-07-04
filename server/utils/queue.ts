@@ -25,6 +25,7 @@ export interface SidecarResult {
     source_site: string
     source_id: string
     tag_names: string[]
+    artist_name?: string
   }
 }
 

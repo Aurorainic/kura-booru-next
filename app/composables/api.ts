@@ -15,7 +15,7 @@ class ApiError extends Error {
   }
 }
 
-async function fetchApi<T>(
+export async function fetchApi<T>(
   endpoint: string,
   params?: Record<string, string | number | undefined>,
   options?: RequestInit & { ssrCookie?: string },
@@ -246,6 +246,13 @@ export async function reprocessTagsAPI(mode: 'unprocessed' | 'all', ssrCookie?: 
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ mode }),
+    ssrCookie,
+  })
+}
+
+export async function fixArtistCategoriesAPI(ssrCookie?: string): Promise<{ fixed_from_knowledge: number; fixed_prefixed: number; total_fixed: number }> {
+  return fetchApi('/admin/tags/fix-artist-categories', undefined, {
+    method: 'POST',
     ssrCookie,
   })
 }

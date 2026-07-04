@@ -182,9 +182,10 @@ def download_with_gallery_dl(url: str) -> tuple[bytes, dict]:
                     "description": data.get("caption") or data.get("description", ""),
                     "source_url": url,
                     "tag_names": tag_names,
+                    # ponytail: artist as separate field, not "artist:xxx" string in tag_names
+                    # — keeps category source-of-truth in pipeline, AI never has to infer it.
+                    "artist_name": artist_name or None,
                 }
-                if artist_name:
-                    metadata["tag_names"].append(f"artist:{artist_name}")
                 # Use numeric ID from extractor or kwdict
                 sid = data.get("id") or ""
                 if sid:
@@ -244,6 +245,7 @@ async def process_job(r: aioredis.Redis, job: dict):
                     "source_site": job.get("source_site", ""),
                     "source_id": gdl_metadata.get("source_id", job.get("source_id", "")),
                     "tag_names": gdl_metadata.get("tag_names", []),
+                    "artist_name": gdl_metadata.get("artist_name"),
                 },
             }
 

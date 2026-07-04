@@ -77,3 +77,45 @@ export interface DashboardStats {
   top_tags: { id: string; name: string; category: TagCategory; post_count: number }[]
   recent_posts: { id: string; thumb_key: string; title: string | null; rating: Rating; source_site: SourceSite; created_at: string }[]
 }
+
+// ── AI types ──
+
+export interface AiStatus {
+  enabled: boolean
+  endpoint: string | null
+  model: string | null
+}
+
+export interface TagClassificationSuggestion {
+  tag_name: string
+  category: TagCategory
+  translation: string
+  danbooru_name: string
+  confidence: number
+}
+
+export interface MergeSuggestion {
+  canonical_name: string
+  aliases: string[]
+  reason: string
+  confidence: number
+}
+
+export interface RatingSuggestionItem {
+  post_id: string
+  current_rating: Rating
+  rating: Rating
+  confidence: number
+  reason: string
+}
+
+export interface AssistantSuggestion {
+  label: string
+  callback_data: string
+  action?: { type: string; payload: any }
+}
+
+export interface AssistantReply {
+  text: string
+  suggestions?: AssistantSuggestion[]
+}

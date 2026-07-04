@@ -74,6 +74,23 @@ async function reprocessTags(mode: 'unprocessed' | 'all') {
   }
 }
 
+// Fix artist categories (one-shot, for historical mis-categorized tags)
+const fixingArtists = ref(false)
+async function fixArtistCategories() {
+  if (fixingArtists.value) return
+  if (!confirm('将根据 tag_knowledge 和 artist: 前缀修复历史画师标签分类。继续？')) return
+  fixingArtists.value = true
+  try {
+    const result = await fixArtistCategoriesAPI(ssrCookie.value)
+    alert(`修复完成: ${result.total_fixed} 个标签已更正为画师分类\n(知识库: ${result.fixed_from_knowledge}, 前缀: ${result.fixed_prefixed})`)
+    await refresh()
+  } catch (e: any) {
+    alert(`修复失败: ${e.message || '未知错误'}`)
+  } finally {
+    fixingArtists.value = false
+  }
+}
+
 // Merge dialog
 const showMergeDialog = ref(false)
 const mergeSourceId = ref('')
@@ -126,6 +143,9 @@ const categoryOptions = [
         </button>
         <button type="button" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--text-primary)]/30 transition-all" :disabled="reprocessing" @click="reprocessTags('all')">
           全部重处理
+        </button>
+        <button type="button" class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-all" :class="fixingArtists ? 'opacity-60' : ''" :disabled="fixingArtists" style="border-color: var(--accent-color)/40; color: var(--accent-color);" @click="fixArtistCategories">
+          {{ fixingArtists ? '修复中…' : '修复画师分类' }}
         </button>
         <button type="button" class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-all" style="border-color: var(--accent-color)/40; color: var(--accent-color);" @click="showMergeDialog = true">合并标签</button>
       </div>

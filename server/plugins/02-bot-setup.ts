@@ -40,6 +40,8 @@ export default defineNitroPlugin(async () => {
       { command: 'random', description: '随机作品 / Random' },
       { command: 'stats', description: '站点统计 / Stats' },
       { command: 'autopass', description: '自动评级开关 / Toggle autopass' },
+      { command: 'aitags', description: 'AI 标签处理 / AI tag processing' },
+      { command: 'ai', description: 'AI 助手 / AI assistant' },
       { command: 'lang', description: '切换语言 / Switch language' },
       { command: 'start', description: '开始使用 / Start' },
     ], { scope: { type: 'all_private_chats' } })

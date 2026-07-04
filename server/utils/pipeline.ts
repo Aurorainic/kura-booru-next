@@ -96,6 +96,9 @@ export async function processResult(result: SidecarResult): Promise<PipelineResu
     // ── 4. Ensure tags (pre-compute tag IDs for auto-rating) ──
     // Move tag upserts inside transaction to prevent partial commits
     const tagNames = [...new Set((meta.tag_names || []).map((n: string) => n.toLowerCase().trim()).filter(Boolean))]
+    // ponytail: artist comes as a dedicated field from sidecar, not "artist:xxx" string.
+    // Upsert with category=artist directly — AI never has to infer it.
+    const artistName = meta.artist_name ? String(meta.artist_name).toLowerCase().trim() : ''
     const tagIds: string[] = []
 
     // ── 5. Apply auto-rating (before Post insert, so rating is correct from start) ──
@@ -136,6 +139,24 @@ export async function processResult(result: SidecarResult): Promise<PipelineResu
         if (tag?.id) tagIds.push(tag.id)
       }
 
+      // Artist tag: dedicated upsert with category=artist
+      if (artistName) {
+        const [tag] = await tx
+          .insert(tags)
+          .values({ name: artistName, category: 'artist' as any, postCount: 1 })
+          .onConflictDoUpdate({
+            target: tags.name,
+            set: {
+              postCount: sql`${tags.postCount} + 1`,
+              // Fix existing mis-categorized artist tags in place
+              category: 'artist' as any,
+              aiProcessedAt: new Date(),
+            },
+          })
+          .returning({ id: tags.id })
+        if (tag?.id && !tagIds.includes(tag.id)) tagIds.push(tag.id)
+      }
+
       const [post] = await tx
         .insert(posts)
         .values({
@@ -165,6 +186,12 @@ export async function processResult(result: SidecarResult): Promise<PipelineResu
           .onConflictDoNothing()
       }
     })
+
+    // ── 7. AI tag processing (non-blocking) ──
+    if (process.env.ENABLE_AI_TAG_PROCESSING === 'true') {
+      try { await aiProcessTagsForPost(postId!, tagIds) }
+      catch (e) { console.warn('[pipeline] AI tag processing failed (non-blocking):', e) }
+    }
 
     return {
       status: 'success',
