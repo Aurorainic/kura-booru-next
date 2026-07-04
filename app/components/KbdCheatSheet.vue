@@ -1,9 +1,8 @@
 <script setup lang="ts">
-const props = defineProps<{ modelValue: boolean }>()
-const emit = defineEmits<{ 'update:modelValue': [boolean] }>()
+const showModal = defineModel<boolean>({ default: false })
 
-function close() { emit('update:modelValue', false) }
-function onKeydown(e: KeyboardEvent) { if (e.key === 'Escape' && props.modelValue) close() }
+function close() { showModal.value = false }
+function onKeydown(e: KeyboardEvent) { if (e.key === 'Escape' && showModal.value) close() }
 onMounted(() => document.addEventListener('keydown', onKeydown))
 onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 
@@ -47,7 +46,7 @@ const groups = [
   <Teleport to="body">
     <Transition name="modal">
       <div
-        v-if="modelValue"
+        v-if="showModal"
         class="fixed inset-0 z-[120] flex items-center justify-center p-4"
         style="background: oklch(0% 0 0 / 0.55);"
         role="dialog"

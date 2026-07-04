@@ -15,7 +15,6 @@
  */
 
 export function useKeyboardShortcuts(opts: {
-  searchInputRef?: Ref<HTMLInputElement | null>
   onPrevPost?: () => void
   onNextPost?: () => void
   onGoTags?: () => void
@@ -58,7 +57,8 @@ export function useKeyboardShortcuts(opts: {
     switch (e.key) {
       case '/':
         e.preventDefault()
-        opts.searchInputRef?.value?.focus()
+        // Focus the first visible search input on the page.
+        document.querySelector<HTMLInputElement>('input[type="search"]')?.focus()
         break
       case '?':
         e.preventDefault()

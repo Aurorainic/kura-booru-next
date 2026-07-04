@@ -83,88 +83,10 @@ async function removeTag(tagId: string) {
   }
 }
 
-// Image modal
+// Image modal (delegates pan/zoom/pinch to <ImageModal>)
 const showModal = ref(false)
-const modalScale = ref(1)
-const modalTranslateX = ref(0)
-const modalTranslateY = ref(0)
-const modalIsDragging = ref(false)
-let modalStartX = 0, modalStartY = 0
-let modalPinchDist = 0
-let modalPinchScale = 1
 
-function openModal() {
-  showModal.value = true
-  modalScale.value = 1
-  modalTranslateX.value = 0
-  modalTranslateY.value = 0
-}
-function closeModal() {
-  showModal.value = false
-  modalScale.value = 1
-  modalTranslateX.value = 0
-  modalTranslateY.value = 0
-}
-
-function onModalWheel(e: WheelEvent) {
-  e.preventDefault()
-  const delta = e.deltaY > 0 ? -0.15 : 0.15
-  modalScale.value = Math.min(8, Math.max(0.5, modalScale.value + delta))
-}
-
-function onModalMouseDown(e: MouseEvent) {
-  if (modalScale.value === 1) return
-  modalIsDragging.value = true
-  modalStartX = e.clientX - modalTranslateX.value
-  modalStartY = e.clientY - modalTranslateY.value
-  window.addEventListener('mousemove', onModalMouseMove)
-  window.addEventListener('mouseup', onModalMouseUp)
-}
-function onModalMouseMove(e: MouseEvent) {
-  if (!modalIsDragging.value) return
-  modalTranslateX.value = e.clientX - modalStartX
-  modalTranslateY.value = e.clientY - modalStartY
-}
-function onModalMouseUp() {
-  modalIsDragging.value = false
-  window.removeEventListener('mousemove', onModalMouseMove)
-  window.removeEventListener('mouseup', onModalMouseUp)
-}
-function onModalDblClick() {
-  if (modalScale.value === 1) modalScale.value = 2
-  else { modalScale.value = 1; modalTranslateX.value = 0; modalTranslateY.value = 0 }
-}
-function onModalTouchStart(e: TouchEvent) {
-  if (e.touches.length === 2) {
-    const [t1, t2] = [e.touches[0], e.touches[1]]
-    modalPinchDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
-    modalPinchScale = modalScale.value
-  } else if (e.touches.length === 1 && modalScale.value > 1) {
-    modalIsDragging.value = true
-    modalStartX = e.touches[0].clientX - modalTranslateX.value
-    modalStartY = e.touches[0].clientY - modalTranslateY.value
-  }
-}
-function onModalTouchMove(e: TouchEvent) {
-  if (e.touches.length === 2) {
-    e.preventDefault()
-    const [t1, t2] = [e.touches[0], e.touches[1]]
-    const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
-    if (modalPinchDist > 0) modalScale.value = Math.min(8, Math.max(0.5, modalPinchScale * dist / modalPinchDist))
-  } else if (e.touches.length === 1 && modalIsDragging.value) {
-    modalTranslateX.value = e.touches[0].clientX - modalStartX
-    modalTranslateY.value = e.touches[0].clientY - modalStartY
-  }
-}
-function onModalTouchEnd(e: TouchEvent) {
-  if (e.touches.length < 2) modalPinchDist = 0
-  if (e.touches.length === 0) modalIsDragging.value = false
-}
-
-onUnmounted(() => {
-  window.removeEventListener('mousemove', onModalMouseMove)
-  window.removeEventListener('mouseup', onModalMouseUp)
-})
+function openModal() { showModal.value = true }
 
 // Delete post
 const deleting = ref(false)
@@ -211,6 +133,8 @@ function nextPost() {
   const i = navList.value.indexOf(id)
   if (i >= 0 && i < navList.value.length - 1) navigateTo(`/posts/${navList.value[i + 1]}`)
 }
+// ponytail: detail page only wires J/K to prev/next post. The layout-level
+// useKeyboardShortcuts already handles /, G+T, and ? — don't duplicate listeners.
 useKeyboardShortcuts({ onPrevPost: prevPost, onNextPost: nextPost })
 const previewLoaded = ref(false)
 function onPreviewLoad() { previewLoaded.value = true }
@@ -500,39 +424,8 @@ useHead({
       </aside>
     </div>
 
-    <!-- Image Modal (pan/zoom/pinch) -->
-    <Teleport to="body">
-      <div
-        v-if="showModal"
-        class="fixed inset-0 z-[100] flex items-center justify-center p-4"
-        style="background: oklch(0% 0 0 / 0.9);"
-        role="dialog"
-        aria-modal="true"
-        :aria-label="post.title || '原图预览'"
-        @click.self="closeModal"
-        @keydown.escape="closeModal"
-      >
-        <img
-          :src="originalUrl"
-          :alt="post.title || '原图'"
-          class="max-w-full max-h-full object-contain touch-none"
-          :class="{ 'cursor-grab': modalScale > 1, 'cursor-grabbing': modalIsDragging, 'cursor-zoom-in': modalScale === 1 }"
-          :style="{
-            transform: `translate(${modalTranslateX}px, ${modalTranslateY}px) scale(${modalScale})`,
-            transition: modalIsDragging ? 'none' : 'transform 0.1s ease-out',
-          }"
-          @wheel.prevent="onModalWheel"
-          @mousedown="onModalMouseDown"
-          @dblclick="onModalDblClick"
-          @touchstart.prevent="onModalTouchStart"
-          @touchmove.prevent="onModalTouchMove"
-          @touchend="onModalTouchEnd"
-          @click.stop
-          draggable="false"
-        />
-        <button class="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors" @click="closeModal" aria-label="关闭">✕</button>
-      </div>
-    </Teleport>
+    <!-- Image Modal (delegates pan/zoom/pinch to <ImageModal>) -->
+    <ImageModal v-model="showModal" :src="originalUrl" :alt="post.title || '原图'" />
   </div>
 </template>
 

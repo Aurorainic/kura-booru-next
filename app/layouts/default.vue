@@ -18,6 +18,8 @@ const announcement = computed(() => settings.value?.announcement || '')
 const headInject = computed(() => settings.value?.head_inject || '')
 
 // Global keyboard shortcuts (? toggles the cheatsheet modal below).
+// ponytail: / focuses the first visible search input on the page via querySelector,
+// avoiding the need to thread a ref from SearchBar (mounted in-page, not in layout) up to layout.
 function goTags() { navigateTo('/tags') }
 const { cheatsheetOpen } = useKeyboardShortcuts({ onGoTags: goTags })
 

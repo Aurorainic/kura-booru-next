@@ -143,7 +143,7 @@ onUnmounted(() => {
         @mousedown.prevent="inputEl?.focus()"
         class="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-muted)] font-mono text-[0.625rem] leading-none hover:text-[var(--text-primary)] hover:border-[var(--accent-color)] transition-colors"
         :aria-label="`按 ${modKey} + K 或 / 聚焦搜索`"
-        title="按 / 聚焦搜索"
+        :title="`按 / 或 ${modKey}+K 聚焦搜索`"
       >
         <span>{{ modKey }}</span>
         <span>K</span>

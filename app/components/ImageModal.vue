@@ -25,12 +25,6 @@ function resetTransform() {
 
 watch(showModal, (v) => { if (!v) resetTransform() })
 
-function onWheel(e: WheelEvent) {
-  e.preventDefault()
-  const delta = e.deltaY > 0 ? -0.1 : 0.1
-  scale.value = Math.min(8, Math.max(0.5, scale.value + delta))
-}
-
 function onMouseDown(e: MouseEvent) {
   // Only pan when zoomed in; at scale=1 let double-click handle zoom
   if (scale.value === 1) return
@@ -59,6 +53,21 @@ function onDoubleClick() {
   } else {
     resetTransform()
   }
+}
+
+// Anchor zoom at mouse position so the point under the cursor stays fixed
+function onWheel(e: WheelEvent) {
+  e.preventDefault()
+  const delta = e.deltaY > 0 ? -0.1 : 0.1
+  const newScale = Math.min(8, Math.max(0.5, scale.value + delta))
+  if (newScale === scale.value) return
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  const cx = e.clientX - (rect.left + rect.width / 2)
+  const cy = e.clientY - (rect.top + rect.height / 2)
+  const ratio = newScale / scale.value
+  translateX.value = cx - (cx - translateX.value) * ratio
+  translateY.value = cy - (cy - translateY.value) * ratio
+  scale.value = newScale
 }
 
 // ── Pinch zoom (touch) ──
@@ -117,6 +126,7 @@ onUnmounted(() => {
   document.removeEventListener('keydown', onKeydown)
   window.removeEventListener('mousemove', onMouseMove)
   window.removeEventListener('mouseup', onMouseUp)
+  isDragging.value = false
 })
 </script>
 
