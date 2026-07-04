@@ -1,10 +1,20 @@
 <script setup lang="ts">
 import type { Post } from '~/types'
 
-defineProps<{
+const props = withDefaults(defineProps<{
   posts: Post[]
   isAdmin?: boolean
-}>()
+  currentPage?: number
+}>(), {
+  isAdmin: false,
+  currentPage: 1,
+})
+
+// URL-encoded post-id list so the detail page can do J/K navigation within
+// the same gallery page. Cheap (only current page's IDs).
+const listParam = computed(() =>
+  encodeURIComponent(JSON.stringify(props.posts.map(p => p.id))),
+)
 </script>
 
 <template>
@@ -15,6 +25,8 @@ defineProps<{
       :post="post"
       :is-admin="isAdmin"
       :index="index"
+      :current-page="currentPage"
+      :list-param="listParam"
     />
   </div>
 </template>

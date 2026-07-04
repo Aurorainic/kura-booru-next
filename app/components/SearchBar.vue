@@ -17,6 +17,11 @@ const loading = ref(false)
 const inputEl = ref<HTMLInputElement | null>(null)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
+// `/` keycap hint shown when input is empty and idle.
+const { isMac } = usePlatform()
+const modKey = computed(() => isMac.value ? '⌘' : 'Ctrl')
+const showKeycap = computed(() => !query.value && !loading.value)
+
 function onInput(value: string) {
   query.value = value
   if (debounceTimer) clearTimeout(debounceTimer)
@@ -46,6 +51,13 @@ function onInput(value: string) {
 }
 
 function onKeyDown(e: KeyboardEvent) {
+  // Cmd/Ctrl+K focuses the search input (works even when already focused).
+  if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault()
+    inputEl.value?.focus()
+    inputEl.value?.select()
+    return
+  }
   if (!showSuggestions.value || suggestions.value.length === 0) {
     if (e.key === 'Enter') submit()
     return
@@ -118,10 +130,26 @@ onUnmounted(() => {
         :aria-expanded="showSuggestions"
         aria-haspopup="listbox"
         :placeholder="placeholder"
-        class="w-full py-1.5 pl-9 pr-8 rounded-[var(--radius-full)] border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] text-[0.875rem] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-color)] focus:ring-2 focus:ring-[var(--accent-subtle)] transition-all"
+        :class="[
+          'w-full py-1.5 pl-9 rounded-[var(--radius-full)] border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] text-[0.875rem] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-color)] focus:ring-2 focus:ring-[var(--accent-subtle)] transition-all',
+          showKeycap ? 'pr-16' : 'pr-8',
+        ]"
       />
+      <!-- Keycap hint: / focuses search (only when idle) -->
       <button
-        v-if="query && !loading"
+        v-if="showKeycap"
+        type="button"
+        @click="inputEl?.focus()"
+        @mousedown.prevent="inputEl?.focus()"
+        class="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-muted)] font-mono text-[0.625rem] leading-none hover:text-[var(--text-primary)] hover:border-[var(--accent-color)] transition-colors"
+        :aria-label="`按 ${modKey} + K 或 / 聚焦搜索`"
+        title="按 / 聚焦搜索"
+      >
+        <span>{{ modKey }}</span>
+        <span>K</span>
+      </button>
+      <button
+        v-else-if="query && !loading"
         @click="query = ''; suggestions = []; showSuggestions = false; inputEl?.focus()"
         class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
         aria-label="清除搜索"

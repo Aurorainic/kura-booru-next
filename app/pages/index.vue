@@ -91,7 +91,7 @@ const ratingFilters = [
     </div>
 
     <!-- Masonry grid -->
-    <PhotoGrid v-if="posts.length > 0" :posts="posts" :is-admin="isAdmin" />
+    <PhotoGrid v-if="posts.length > 0" :posts="posts" :is-admin="isAdmin" :current-page="page" />
 
     <!-- Empty state -->
     <div v-else class="flex flex-col items-center justify-center py-24 text-[var(--text-muted)]">

@@ -2,11 +2,10 @@
 
 ## 待做功能
 
-- [ ] sharp 替代 Pillow 缩略图生成（sidecar 当前使用 Pillow，计划迁移到 sharp 以获得 3-5x 性能提升）
-- [ ] LQIP 生成（sidecar 生成 20×20px 模糊占位图，嵌入 API 响应 `lqip` 字段）
-- [ ] 图片 modal pan/zoom（滚轮缩放 + 拖拽平移 + 双指 pinch）
-- [ ] 键盘导航（J/K 翻页，/ 聚焦搜索，G+T 跳转标签）
-- [ ] 滚动位置记忆（详情页返回首页时恢复滚动位置）
+- [ ] LQIP 生成（sharp 流水线在 Node pipeline 生成 20×20 webp blur → base64 → DB `lqip` 列；详情页占位也从 CSS-blur-thumb 改为真 base64 LQIP；不回填历史作品）
+- [ ] 图片 modal pan/zoom（gallery `ImageModal.vue` 修活加 v-model + pinch 用于 PhotoCard 点击弹出；详情页内联 `<Teleport>` modal 也补上 wheel zoom + drag pan + pinch）
+- [ ] 键盘导航（J/K 翻页，/ 聚焦搜索，G+T 跳转标签，? 弹出快捷键 cheatsheet modal；输入框守卫 `e.target === document.body`；SearchBar 右侧 mac 键帽 chip 显示 ⌘/Ctrl，head 内联脚本写 `kura-platform` cookie 实现 SSR anti-flash）
+- [ ] 滚动位置记忆（`app/router.options.ts` 的 `scrollBehavior(to, from, savedPosition)` + sessionStorage 按 `from.path` 存 scrollY；详情页返回按钮带 `?page=` 双保险）
 - [ ] 最近搜索（localStorage 5 条历史）
 - [ ] 相关标签（标签详情页展示共现 Top 10）
 - [ ] 端到端测试
@@ -47,10 +46,10 @@
 
 ## 长期愿景
 
-- sharp 替代 Pillow（缩略图生成 3-5x 提速）
 - Twitter 完整 extractor
 - 多管理员支持
 - keyset pagination（深分页优化）
 - Danbooru tag implications（3 万+ 条隐含关系）
 - 浏览器扩展支持更多站点（Twitter、Danbooru）
 - Chrome Web Store 发布
+- 快捷键体系扩展（更多站点级快捷键 + 自定义）

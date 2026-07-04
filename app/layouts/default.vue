@@ -17,6 +17,10 @@ const siteDescription = computed(() => settings.value?.site_description || '个�
 const announcement = computed(() => settings.value?.announcement || '')
 const headInject = computed(() => settings.value?.head_inject || '')
 
+// Global keyboard shortcuts (? toggles the cheatsheet modal below).
+function goTags() { navigateTo('/tags') }
+const { cheatsheetOpen } = useKeyboardShortcuts({ onGoTags: goTags })
+
 const { public: publicConfig } = useRuntimeConfig()
 const gitTag = publicConfig.gitTag
 const repoUrl = publicConfig.repoUrl || 'https://gitea.lainns.xyz/lainsaka/kura-booru-next'
@@ -27,6 +31,9 @@ const accentCookie = useCookie('kura-accent-hue')
 let accentHue = parseInt(accentCookie.value || '', 10)
 if (isNaN(accentHue) || accentHue < 0 || accentHue > 360) accentHue = 175
 const accentHueEnd = accentHue + 25
+
+// Platform detection for keycap display (⌘ vs Ctrl) — SSR anti-flash via cookie.
+usePlatform()
 
 const titleParts = computed(() => siteTitle.value.split(' '))
 const gradientPart = computed(() => titleParts.value[0])
@@ -183,5 +190,8 @@ useHead(headInjectEntries)
 
     <!-- Mobile bottom tab bar -->
     <BottomTabBar :is-admin="isAdmin" />
+
+    <!-- Keyboard shortcuts cheatsheet (? to toggle) -->
+    <KbdCheatSheet v-model="cheatsheetOpen" />
   </div>
 </template>

@@ -2,6 +2,30 @@
 
 本文件记录项目的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.7.1-dev] - 2026-07-04
+
+### 新增
+- **LQIP 低质量图像占位符** — 入库时由 sharp 生成 20×20 webp (cover + blur(2) + q40) 缩略图，编码为 base64 数据 URI 嵌入 API 响应。列表卡片/详情页在原图加载前先渲染模糊 LQIP 占位，消除灰底闪烁。
+  - `posts.lqip` 列（drizzle 迁移 0001）
+  - `server/utils/pipeline.ts` 在缩略图生成后同步产出 `lqipDataUri`
+- **图片模态框 pan/zoom** (`ImageModal.vue`) — 详情页点击图片打开全屏模态框，支持鼠标滚轮缩放 (0.5×–8×)、双击切换 2×/复位、按住拖拽平移、双指捏合缩放（触屏）、点击/ESC 关闭。`defineModel<boolean>` 双向绑定可见状态，Teleport 至 body 避免 z-index 层叠问题。
+- **全局键盘快捷键** (`useKeyboardShortcuts.ts`) — 布局级一次性挂载，输入元素聚焦时自动防御。
+  - `J` / `K` — 详情页下一个 / 上一个作品（按当前列表上下文）
+  - `/` — 聚焦搜索框
+  - `G` 然后 `T` — 跳转标签列表
+  - `?` — 打开快捷键速查表
+- **`Kbd.vue` 平台感知键盘提示** — 自动根据 `navigator.platform` / cookie 渲染 ⌘ (mac) 或 Ctrl (其他)，配套 `usePlatform.ts` SSR 防闪烁（cookie + head 内联脚本）。
+- **`KbdCheatSheet.vue` 速查表** — `?` 触发的模态框，列出全部快捷键 + 平台对应键帽。
+- **搜索框 ⌘K 聚焦** — `SearchBar.vue` 显示 `⌘/Ctrl+K` 键帽芯片，按下自动聚焦输入框。
+- **滚动位置记忆** (`app/router.options.ts`) — `scrollBehavior` 配合 sessionStorage 在列表 ↔ 详情页来回导航时恢复瀑布流滚动位置，避免回到顶部。
+
+### 变更
+- **`PhotoCard.vue`** — 卡片改为 `NuxtLink` 包裹 + `@click` preventDefault 打开模态框；新增 `currentPage` / `listParam` 属性以构建详情页返回上下文。
+- **`PhotoGrid.vue`** — 接收并透传 `currentPage`，计算 `listParam` 供卡片使用。
+- **`app/pages/posts/[id].vue`** — 内联 pan/zoom 状态与处理器；LQIP 优先占位回退到 thumb；挂载 `useKeyboardShortcuts`（J/K 导航 + navList）。
+- **`app/layouts/default.vue`** — 挂载 `usePlatform` / `useKeyboardShortcuts` / `KbdCheatSheet`，双向同步 cheatsheet 开关状态。
+- **`docs/roadmap.md`** — 移除已完成的 sharp/LQIP/模态框/键盘/滚动条目，更新长期愿景。
+
 ## [0.7.0] - 2026-07-02
 
 ### 新增

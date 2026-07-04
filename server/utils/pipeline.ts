@@ -72,6 +72,7 @@ export async function processResult(result: SidecarResult): Promise<PipelineResu
     const sharpMod = await getSharp()
     let thumbBuffer: Buffer | null = null
     let previewBuffer: Buffer | null = null
+    let lqipDataUri: string | null = null
 
     if (sharpMod) {
       const img = sharpMod.default(imageBuffer)
@@ -79,6 +80,13 @@ export async function processResult(result: SidecarResult): Promise<PipelineResu
         img.clone().resize(300, 300, { fit: 'inside' }).webp({ quality: 80 }).toBuffer(),
         img.clone().resize(1280, undefined, { fit: 'inside' }).webp({ quality: 85 }).toBuffer(),
       ])
+      // LQIP: 20×20 webp blur → base64 data URI (embedded in API response, no extra request)
+      const lqipBuf = await img.clone()
+        .resize(20, 20, { fit: 'cover' })
+        .blur(2)
+        .webp({ quality: 40 })
+        .toBuffer()
+      lqipDataUri = `data:image/webp;base64,${lqipBuf.toString('base64')}`
     }
 
     // ── 3. Upload to S3 ──
@@ -171,6 +179,7 @@ export async function processResult(result: SidecarResult): Promise<PipelineResu
           fileSize: meta.file_size,
           mimeType: meta.mime_type,
           phash: result.phash || '',
+          lqip: lqipDataUri,
           title: meta.title || null,
           rating: rating as any,
         })

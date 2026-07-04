@@ -5,27 +5,41 @@ const props = withDefaults(defineProps<{
   post: Post
   isAdmin?: boolean
   index?: number
+  currentPage?: number
+  listParam?: string
 }>(), {
   isAdmin: false,
   index: 0,
+  currentPage: 1,
+  listParam: '',
 })
 
 const previewUrl = getPreviewUrl(props.post)
 const lqip = props.post.lqip
 const showLqip = ref(false)
 const imgLoaded = ref(false)
+const modalOpen = ref(false)
+
+function onCardClick(e: MouseEvent) {
+  // Single click → open in-place zoom modal; middle-click / Ctrl+click → default (new tab / navigate)
+  if (e.button === 0 && !(e.metaKey || e.ctrlKey || e.shiftKey)) {
+    e.preventDefault()
+    modalOpen.value = true
+  }
+}
 
 onMounted(() => { showLqip.value = true })
 </script>
 
 <template>
   <NuxtLink
-    :to="`/posts/${post.id}`"
-    class="masonry-item block mb-2"
+    :to="`/posts/${post.id}?from=gallery&page=${currentPage}${listParam ? '&list=' + listParam : ''}`"
+    class="masonry-item block mb-2 cursor-zoom-in"
     :style="{
       animation: `blurReveal var(--duration-slow) var(--ease-out) both`,
       animationDelay: `${index < 12 ? index * 60 : 0}ms`,
     }"
+    @click="onCardClick"
   >
     <div class="img-container" :style="{ aspectRatio: `${post.width} / ${post.height}` }">
       <!-- LQIP blur placeholder -->
@@ -90,4 +104,7 @@ onMounted(() => { showLqip.value = true })
       </div>
     </div>
   </NuxtLink>
+
+  <!-- Gallery zoom modal (open on click; "详情" button navigates to detail page) -->
+  <ImageModal v-model="modalOpen" :src="previewUrl" :alt="post.title || `作品 ${post.id.slice(0, 8)}`" :detail-href="`/posts/${post.id}`" />
 </template>

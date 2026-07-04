@@ -15,6 +15,7 @@ export const posts = pgTable('posts', {
   fileSize: integer('file_size').notNull(),
   mimeType: text('mime_type').notNull(),
   phash: text('phash').notNull(),      // ponytail: not exposed in API responses
+  lqip: text('lqip'),                 // 20×20 base64 webp blur placeholder, embedded in API response
   title: text('title'),
   description: text('description'),
   rating: ratingEnum('rating').notNull().default('safe'),
