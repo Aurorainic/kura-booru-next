@@ -103,12 +103,14 @@ async function deletePostAction() {
   }
 }
 
-// Back to gallery with page context restored
+// Back to gallery with page context restored. We strip the `from`/`list`
+// helper params so they don't pollute the gallery URL, keeping `page` so the
+// gallery refetches the same page. scrollBehavior keys the saved offset on
+// path "/", so it restores regardless of the rewritten query string.
 function goBack() {
   const from = route.query.from as string | undefined
   const page = route.query.page as string | undefined
   if (from === 'gallery' && page) {
-    // Clear the helper query params so they don't pollute the gallery URL.
     navigateTo({ path: '/', query: { page } })
   } else {
     navigateTo('/')
