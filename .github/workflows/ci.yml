@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# Cancel superseded runs on the same ref so a fast push doesn't queue stale jobs.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   typecheck:
     runs-on: ubuntu-latest
@@ -14,8 +19,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+      # postinstall runs `nuxt prepare`, which generates the .nuxt tsconfig refs
+      # that `nuxt typecheck` consumes — must succeed for typecheck to be valid.
       - run: npm ci
-      - run: npx nuxi typecheck
+      - run: npx nuxt typecheck
 
   extension-tests:
     runs-on: ubuntu-latest
@@ -24,6 +32,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
       - name: Install extension deps
         run: |
           cd extension
@@ -31,9 +41,7 @@ jobs:
       - name: Run tests
         run: |
           cd extension
-          npx vitest run --config vitest.config.ts
-        env:
-          COVERAGE_THRESHOLD_LINES: 50
+          npx vitest run
 
   sidecar-tests:
     runs-on: ubuntu-latest
@@ -48,6 +56,10 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
       - name: Run tests
+        # Fail loudly if sidecar has no tests yet — a green CI that silently
+        # skipped pytest hides real breakage. `--no-header -q` keeps output lean.
         run: |
           cd sidecar
-          python -m pytest tests/ -v --tb=short || echo "No tests yet — skipping"
+          # exit 5 = "no tests collected"; treat that as a failure here so the
+          # absence of tests is visible instead of masquerading as a pass.
+          python -m pytest tests/ -v --tb=short

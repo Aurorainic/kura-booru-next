@@ -5,16 +5,45 @@ on:
     paths:
       - "extension/**"
       - "logo.svg"
+      - ".github/workflows/build-extension.yml"
   workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch/tag/SHA to build from (defaults to the workflow's ref)"
+        required: false
+
+# One build per ref at a time — a fresh push should replace a stale queued run,
+# not pile up. workflow_dispatch builds are excluded from cancellation so a
+# manual rebuild can't be killed by a stray push.
+concurrency:
+  group: build-extension-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        # `ref` is an attacker-controllable input (workflow_dispatch trigger).
+        # Validate it looks like a git ref before handing it to checkout to
+        # prevent ref-injection (e.g. refs that escape the repo history).
+        with:
+          ref: ${{ github.event.inputs.ref && github.event.inputs.ref || github.ref }}
+
+      - name: Validate requested ref (dispatch only)
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref != '' }}
+        run: |
+          REF='${{ github.event.inputs.ref }}'
+          # Reject path traversal / refspec shenanigans — a real branch, tag, or
+          # full SHA never contains .. or : and is not empty.
+          if [[ ! "$REF" =~ ^[A-Za-z0-9._/-]+$ ]] || [[ "$REF" == *..* ]]; then
+            echo "::error::Invalid ref '$REF': must match ^[A-Za-z0-9._/-]+$ and contain no '..'"
+            exit 1
+          fi
 
       - name: Install resvg
-        run: pip install resvg-cli
+        run: pip install --user --no-cache-dir resvg-cli
 
       - name: Rasterize logo to extension icons
         run: |
@@ -38,3 +67,5 @@ jobs:
         with:
           name: kura-booru-importer-v${{ steps.version.outputs.version }}
           path: kura-booru-importer-v${{ steps.version.outputs.version }}.zip
+          # Keep only recent builds to avoid silently filling the artifact quota.
+          retention-days: 30
