@@ -56,7 +56,7 @@ jobs:
           # No test directory = nothing to run; report and pass. An import
           # or syntax error inside tests/ must NOT be masked — it surfaces
           # as a collection error and fails the job.
-          if [ ! -d tests ] || [ -z "$(find tests -name 'test_*.py' -o -name '*_test.py' -print -quit)" ]; then
+          if [ ! -d tests ] || [ -z "$(find tests \( -name 'test_*.py' -o -name '*_test.py' \) -print -quit)" ]; then
             echo "No test files found — passing."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
