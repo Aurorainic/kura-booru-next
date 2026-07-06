@@ -1,0 +1,16 @@
+{
+  // ponytail: minimal tsconfig so vitest 4's oxc parser can load tests/*.test.ts.
+  // Extension is plain JS (no TS source) — only tests + vitest.config.ts are TS.
+  // Do NOT inherit root tsconfig: it's a Nuxt references structure whose .nuxt/*
+  // files don't exist here and aren't relevant to the vitest run.
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["vitest/globals"]
+  },
+  "include": ["tests/**/*.test.ts", "*.config.ts"]
+}
