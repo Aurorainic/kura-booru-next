@@ -11,6 +11,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
+    "lqip:check": "tsx scripts/lqip.check.ts",
     "postinstall": "nuxt prepare"
   },
   "dependencies": {

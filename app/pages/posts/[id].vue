@@ -213,6 +213,7 @@ useHead({
               alt=""
               class="img-blur-placeholder absolute inset-0 w-full h-full object-cover"
               :class="{ 'loaded': previewLoaded }"
+              :style="{ opacity: previewLoaded ? 0 : 1 }"
               aria-hidden="true"
             />
             <!-- Fallback: 300px thumbnail blur (when no LQIP data, e.g. old posts) -->
@@ -222,6 +223,7 @@ useHead({
               alt=""
               class="img-blur-placeholder absolute inset-0 w-full h-full object-cover"
               :class="{ 'loaded': previewLoaded }"
+              :style="{ opacity: previewLoaded ? 0 : 1 }"
               aria-hidden="true"
             />
             <img

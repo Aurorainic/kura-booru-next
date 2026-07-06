@@ -1,4 +1,4 @@
-// ponytail: self-check for LQIP generation. Run: npx tsx server/utils/lqip.check.ts
+// ponytail: self-check for LQIP generation. Run: npm run lqip:check
 // Verifies the sharp pipeline produces a valid base64 webp data URI within a
 // bounded byte size — the one invariant the gallery placeholder relies on.
 // Not a unit-test framework; a single runnable assertion, deleted/ignored by Nitro.

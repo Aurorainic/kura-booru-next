@@ -503,7 +503,7 @@ body::before {
 .img-blur-placeholder {
   filter: blur(20px);
   transform: scale(1.1);
-  transition: filter 0.4s var(--ease-out), transform 0.4s var(--ease-out);
+  transition: filter 0.4s var(--ease-out), transform 0.4s var(--ease-out), opacity 0.4s var(--ease-out);
 }
 
 .img-blur-placeholder.loaded {
