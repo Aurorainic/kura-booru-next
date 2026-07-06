@@ -35,7 +35,7 @@ async function updateRating(post: Post, newRating: string) {
   saving.value.add(post.id)
   try {
     await updatePostRating(post.id, newRating as Rating)
-    post.rating = newRating
+    post.rating = newRating as Rating
   } catch {
     alert('评级更新失败')
   } finally {

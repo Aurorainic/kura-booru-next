@@ -71,7 +71,7 @@ export async function isPrivateHost(hostname: string): Promise<boolean> {
 export async function dnsLookup(hostname: string): Promise<string> {
   const addresses = await dnsLookupAll(hostname)
   if (!addresses.length) throw new Error(`DNS lookup failed for ${hostname}`)
-  return addresses[0]
+  return addresses[0]!
 }
 
 async function dnsLookupAll(hostname: string): Promise<string[]> {

@@ -74,30 +74,34 @@ function onWheel(e: WheelEvent) {
 function onTouchStart(e: TouchEvent) {
   if (e.touches.length === 2) {
     e.preventDefault()
-    const [t1, t2] = [e.touches[0], e.touches[1]]
+    const t1 = e.touches[0]
+    const t2 = e.touches[1]
+    if (!t1 || !t2) return
     pinchStartDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
     pinchStartScale = scale.value
     pinchMidX = (t1.clientX + t2.clientX) / 2
     pinchMidY = (t1.clientY + t2.clientY) / 2
   } else if (e.touches.length === 1 && scale.value > 1) {
     isDragging.value = true
-    startX = e.touches[0].clientX - translateX.value
-    startY = e.touches[0].clientY - translateY.value
+    startX = e.touches[0]!.clientX - translateX.value
+    startY = e.touches[0]!.clientY - translateY.value
   }
 }
 
 function onTouchMove(e: TouchEvent) {
   if (e.touches.length === 2) {
     e.preventDefault()
-    const [t1, t2] = [e.touches[0], e.touches[1]]
+    const t1 = e.touches[0]
+    const t2 = e.touches[1]
+    if (!t1 || !t2) return
     const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
     if (pinchStartDist > 0) {
       const ratio = dist / pinchStartDist
       scale.value = Math.min(8, Math.max(0.5, pinchStartScale * ratio))
     }
   } else if (e.touches.length === 1 && isDragging.value) {
-    translateX.value = e.touches[0].clientX - startX
-    translateY.value = e.touches[0].clientY - startY
+    translateX.value = e.touches[0]!.clientX - startX
+    translateY.value = e.touches[0]!.clientY - startY
   }
 }
 

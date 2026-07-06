@@ -1,16 +1,16 @@
 <script setup lang="ts">
-const themes = [
+const themes: Array<{ key: 'auto' | 'light' | 'dark'; label: string; icon: string }> = [
   // Monitor/display icon — auto = follow system preference
   { key: 'auto', label: '自动', icon: 'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6zM8 21h8M12 17v4' },
   { key: 'light', label: '浅色', icon: 'M12 17a5 5 0 100-10 5 5 0 000 10zM12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42' },
   { key: 'dark', label: '深色', icon: 'M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z' },
 ]
 
-const current = ref('auto')
+const current = ref<'auto' | 'light' | 'dark'>('auto')
 const spinning = ref(false)
 
 onMounted(() => {
-  current.value = localStorage.getItem('kura-theme-preference') || 'auto'
+  current.value = (localStorage.getItem('kura-theme-preference') as typeof current.value) || 'auto'
   applyTheme(current.value)
 
   // F-C-1: Listen for system theme changes when in 'auto' mode
@@ -22,7 +22,7 @@ onMounted(() => {
   onUnmounted(() => mq.removeEventListener('change', onSystemChange))
 })
 
-function applyTheme(theme: string) {
+function applyTheme(theme: 'auto' | 'light' | 'dark') {
   const resolved = theme === 'auto'
     ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     : theme
@@ -31,8 +31,8 @@ function applyTheme(theme: string) {
 }
 
 function cycle() {
-  const order = ['auto', 'light', 'dark']
-  const next = order[(order.indexOf(current.value) + 1) % order.length]
+  const order: Array<'auto' | 'light' | 'dark'> = ['auto', 'light', 'dark']
+  const next = order[(order.indexOf(current.value) + 1) % order.length] ?? 'auto'
   current.value = next
   localStorage.setItem('kura-theme-preference', next)
   applyTheme(next)
@@ -40,7 +40,7 @@ function cycle() {
   setTimeout(() => { spinning.value = false }, 300)
 }
 
-const activeTheme = computed(() => themes.find(t => t.key === current.value) || themes[0])
+const activeTheme = computed(() => themes.find(t => t.key === current.value) ?? themes[0]!)
 </script>
 
 <template>

@@ -27,7 +27,7 @@ function onInput(value: string) {
   if (debounceTimer) clearTimeout(debounceTimer)
 
   const parts = value.split(/[\s+]+/)
-  const currentTag = parts[parts.length - 1].replace(/^-/, '')
+  const currentTag = (parts[parts.length - 1] || '').replace(/^-/, '')
 
   if (!currentTag || currentTag.length < 2) {
     suggestions.value = []
@@ -72,7 +72,8 @@ function onKeyDown(e: KeyboardEvent) {
   } else if (e.key === 'Enter') {
     if (selectedIndex.value >= 0) {
       e.preventDefault()
-      selectSuggestion(suggestions.value[selectedIndex.value])
+      const tag = suggestions.value[selectedIndex.value]
+      if (tag) selectSuggestion(tag)
     } else {
       submit()
     }
@@ -84,7 +85,7 @@ function onKeyDown(e: KeyboardEvent) {
 
 function selectSuggestion(tag: Tag) {
   const parts = query.value.split(/([\s+]+)/)
-  const last = parts[parts.length - 1]
+  const last = parts[parts.length - 1] || ''
   const hasNegation = last.startsWith('-')
   parts[parts.length - 1] = (hasNegation ? '-' : '') + tag.name
   query.value = parts.join('')

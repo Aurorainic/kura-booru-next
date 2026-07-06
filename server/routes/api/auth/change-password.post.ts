@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
   const adminRows = await db.select().from(admins).where(eq(admins.id, adminId)).limit(1)
   if (!adminRows[0]) throw createError({ statusCode: 401, statusMessage: 'Admin not found' })
 
-  const match = await bcryptjs.compare(body.current_password, adminRows[0].passwordHash)
+  const match = await verifyAdminPassword(adminRows[0], body.current_password)
   if (!match) throw createError({ statusCode: 401, statusMessage: 'Current password incorrect' })
 
   await changeAdminPassword(adminRows[0].id, body.new_password)
