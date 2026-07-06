@@ -7,8 +7,9 @@
     "lint": "eslint . --ext .js"
   },
   "devDependencies": {
-    "vitest": "^4.1.9",
     "eslint": "^9.0.0",
-    "prettier": "^3.5.0"
+    "jsdom": "^29.1.1",
+    "prettier": "^3.5.0",
+    "vitest": "^4.1.9"
   }
 }
