@@ -19,7 +19,7 @@
 - **搜索框 ⌘K 聚焦** — `SearchBar.vue` 显示 `⌘/Ctrl+K` 键帽芯片，按下自动聚焦输入框。
 - **滚动位置记忆** (`app/router.options.ts`) — `scrollBehavior` 配合 sessionStorage 在列表 ↔ 详情页来回导航时恢复瀑布流滚动位置，避免回到顶部。
   - 按 `from.path` / `to.path` 存取 scrollY（path-only 键，跳过 query 串），覆盖详情页返回按钮把 URL 改写为 `/?page=N` 后仍能命中。
-  - 返回时 rAF 轮询 `scrollTo` 直到浏览器接受目标偏移（瀑布流图片流式回流导致高度增长），1s 硬上限避免短页卡死。
+  - 返回时 rAF 轮询 `scrollTo` 直到浏览器接受目标偏移（瀑布流图片流式回流导致高度增长）；Promise 仅在滚到位/不可达/超时后才 resolve，并返回 `false` 让 vue-router 跳过自身的 `scrollToPosition`，避免双写互抢。短页（文档高度 < targetY）立即以 `!reachable` 退出，1s 仅作兜底。
   - 30 分钟 TTL 自动清理 sessionStorage 旧条目；浏览器原生后退/前进（`savedPosition`）优先走原生恢复。
   - 详情页返回按钮保留 `?page=N` 双保险，确保画廊重新拉取同一页数据。
 
