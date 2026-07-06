@@ -1,4 +1,4 @@
-import type { RouterConfig } from '@nuxt/kit'
+import type { RouterConfig } from 'nuxt/schema'
 
 // Scroll position memory: store scrollY per from.path in sessionStorage,
 // restore on back/forward navigation. Forward navigation scrolls to top.

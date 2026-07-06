@@ -40,6 +40,7 @@ export function serializeTag(t: any): any {
     post_count: t.postCount,
     danbooru_name: t.danbooruName ?? null,
     translation: t.translation ?? null,
+    ai_processed_at: t.aiProcessedAt ?? null,
   }
 }
 

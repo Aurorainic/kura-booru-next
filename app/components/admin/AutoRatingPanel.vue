@@ -32,6 +32,10 @@ function selectSuggestion(tag: Tag) {
   showSuggestions.value = false
 }
 
+function hideSuggestions() {
+  setTimeout(() => { showSuggestions.value = false }, 200)
+}
+
 async function addRule() {
   if (!newTagName.value.trim()) return
   try {
@@ -77,7 +81,7 @@ onUnmounted(() => {
           :style="{ borderColor: 'var(--border-color)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }"
           @input="onTagInput"
           @focus="onTagInput"
-          @blur="setTimeout(() => showSuggestions = false, 200)"
+          @blur="hideSuggestions"
         />
         <ul
           v-if="showSuggestions"

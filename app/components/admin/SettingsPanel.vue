@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { SiteSettings } from '~/types'
 const { ssrCookie } = useSsrContext()
 
 const siteTitle = ref('')
@@ -24,7 +25,7 @@ const { data: settings } = await useAsyncData('admin-settings', async () => {
       fetchPublicSettings(ssrCookie.value),
       fetchAdminSettings(ssrCookie.value),
     ])
-    return { ...pub, ...admin }
+    return { ...pub, ...admin } as SiteSettings & { database_url?: string; redis_url?: string }
   } catch {
     return null
   }

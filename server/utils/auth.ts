@@ -116,9 +116,14 @@ export async function getIsAdmin(cookieHeader: string): Promise<boolean> {
 export async function verifyAdminLogin(username: string, password: string) {
   const admin = await db.select().from(admins).where(eq(admins.username, username)).limit(1)
   if (!admin[0]) return null
-  const match = await bcryptjs.compare(password, admin[0].passwordHash)
-  if (!match) return null
+  if (!(await verifyAdminPassword(admin[0], password))) return null
   return admin[0]
+}
+
+// ponytail: bcrypt compare pulled out of verifyAdminLogin so the change-password route
+// can verify the current password without re-fetching the admin row.
+export async function verifyAdminPassword(admin: { passwordHash: string }, password: string): Promise<boolean> {
+  return bcryptjs.compare(password, admin.passwordHash)
 }
 
 export function createSession(adminId: string): string {

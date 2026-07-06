@@ -5,6 +5,7 @@
  */
 
 import type { Rating, TagCategory } from '~/types'
+import { isNull } from 'drizzle-orm'
 
 // ── Types ──
 

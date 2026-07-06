@@ -160,13 +160,13 @@ const categoryOptions = [
           type="search"
           placeholder="搜索标签…"
           class="w-full pl-8 pr-3 py-2 text-xs rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-color)] transition-colors"
-          @keydown.enter="refresh"
+          @keydown.enter.prevent="() => refresh()"
         />
       </div>
-      <select v-model="categoryFilter" class="text-xs px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] cursor-pointer focus:outline-none focus:border-[var(--accent-color)] transition-colors" @change="refresh">
+      <select v-model="categoryFilter" class="text-xs px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] cursor-pointer focus:outline-none focus:border-[var(--accent-color)] transition-colors" @change="() => refresh()">
         <option v-for="cat in categories" :key="cat.value" :value="cat.value">{{ cat.label }}</option>
       </select>
-      <select v-model="sortKey" class="text-xs px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] cursor-pointer focus:outline-none focus:border-[var(--accent-color)] transition-colors" @change="refresh">
+      <select v-model="sortKey" class="text-xs px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] cursor-pointer focus:outline-none focus:border-[var(--accent-color)] transition-colors" @change="() => refresh()">
         <option value="post_count">按数量</option>
         <option value="name">按名称</option>
       </select>

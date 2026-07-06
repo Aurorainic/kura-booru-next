@@ -30,6 +30,7 @@ export interface Tag {
   danbooru_name?: string | null
   translation?: string | null
   matched_field?: string | null
+  ai_processed_at?: string | null
 }
 
 export interface PaginatedResponse<T> {

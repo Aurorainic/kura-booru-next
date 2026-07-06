@@ -1,5 +1,15 @@
-import { Bot } from 'grammy'
+import { Bot, type Context } from 'grammy'
 import type { PipelineResult } from './queue'
+
+// Custom context flavor: per-request bot config set by auth middleware.
+// grammy standard pattern — one flavor declaration eliminates all ctx.config errors.
+interface BotConfig {
+  isAdmin: boolean
+  lang: string
+}
+interface BotContext extends Context {
+  config: BotConfig
+}
 
 const BOT_TOKEN = process.env.BOT_TOKEN || ''
 const BOT_ADMIN_IDS = (process.env.BOT_ADMIN_IDS || '').split(',').map(Number).filter(Boolean)
@@ -12,7 +22,7 @@ if (!BOT_TOKEN) {
   console.warn('[bot] BOT_TOKEN not set, bot disabled')
 }
 
-export const bot = new Bot(BOT_TOKEN)
+export const bot = new Bot<BotContext>(BOT_TOKEN)
 
 // Lazy-init
 let _botReady: Promise<void> | null = null
@@ -248,13 +258,13 @@ bot.command('stats', async (ctx) => {
       db.select({ count: sql`count(*)` }).from(postTags),
       db.select({ total: sql`COALESCE(SUM(file_size), 0)` }).from(posts),
     ])
-    const totalSize = Number(sc[0].total)
+    const totalSize = Number(sc[0]?.total ?? 0)
     const sizeStr = totalSize >= 1073741824
       ? (totalSize / 1073741824).toFixed(1) + ' GB'
       : totalSize >= 1048576
         ? (totalSize / 1048576).toFixed(1) + ' MB'
         : (totalSize / 1024).toFixed(1) + ' KB'
-    await ctx.reply(t('stats', ctx.config.lang, Number(pc[0].count), Number(tc[0].count), Number(ptc[0].count), sizeStr)).catch(() => {})
+    await ctx.reply(t('stats', ctx.config.lang, Number(pc[0]?.count ?? 0), Number(tc[0]?.count ?? 0), Number(ptc[0]?.count ?? 0), sizeStr)).catch(() => {})
   } catch (err) { console.error('[bot] stats error:', err) }
 })
 
@@ -278,7 +288,7 @@ bot.command('lang', async (ctx) => {
 
     const arg = ctx.message?.text?.split(' ')[1]
     if (arg === 'en' || arg === 'zh') {
-      await redis.set(`kura:bot:lang:${chatId}`, arg, 'EX', 30 * 86400) // 30d TTL
+      await redis.set(`kura:bot:lang:${chatId}`, arg, { expiration: { type: 'EX', value: 30 * 86400 } }) // 30d TTL
       ctx.config.lang = arg
       await ctx.reply(t('langSwitched', arg)).catch(() => {})
     } else {
@@ -515,13 +525,14 @@ bot.on('message:photo', async (ctx) => {
 
 // ── Callback query handler (T-P0-3: rating buttons + search pagination + random) ──
 bot.on('callback_query', async (ctx) => {
-  const data = ctx.callbackQuery.data
+  const data = ctx.callbackQuery.data ?? ''
   const chatId = ctx.chat?.id?.toString()
   if (!chatId) return
 
   try {
     if (data.startsWith('rate:')) {
       const [, postId, rating] = data.split(':')
+      if (!postId || !rating) return
       // Cancel countdown if user manually selected
       const timer = ratingCountdowns.get(postId)
       if (timer) { clearInterval(timer); ratingCountdowns.delete(postId) }

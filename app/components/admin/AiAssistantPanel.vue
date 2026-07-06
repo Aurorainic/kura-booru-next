@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TagCategory, TagClassificationSuggestion, MergeSuggestion, RatingSuggestionItem, AssistantReply } from '~/types'
+import type { TagCategory, TagClassificationSuggestion, MergeSuggestion, RatingSuggestionItem, AssistantReply, AiStatus } from '~/types'
 
 const { ssrCookie } = useSsrContext()
 
@@ -100,7 +100,7 @@ async function applyMerge(idx: number, suggestion: MergeSuggestion) {
     const targetTag = canonical.items?.[0]
     if (!targetTag) { alert('找不到目标标签'); return }
     for (let i = 0; i < aliasTags.length; i++) {
-      const sourceTag = aliasTags[i].items?.[0]
+      const sourceTag = aliasTags[i]?.items?.[0]
       if (sourceTag) {
         await mergeTags(sourceTag.id, targetTag.id, ssrCookie.value)
       }
