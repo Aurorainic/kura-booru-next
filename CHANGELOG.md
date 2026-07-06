@@ -8,6 +8,7 @@
 - **LQIP 低质量图像占位符** — 入库时由 sharp 生成 20×20 webp (cover + blur(2) + q40) 缩略图，编码为 base64 数据 URI 嵌入 API 响应。列表卡片/详情页在原图加载前先渲染模糊 LQIP 占位，消除灰底闪烁。
   - `posts.lqip` 列（drizzle 迁移 0001）
   - `server/utils/pipeline.ts` 在缩略图生成后同步产出 `lqipDataUri`
+  - `server/utils/queries.ts` `listPosts` 现在显式 select `lqip` 列（之前遗漏，导致列表页 LQIP 占位缺失）
 - **图片模态框 pan/zoom** (`ImageModal.vue`) — 详情页点击图片打开全屏模态框，支持鼠标滚轮缩放 (0.5×–8×)、双击切换 2×/复位、按住拖拽平移、双指捏合缩放（触屏）、点击/ESC 关闭。`defineModel<boolean>` 双向绑定可见状态，Teleport 至 body 避免 z-index 层叠问题。
 - **全局键盘快捷键** (`useKeyboardShortcuts.ts`) — 布局级一次性挂载，输入元素聚焦时自动防御。
   - `J` / `K` — 详情页下一个 / 上一个作品（按当前列表上下文）

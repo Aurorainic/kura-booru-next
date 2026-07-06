@@ -146,6 +146,7 @@ export async function listPosts(opts: {
       sourceUrl: posts.sourceUrl, sourceSite: posts.sourceSite, sourceId: posts.sourceId,
       width: posts.width, height: posts.height, fileSize: posts.fileSize, mimeType: posts.mimeType,
       title: posts.title, description: posts.description, rating: posts.rating, createdAt: posts.createdAt,
+      lqip: posts.lqip,
     }).from(posts).where(where).orderBy(desc(posts.createdAt)).limit(perPage).offset(offset),
   ])
 

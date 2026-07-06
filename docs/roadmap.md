@@ -2,7 +2,6 @@
 
 ## 待做功能
 
-- [ ] LQIP 生成（sharp 流水线在 Node pipeline 生成 20×20 webp blur → base64 → DB `lqip` 列；详情页占位也从 CSS-blur-thumb 改为真 base64 LQIP；不回填历史作品）
 - [ ] 图片 modal pan/zoom（gallery `ImageModal.vue` 修活加 v-model + pinch 用于 PhotoCard 点击弹出；详情页内联 `<Teleport>` modal 也补上 wheel zoom + drag pan + pinch）
 - [ ] 键盘导航（J/K 翻页，/ 聚焦搜索，G+T 跳转标签，? 弹出快捷键 cheatsheet modal；输入框守卫 `e.target === document.body`；SearchBar 右侧 mac 键帽 chip 显示 ⌘/Ctrl，head 内联脚本写 `kura-platform` cookie 实现 SSR anti-flash）
 - [ ] 滚动位置记忆（`app/router.options.ts` 的 `scrollBehavior(to, from, savedPosition)` + sessionStorage 按 `from.path` 存 scrollY；详情页返回按钮带 `?page=` 双保险）
@@ -14,6 +13,8 @@
 - [ ] SSR 缓存启用（需先解决 Vary: Cookie + 缓存 key 问题）
 
 ## 已完成功能
+
+- [x] **LQIP 生成** — sharp 在入库 pipeline 同步产出 20×20 webp (cover + blur(2) + q40) base64 数据 URI，存 `posts.lqip` 列，列表/详情页占位直接渲染；不回填历史作品 — v0.7.1-dev
 
 ###  架构迁移 (TypeScript 全栈)
 
