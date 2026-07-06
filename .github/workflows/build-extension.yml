@@ -18,20 +18,31 @@ jobs:
 
       - name: Rasterize logo to extension icons
         run: |
+          set -euo pipefail
           for size in 16 48 128; do
-            resvg -w $size -h $size logo.svg extension/icons/icon${size}.png
+            resvg -w "$size" -h "$size" logo.svg "extension/icons/icon${size}.png"
           done
 
       - name: Read version from manifest
         id: version
         run: |
+          set -euo pipefail
           VERSION=$(python3 -c "import json; print(json.load(open('extension/manifest.json'))['version'])")
+          # Validate version is a safe tag string (digits and dots only) so it
+          # can never inject into artifact names or zip filenames.
+          if ! [[ "$VERSION" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "Invalid version in manifest.json: '$VERSION'"
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Package extension
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
+          set -euo pipefail
           cd extension
-          zip -r ../kura-booru-importer-v${{ steps.version.outputs.version }}.zip .
+          zip -r "../kura-booru-importer-v${VERSION}.zip" .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

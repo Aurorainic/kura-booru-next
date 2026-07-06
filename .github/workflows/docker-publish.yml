@@ -31,10 +31,13 @@ jobs:
 
       - name: Extract version from tag
         id: meta
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
         run: |
+          set -euo pipefail
           TAG=${GITHUB_REF#refs/tags/}
           echo "version=$TAG" >> "$GITHUB_OUTPUT"
-          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          OWNER_LOWER=$(echo "$REPO_OWNER" | tr '[:upper:]' '[:lower:]')
           echo "owner_lower=$OWNER_LOWER" >> "$GITHUB_OUTPUT"
           echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 

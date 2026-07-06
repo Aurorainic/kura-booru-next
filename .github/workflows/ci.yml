@@ -8,34 +8,36 @@ on:
 
 jobs:
   typecheck:
+    name: Typecheck (Nuxt)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
       - run: npm ci
       - run: npx nuxi typecheck
 
   extension-tests:
+    name: Extension tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
       - name: Install extension deps
-        run: |
-          cd extension
-          npm ci
+        run: npm ci
+        working-directory: extension
       - name: Run tests
-        run: |
-          cd extension
-          npx vitest run --config vitest.config.ts
-        env:
-          COVERAGE_THRESHOLD_LINES: 50
+        run: npx vitest run
+        working-directory: extension
 
   sidecar-tests:
+    name: Sidecar tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,10 +46,24 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: |
-          cd sidecar
+          pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest
-      - name: Run tests
+        working-directory: sidecar
+      - name: Collect tests (report missing, not fail)
+        id: collect
         run: |
-          cd sidecar
-          python -m pytest tests/ -v --tb=short || echo "No tests yet — skipping"
+          # No test directory = nothing to run; report and pass. An import
+          # or syntax error inside tests/ must NOT be masked — it surfaces
+          # as a collection error and fails the job.
+          if [ ! -d tests ] || [ -z "$(find tests -name 'test_*.py' -o -name '*_test.py' -print -quit)" ]; then
+            echo "No test files found — passing."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+        working-directory: sidecar
+      - name: Run tests
+        if: steps.collect.outputs.skip != 'true'
+        run: python -m pytest tests/ -v --tb=short
+        working-directory: sidecar
