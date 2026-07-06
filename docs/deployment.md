@@ -35,7 +35,7 @@ For the complete list of all variables with descriptions and defaults, see [`inf
 
 | Category | Key Variables |
 |---|---|
-| Application | `SITE_URL` (required), `KURA_VERSION` |
+| Application | `SITE_URL` (required), `KURA_VERSION`, `KURA_IMAGE_TAG`, `KURA_IMAGE_REGISTRY` |
 | Secret | `SECRET_KEY`, `SESSION_SECRET` |
 | Admin Auth | `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `BACKEND_API_KEY` |
 | S3 Storage | `S3_ENDPOINT`, `S3_EXTERNAL_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION` |
@@ -65,7 +65,7 @@ No reverse proxy needed. The Nuxt/Nitro server handles SSR, API, Bot webhook, an
 ```bash
 # Only 1 address variable required:
 #   SITE_URL=https://kura-booru.example.com
-cd infra && docker compose up -d --force-recreate
+cd infra && docker compose pull && docker compose up -d
 ```
 
 The browser talks directly to the Nuxt server (`:3000`), which handles SSR and proxies image requests to S3 internally.
@@ -76,7 +76,7 @@ Use any reverse proxy for HTTPS termination, compression, and static asset cachi
 
 ```bash
 # Start all services
-cd infra && docker compose up -d --force-recreate
+cd infra && docker compose pull && docker compose up -d
 
 # Deploy reverse proxy config (on the host machine)
 # Caddy:
@@ -120,10 +120,12 @@ cp infra/.env.example .env
 ### 2. Start Services
 
 ```bash
-cd infra && docker compose up -d --force-recreate
+cd infra && docker compose pull && docker compose up -d
 ```
 
-Always use `--force-recreate` to pick up new `:latest` images. See [versioning.md](versioning.md).
+`docker compose pull` fetches the image tag pinned by `KURA_IMAGE_TAG` in `.env`
+(defaults to `:latest`). See [versioning.md](versioning.md) for tag strategy and
+rollback.
 
 ### 3. Initialize Database
 

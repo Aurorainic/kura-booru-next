@@ -10,9 +10,10 @@
 ## Versioning & Deployment
 
 - **Version label**: `KURA_VERSION` in `.env` (e.g. `v0.7.0-pre1`). Nuxt footer reads this at runtime.
-- **Docker images**: All custom images use `:latest` tag. No version-pinned tags.
-- **Deployment command**: `cd infra && docker compose up -d --force-recreate` — always use `--force-recreate` to pick up new `:latest` images.
-- **Build → deploy flow**: `docker build -t <name>:latest` → `docker compose up -d --force-recreate`
+- **Docker images**: Custom images are published to GHCR with **both** `:<version-tag>` (e.g. `v0.7.0`) **and** `:latest`. Deploys **pin a version tag** via `KURA_IMAGE_TAG` in `.env`; leaving it unset/empty tracks `:latest` (dev/rolling). See `docs/versioning.md`.
+- **Deployment command**: `cd infra && docker compose pull && docker compose up -d` — `pull` fetches the pinned tag; `up -d` recreates changed containers. (`--force-recreate` is no longer needed: a pinned tag + `pull` makes the image change explicit.)
+- **Build → deploy flow** (CI): tag pushed → `docker-publish.yml` builds and pushes `:<tag>` + `:latest` to GHCR → deployer bumps `KURA_IMAGE_TAG` → `pull` + `up -d`. Local dev: `docker build -t <name>:latest .` then `up -d`.
+- **Rollback**: set `KURA_IMAGE_TAG` to a prior release tag in `.env`, then `cd infra && docker compose pull && docker compose up -d`. No rebuild needed.
 - **Container count**: 4 (web, worker, postgres, redis). See `infra/docker-compose.yml`.
 - **Data migration**: Existing PG volumes are reused. New stack connects to same PG — no data copy needed.
 
