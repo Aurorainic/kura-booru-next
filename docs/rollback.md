@@ -30,7 +30,9 @@ every release tag stays in GHCR.
 3. **Pull and redeploy.**
 
    ```bash
-   cd infra && docker compose pull && docker compose up -d
+   # Run from infra/ — --env-file ../.env is REQUIRED for ${KURA_IMAGE_TAG} to resolve
+   docker compose --env-file ../.env -f docker-compose.yml pull
+   docker compose --env-file ../.env -f docker-compose.yml up -d
    ```
 
    `pull` fetches the pinned manifest; `up -d` recreates only the web/worker
@@ -40,8 +42,8 @@ every release tag stays in GHCR.
 4. **Verify.**
 
    ```bash
-   docker compose ps              # all healthy
-   docker compose exec web printenv KURA_VERSION   # footer label
+   docker compose --env-file ../.env -f docker-compose.yml ps   # all healthy
+   docker compose --env-file ../.env -f docker-compose.yml exec web printenv KURA_VERSION   # footer label
    # Smoke-test: homepage loads, login works, image proxy serves.
    ```
 
@@ -62,7 +64,7 @@ happens, rebuild from the git tag instead:
 git checkout v0.6.2
 docker build -t ghcr.io/aurorainic/kura-booru-web:v0.6.2 .
 cd sidecar && docker build -t ghcr.io/aurorainic/kura-booru-worker:v0.6.2 .
-cd ../infra && KURA_IMAGE_TAG=v0.6.2 docker compose up -d
+cd ../infra && KURA_IMAGE_TAG=v0.6.2 docker compose --env-file ../.env -f docker-compose.yml up -d
 ```
 
 ## Forward-fix is preferred when safe

@@ -6,14 +6,17 @@
 # PostgreSQL: Primary database (with pg_trgm)
 # Redis: Queue (bare LPUSH/BRPOP) + Cache
 #
-# Deployment:
-#   cd infra && docker compose pull && docker compose up -d
+# Deployment (run from infra/, .env lives at project root):
+#   docker compose --env-file ../.env -f docker-compose.yml pull
+#   docker compose --env-file ../.env -f docker-compose.yml up -d
 #
 # Versioning:
 #   Custom images are version-pinned by tag (KURA_IMAGE_TAG in .env).
 #   A release pushes both :<tag> and :latest to GHCR; deployers pin a tag.
 #   Rollback = change KURA_IMAGE_TAG to a prior tag + `pull` + `up -d`.
 #   Leave KURA_IMAGE_TAG unset/empty to track :latest (dev/rolling).
+#   NOTE: --env-file is REQUIRED — `env_file` below only injects vars into
+#   containers; it does NOT feed ${VAR} interpolation in this file.
 # =============================================================================
 
 # Registry prefix for custom images. Override KURA_IMAGE_TAG in .env to pin a

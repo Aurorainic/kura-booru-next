@@ -17,9 +17,10 @@ CI (`docker-publish.yml`) builds and pushes on every `v*` tag. Deployers pull a
 pinned tag — no local build needed.
 
 ```bash
-# .env: KURA_IMAGE_TAG=v0.7.0
-cd infra && docker compose pull
-cd infra && docker compose up -d
+# .env (project root): KURA_IMAGE_TAG=v0.7.0
+# Run from infra/ — --env-file is REQUIRED for ${KURA_IMAGE_TAG} to resolve
+docker compose --env-file ../.env -f docker-compose.yml pull
+docker compose --env-file ../.env -f docker-compose.yml up -d
 ```
 
 ### Building Images (Local Dev)
@@ -35,13 +36,16 @@ cd sidecar && docker build -t ghcr.io/aurorainic/kura-booru-worker:latest .
 ### Production Deployment
 
 ```bash
-# Pin a tag in .env (KURA_IMAGE_TAG=v0.7.0), then:
-cd infra && docker compose pull && docker compose up -d
+# Pin a tag in .env (KURA_IMAGE_TAG=v0.7.0), then (run from infra/):
+docker compose --env-file ../.env -f docker-compose.yml pull
+docker compose --env-file ../.env -f docker-compose.yml up -d
 ```
 
 `docker compose pull` fetches the pinned manifest; `up -d` recreates only the
 containers whose image changed. `--force-recreate` is no longer needed because
-the pinned tag + `pull` make the image change explicit.
+the pinned tag + `pull` make the image change explicit. **Always pass
+`--env-file ../.env`** — without it `${KURA_IMAGE_TAG}` silently resolves to
+`:latest` even when `.env` pins a tag.
 
 ### Rollback
 
@@ -49,7 +53,8 @@ Rollback is a tag change — no rebuild. The prior release tag is still in GHCR.
 
 ```bash
 # .env: KURA_IMAGE_TAG=v0.6.2
-cd infra && docker compose pull && docker compose up -d
+docker compose --env-file ../.env -f docker-compose.yml pull
+docker compose --env-file ../.env -f docker-compose.yml up -d
 ```
 
 ### Cleanup Old Images
@@ -102,9 +107,9 @@ versions are never auto-deleted.
    ```bash
    docker compose exec redis redis-cli SET kura:password_epoch "$(date +%s)000"
    ```
-5. Restart the nuxt container:
+5. Restart the web container:
    ```bash
-   cd infra && docker compose up -d --force-recreate nuxt
+   docker compose --env-file ../.env -f docker-compose.yml up -d web
    ```
 
 The `seed-admin.ts` plugin will NOT overwrite an existing admin — it only creates one if none exists.
@@ -121,9 +126,10 @@ The `seed-admin.ts` plugin will NOT overwrite an existing admin — it only crea
 
 ### Build & Deploy (CI pushes images on tag)
 - [ ] Git tag created and pushed (e.g. `git tag v0.7.0 && git push origin v0.7.0`) — triggers `docker-publish.yml` to push `:v0.7.0` + `:latest` to GHCR
-- [ ] Set `KURA_IMAGE_TAG=v0.7.0` in `.env` (matches the git tag)
-- [ ] Pull pinned images: `cd infra && docker compose pull`
-- [ ] Deploy: `cd infra && docker compose up -d`
+- [ ] Set `KURA_IMAGE_TAG=v0.7.0` in `.env` (project root; matches the git tag)
+- [ ] Validate: `./scripts/validate-env.sh prod` (rejects empty `KURA_IMAGE_TAG`)
+- [ ] Pull pinned images: `docker compose --env-file ../.env -f docker-compose.yml pull`
+- [ ] Deploy: `docker compose --env-file ../.env -f docker-compose.yml up -d`
 - [ ] Health check: `docker compose ps` (all healthy)
 - [ ] Core functionality verified (homepage, login, admin, image loading)
 

@@ -21,7 +21,9 @@ The sidecar and PostgreSQL/Redis need to be running separately (via Docker or lo
 ### Start Dev Compose
 
 ```bash
-cd infra && docker compose up
+# Run from infra/ — --env-file ../.env feeds ${VAR} interpolation in docker-compose.yml
+# (e.g. KURA_IMAGE_TAG). .env lives at the project root.
+docker compose --env-file ../.env -f docker-compose.yml up
 ```
 
 This starts all 4 containers (nuxt, sidecar, postgres, redis). The nuxt container uses the `dev` Dockerfile stage with hot-reload.

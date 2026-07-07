@@ -24,7 +24,10 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 MODE="${1:-prod}"
-ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.env"
+# .env lives at the project root (one level above infra/), matching
+# docker-compose.yml's `env_file: ../.env` and the docs. The validator reads
+# it from there so it checks the same file Compose interpolates from.
+ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/.env"
 
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -45,8 +48,8 @@ log_error() {
 # Check if .env file exists
 if [ ! -f "$ENV_FILE" ]; then
     log_error ".env file not found at: $ENV_FILE"
-    log_info "Copy .env.example to .env and configure it:"
-    log_info "  cp infra/.env.example infra/.env"
+    log_info "Copy .env.example to the project root and configure it:"
+    log_info "  cp infra/.env.example .env"
     exit 1
 fi
 
@@ -117,6 +120,12 @@ validate_prod() {
 
     if [ "${S3_SECRET_KEY:-}" = "minioadmin" ]; then
         weak_vars+=("S3_SECRET_KEY (using dev default)")
+    fi
+
+    # Production MUST explicitly pin an image tag — empty KURA_IMAGE_TAG silently
+    # tracks :latest, which defeats reproducible deploys and rollback.
+    if ! check_var "KURA_IMAGE_TAG"; then
+        missing_vars+=("KURA_IMAGE_TAG (empty → tracks :latest; pin a release tag in production)")
     fi
 
     # Report results

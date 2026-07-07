@@ -40,7 +40,7 @@
 ## 🚀 快速开始
 
 1. **配置环境变量** — `cp infra/.env.example .env` 并填入真实值（详见 [部署文档](docs/deployment.md)）
-2. **启动服务** — `cd infra && docker compose up -d --force-recreate`
+2. **启动服务** — `cd infra && docker compose --env-file ../.env -f docker-compose.yml up -d`（生产需先在 `.env` 设 `KURA_IMAGE_TAG`；详见 [部署文档](docs/deployment.md)）
 3. **初始化数据库** — `npx drizzle-kit push`
 4. **配置反向代理（可选）** — 详见 [部署文档](docs/deployment.md)
 5. **设置 Telegram Webhook** — Bot 启动时自动设置，确保 `SITE_URL` 正确
