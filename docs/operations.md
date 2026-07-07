@@ -4,44 +4,67 @@
 
 ### Tag Strategy
 
-All custom images use **`:latest` only**. No version-pinned tags. Version history lives in git commits + `KURA_VERSION` in `.env`.
+Custom images are published to GHCR with **two tags**: the release tag
+(`:v0.7.0`) and `:latest`. Production deploys **pin a release tag** via
+`KURA_IMAGE_TAG` in `.env`; development/rolling deploys track `:latest`.
 
-### Building Images
+Version history also lives in git tags + `KURA_VERSION` (footer label) in `.env`.
+See [versioning.md](versioning.md) for the full strategy.
+
+### Pulling Pre-built Images (Production)
+
+CI (`docker-publish.yml`) builds and pushes on every `v*` tag. Deployers pull a
+pinned tag — no local build needed.
+
+```bash
+# .env (project root): KURA_IMAGE_TAG=v0.7.0
+# Run from infra/ — --env-file is REQUIRED for ${KURA_IMAGE_TAG} to resolve
+docker compose --env-file ../.env -f docker-compose.yml pull
+docker compose --env-file ../.env -f docker-compose.yml up -d
+```
+
+### Building Images (Local Dev)
 
 ```bash
 # Nuxt (SSR + API + Bot webhook)
-docker build -t kura-booru-web:latest .
+docker build -t ghcr.io/aurorainic/kura-booru-web:latest .
 
 # Sidecar (Python gallery-dl + phash)
-cd sidecar && docker build -t kura-booru-worker:latest .
+cd sidecar && docker build -t ghcr.io/aurorainic/kura-booru-worker:latest .
 ```
 
 ### Production Deployment
 
 ```bash
-# Build new images, then deploy (always use --force-recreate)
-docker build -t kura-booru-web:latest .
-cd sidecar && docker build -t kura-booru-worker:latest .
-cd infra && docker compose up -d --force-recreate
+# Pin a tag in .env (KURA_IMAGE_TAG=v0.7.0), then (run from infra/):
+docker compose --env-file ../.env -f docker-compose.yml pull
+docker compose --env-file ../.env -f docker-compose.yml up -d
 ```
 
-`--force-recreate` is mandatory — without it, Docker may reuse cached containers even when the `:latest` image changed.
+`docker compose pull` fetches the pinned manifest; `up -d` recreates only the
+containers whose image changed. `--force-recreate` is no longer needed because
+the pinned tag + `pull` make the image change explicit. **Always pass
+`--env-file ../.env`** — without it `${KURA_IMAGE_TAG}` silently resolves to
+`:latest` even when `.env` pins a tag.
 
 ### Rollback
 
-Since there are no version-pinned tags, rollback is via git: checkout the previous commit, rebuild, and redeploy.
+Rollback is a tag change — no rebuild. The prior release tag is still in GHCR.
 
 ```bash
-git checkout <previous-commit>
-docker build -t kura-booru-web:latest .
-cd infra && docker compose up -d --force-recreate
+# .env: KURA_IMAGE_TAG=v0.6.2
+docker compose --env-file ../.env -f docker-compose.yml pull
+docker compose --env-file ../.env -f docker-compose.yml up -d
 ```
 
 ### Cleanup Old Images
 
 ```bash
-docker image prune -f    # Remove dangling images
+docker image prune -f    # Remove dangling images (local)
 ```
+
+CI keeps the 3 most recent untagged versions per image in GHCR; tagged release
+versions are never auto-deleted.
 
 ---
 
@@ -49,8 +72,8 @@ docker image prune -f    # Remove dangling images
 
 | Container | Image | Purpose |
 |---|---|---|
-| `kura-web` | `kura-booru-web:latest` | SSR + REST API + Bot webhook (single Node process) |
-| `kura-worker` | `kura-booru-worker:latest` | Python gallery-dl + imagehash phash worker |
+| `kura-web` | `ghcr.io/aurorainic/kura-booru-web:${KURA_IMAGE_TAG:-latest}` | SSR + REST API + Bot webhook (single Node process) |
+| `kura-worker` | `ghcr.io/aurorainic/kura-booru-worker:${KURA_IMAGE_TAG:-latest}` | Python gallery-dl + imagehash phash worker |
 | `kura-postgres` | `postgres:18-alpine` | Primary database |
 | `kura-redis` | `redis:8-alpine` | Job queue + cache |
 
@@ -84,9 +107,9 @@ docker image prune -f    # Remove dangling images
    ```bash
    docker compose exec redis redis-cli SET kura:password_epoch "$(date +%s)000"
    ```
-5. Restart the nuxt container:
+5. Restart the web container:
    ```bash
-   cd infra && docker compose up -d --force-recreate nuxt
+   docker compose --env-file ../.env -f docker-compose.yml up -d web
    ```
 
 The `seed-admin.ts` plugin will NOT overwrite an existing admin — it only creates one if none exists.
@@ -98,19 +121,21 @@ The `seed-admin.ts` plugin will NOT overwrite an existing admin — it only crea
 ### Before Release
 - [ ] Code merged to main branch
 - [ ] CHANGELOG.md updated
-- [ ] `KURA_VERSION` in `.env` updated
+- [ ] `KURA_VERSION` in `.env` updated (e.g. `v0.7.0`)
 - [ ] `.env` has all required production variables
 
-### Build & Deploy
-- [ ] Build nuxt image: `docker build -t kura-booru-web:latest .`
-- [ ] Build sidecar image (if sidecar changed): `cd sidecar && docker build -t kura-booru-worker:latest .`
-- [ ] Deploy: `cd infra && docker compose up -d --force-recreate`
+### Build & Deploy (CI pushes images on tag)
+- [ ] Git tag created and pushed (e.g. `git tag v0.7.0 && git push origin v0.7.0`) — triggers `docker-publish.yml` to push `:v0.7.0` + `:latest` to GHCR
+- [ ] Set `KURA_IMAGE_TAG=v0.7.0` in `.env` (project root; matches the git tag)
+- [ ] Validate: `./scripts/validate-env.sh prod` (rejects empty `KURA_IMAGE_TAG`)
+- [ ] Pull pinned images: `docker compose --env-file ../.env -f docker-compose.yml pull`
+- [ ] Deploy: `docker compose --env-file ../.env -f docker-compose.yml up -d`
 - [ ] Health check: `docker compose ps` (all healthy)
 - [ ] Core functionality verified (homepage, login, admin, image loading)
 
 ### After Release
-- [ ] Git tag created and pushed
-- [ ] Clean up old images: `docker image prune -f`
+- [ ] Verify deploy in production
+- [ ] Clean up old local images: `docker image prune -f` (GHCR untagged cleanup runs in CI)
 
 ---
 

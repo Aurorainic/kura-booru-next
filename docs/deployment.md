@@ -10,11 +10,21 @@
 
 ## Environment Variables
 
-All configuration is via `.env` file. Copy and edit the template:
+All configuration is via `.env` file at the **project root** (next to
+`package.json`), created from the template:
 
 ```bash
-cp infra/.env.example .env
+cp infra/.env.example .env   # .env MUST live at project root, NOT in infra/
 ```
+
+> ⚠️ **`.env` location matters.** Compose's `${VAR}` interpolation reads only
+> from the file passed to `--env-file` (or auto-found next to the compose file).
+> The `env_file:` key in `docker-compose.yml` injects vars **into containers**
+> but does **not** feed interpolation. So `KURA_IMAGE_TAG` (and any other
+> `${VAR}` in the compose file) only resolves when you pass
+> `--env-file ../.env`. Without it, `KURA_IMAGE_TAG` silently falls back to
+> `:latest`. Always run compose from `infra/` with `--env-file ../.env`. See
+> [versioning.md](versioning.md).
 
 For the complete list of all variables with descriptions and defaults, see [`infra/.env.example`](../infra/.env.example).
 
@@ -23,6 +33,7 @@ For the complete list of all variables with descriptions and defaults, see [`inf
 | Variable | Description |
 |---|---|
 | `SITE_URL` | Your public site URL (e.g., `https://kura-booru.example.com`) |
+| `KURA_IMAGE_TAG` | Release tag to pin (e.g. `v0.7.0`); empty → `:latest` (rejected by `validate-env.sh prod`) |
 | `SECRET_KEY` | Generate with: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `POSTGRES_PASSWORD` | Database password |
 | `S3_ENDPOINT` / `S3_EXTERNAL_URL` | S3 storage endpoint (see S3 Configuration below) |
@@ -35,7 +46,7 @@ For the complete list of all variables with descriptions and defaults, see [`inf
 
 | Category | Key Variables |
 |---|---|
-| Application | `SITE_URL` (required), `KURA_VERSION` |
+| Application | `SITE_URL` (required), `KURA_VERSION`, `KURA_IMAGE_TAG`, `KURA_IMAGE_REGISTRY` |
 | Secret | `SECRET_KEY`, `SESSION_SECRET` |
 | Admin Auth | `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `BACKEND_API_KEY` |
 | S3 Storage | `S3_ENDPOINT`, `S3_EXTERNAL_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION` |
@@ -50,8 +61,8 @@ For the complete list of all variables with descriptions and defaults, see [`inf
 ### Validate Environment
 
 ```bash
-cd infra && ./scripts/validate-env.sh prod   # Strict: all production-required vars must be set
-cd infra && ./scripts/validate-env.sh dev    # Relaxed: warns but doesn't fail
+./scripts/validate-env.sh prod   # Strict: all production-required vars + KURA_IMAGE_TAG must be set (run from infra/)
+./scripts/validate-env.sh dev    # Relaxed: warns but doesn't fail
 ```
 
 ---
@@ -65,7 +76,9 @@ No reverse proxy needed. The Nuxt/Nitro server handles SSR, API, Bot webhook, an
 ```bash
 # Only 1 address variable required:
 #   SITE_URL=https://kura-booru.example.com
-cd infra && docker compose up -d --force-recreate
+# Run from infra/ — --env-file ../.env is REQUIRED (see Environment Variables above)
+docker compose --env-file ../.env -f docker-compose.yml pull
+docker compose --env-file ../.env -f docker-compose.yml up -d
 ```
 
 The browser talks directly to the Nuxt server (`:3000`), which handles SSR and proxies image requests to S3 internally.
@@ -75,8 +88,9 @@ The browser talks directly to the Nuxt server (`:3000`), which handles SSR and p
 Use any reverse proxy for HTTPS termination, compression, and static asset caching. The proxy forwards all traffic to the Nuxt container.
 
 ```bash
-# Start all services
-cd infra && docker compose up -d --force-recreate
+# Start all services (run from infra/)
+docker compose --env-file ../.env -f docker-compose.yml pull
+docker compose --env-file ../.env -f docker-compose.yml up -d
 
 # Deploy reverse proxy config (on the host machine)
 # Caddy:
@@ -113,17 +127,21 @@ The S3 layer works with **any** S3-compatible storage. Images are served **direc
 ### 1. Configure Environment Variables
 
 ```bash
-cp infra/.env.example .env
-# Edit .env and fill in real values
+cp infra/.env.example .env   # .env at project root, NOT in infra/
+# Edit .env and fill in real values (set KURA_IMAGE_TAG in production)
 ```
 
 ### 2. Start Services
 
 ```bash
-cd infra && docker compose up -d --force-recreate
+# Run from infra/ — --env-file ../.env is REQUIRED for ${KURA_IMAGE_TAG} to resolve
+docker compose --env-file ../.env -f docker-compose.yml pull
+docker compose --env-file ../.env -f docker-compose.yml up -d
 ```
 
-Always use `--force-recreate` to pick up new `:latest` images. See [versioning.md](versioning.md).
+`docker compose pull` fetches the image tag pinned by `KURA_IMAGE_TAG` in `.env`
+(defaults to `:latest` when unset). See [versioning.md](versioning.md) for tag
+strategy and rollback.
 
 ### 3. Initialize Database
 
