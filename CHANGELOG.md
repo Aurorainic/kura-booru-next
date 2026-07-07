@@ -2,9 +2,12 @@
 
 本文件记录项目的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [0.7.1-dev] - 2026-07-04
+## [0.7.1] - 2026-07-07
 
 ### 新增
+- **AI 助手** (`server/utils/ai.ts`) — 管理后台新增 `/ai` 标签页，对作品做摘要 / 评级建议 / 标签分类建议（OpenAI 兼容 API）。Bot 新增 `/ai`、`/aitags` 命令，`/info` 附带作品摘要，轮询通知中给出评级建议。新增 `AiStatus`、`AssistantSuggestion`、`AssistantReply`、`RatingSuggestionItem`、`TagClassificationSuggestion`、`MergeSuggestion` 类型。
+- **Artist 标签字段化** — artist 从普通标签提升为独立字段，sidecar 抓取 → pipeline → DB 全链路贯通；一次性修复历史错误归类的 artist 标签；标签别名 CRUD + 重处理流程。
+- **新 Logo / favicon** — 扇形三卡设计替代字母标。
 - **LQIP 低质量图像占位符** — 入库时由 sharp 生成 20×20 webp (cover + blur(2) + q40) 缩略图，编码为 base64 数据 URI 嵌入 API 响应。列表卡片/详情页在原图加载前先渲染模糊 LQIP 占位，消除灰底闪烁。
   - `posts.lqip` 列（drizzle 迁移 0001）
   - `server/utils/pipeline.ts` 在缩略图生成后同步产出 `lqipDataUri`
@@ -18,13 +21,28 @@
 - **`KbdCheatSheet.vue` 速查表** — `?` 触发的模态框，列出全部快捷键 + 平台对应键帽。
 - **搜索框 ⌘K 聚焦** — `SearchBar.vue` 显示 `⌘/Ctrl+K` 键帽芯片，按下自动聚焦输入框。
 - **滚动位置记忆** (`app/router.options.ts`) — `scrollBehavior` 配合 sessionStorage 在列表 ↔ 详情页来回导航时恢复瀑布流滚动位置，避免回到顶部。
+- **Extension 测试覆盖** (`extension/tests/`) — vitest 套件覆盖 service-worker / content / popup 三个入口的导入流程（config 缺失、401、非 ok HTTP、网络错误、轮询终态、超时守卫、设置持久化等），从 1 个无断言 smoke 测试提升到 31 个真实测试。引入 jsdom 执行 ES5 content/popup 脚本。
+- **Sidecar SSRF 守卫测试** (`sidecar/tests/test_ssrf.py`) — 16 个纯函数测试覆盖 `validate_url` / `_is_blocked_ip`（scheme 策略、缺失 host、RFC1918 / link-local / loopback / ULA / cloud-metadata 拦截），<1s 运行。
 
 ### 变更
+- **镜像 tag 策略统一** (LAI-9) — 生产部署通过 `KURA_IMAGE_TAG` 在 `.env` pin 一个 release tag（如 `v0.7.1`），`:latest` 仅用于 dev/rolling。所有 compose 调用必须带 `--env-file ../.env`（`env_file:` 只注入容器变量，不喂 `${VAR}` 插值，否则静默回退 `:latest`）。`.env` 默认位于项目根目录，`validate-env.sh prod` 拒绝空的 `KURA_IMAGE_TAG`。`docs/versioning.md` / `rollback.md` / `operations.md` / `deployment.md` / `CLAUDE.md` / compose 头部全部同步。
+- **CI workflow 重构** — `ci.yml` 改用 npm 缓存 + `nuxt typecheck`（非 nuxi），删除 vitest 忽略的 `COVERAGE_THRESHOLD`、停止把 sidecar pytest 失败伪装成通过（`|| echo`），拆分 job 让失败可归因；`build-extension.yml` 修正包名（resvg → resvg-cli）、加 concurrency + artifact retention、校验 `workflow_dispatch` ref 防注入；`docker-publish.yml` 仅放行 `v*` release tag，移除会与 `:latest` 语义漂移的 `latest-<timestamp>` tag，恢复 `delete-only-untagged-versions=true`（绝不删除仍被部署拉取的 tagged 版本），cleanup 以 build 成功为前置。
 - **`PhotoCard.vue`** — 卡片改为 `NuxtLink` 包裹 + `@click` preventDefault 打开模态框；新增 `currentPage` / `listParam` 属性以构建详情页返回上下文。
 - **`PhotoGrid.vue`** — 接收并透传 `currentPage`，计算 `listParam` 供卡片使用。
-- **`app/pages/posts/[id].vue`** — 内联 pan/zoom 状态与处理器；LQIP 优先占位回退到 thumb；挂载 `useKeyboardShortcuts`（J/K 导航 + navList）。
+- **`app/pages/posts/[id].vue`** — pan/zoom 状态机抽出到 `<ImageModal>` 组件；LQIP 优先占位回退到 thumb；挂载 `useKeyboardShortcuts`（J/K 导航 + navList）。
 - **`app/layouts/default.vue`** — 挂载 `usePlatform` / `useKeyboardShortcuts` / `KbdCheatSheet`，双向同步 cheatsheet 开关状态。
 - **`docs/roadmap.md`** — 移除已完成的 sharp/LQIP/模态框/键盘/滚动条目，更新长期愿景。
+
+### 修复
+- **全栈安全审计** — 服务端：导出 `parseSession`/`SESSION_MAX_AGE` 并停止缓存 Redis-down fail-open；改密端点用共享 `parseSession`（原缺 MAX_AGE 检查）；login cookie maxAge 与 session MAX_AGE 对齐（原 30d vs 7d）；`test-pg`/`test-redis` DNS pinning 防 rebinding SSRF；webhook 生产环境缺 `BOT_WEBHOOK_SECRET` 时拒绝；bot-rating 内部 PATCH 补 `x-api-key`（原静默 401）；`posts/[id].patch` 用 `.returning()` 替代 update+select 竞态；扩展源 CORS 不再带 `Allow-Credentials`；`i/[...]` 改为流式转发 S3 响应（原全量缓冲进内存）；SSE 流 `JSON.parse` 包 try/catch（一条坏结果不再杀死整个流）；`sanitize.ts` 改为 escape-first allowlist（原 regex sanitizer 可绕过）。前端：生产关闭 devtools（原移动端可见）；移除硬编码 `htmlAttrs.class='dark'`（SSR 主题闪烁）；`AnnouncementBanner` 全重写（Vue 模板 + XSS-safe markdown + 清理 timer/listener）；`index/search` 的 `perPage` 由 `let` 改 `computed`（URL 变化不重新 fetch）；`ImageModal` mousemove/mouseup 挂 window + `role=dialog`；多个组件补 `onUnmounted` 清理 listener/timer/EventSource。CI：删除不存在的 lint job、extension-tests 补 `npm ci`、drop `--coverage`；`.dockerignore` 入库。维护模式关闭时 `/maintenance` → `/` 重定向。
+- **Typecheck 142→0** — 用 `BotContext extends Context` flavor + `Bot<BotContext>` 替代会遮蔽 grammy 真实导出的 ambient `declare module 'grammy'`（删除 `server/types/grammy.d.ts`）；handler 参数全量类型化；窄化 `ctx.callbackQuery.data` 与数组下标（`noUncheckedIndexedAccess`）；`redis.set()` 改用 `{ expiration: { type: 'EX', value } }`（v6 签名无位置参数）。顺带修两个真 bug：`change-password.post.ts` 引用未定义的 `bcryptjs`（运行时 ReferenceError）→ 改用共享 `verifyAdminPassword()`；`ai.ts` 的 `isNull` 未定义 → `import { isNull } from 'drizzle-orm'`。前端无 `as` cast 修 `noUncheckedIndexedAccess`。`npx nuxt typecheck` exit 0。
+- **P1–P7 评审** — `[id].vue` 内联 80 行 pan/zoom 状态机抽到 `<ImageModal>` 组件（P1）；`onUnmounted` 复位 `isDragging` 防泄漏（P2）；`onWheel` 以鼠标位置为锚点缩放（P3）；`SearchBar` ⌘K title 动态化（P5，原硬编码 `/ 聚焦搜索`）；`KbdCheatSheet` 改 `defineModel`（P6，原 props+emit 拆分）；`useKeyboardShortcuts` / focuses 走 `querySelector`（P7，无 ref 线程化）。
+- **Extension tsconfig** — vitest 4 的 oxc parser 加载 `.test.ts` 需要 tsconfig，否则 `[TSCONFIG_ERROR]` 让 extension-tests CI 常红。新增仅覆盖 `tests/` + `*.config.ts` 的最小 tsconfig（不继承根 Nuxt tsconfig 的 references 结构）。
+- **delete 端点假错** — 204 No Content 触发 `.json()` `SyntaxError`，删除看似失败实则成功。改用状态码判断。
+- **head_inject 嵌套 script** — innerHTML 包裹 `<script>` 产生浏览器无法解析的嵌套标签。解析 `head_inject` HTML 抽取 script 属性供 `useHead` 渲染。
+- **Tag UUID 复制按钮** — `TagIdTooltip` prop 不匹配（`:id` vs `tagId`）致 UUID 从未传入。重做为带剪贴板图标的可见复制按钮。
+- **Sidecar artist tag 取错字段** — gallery-dl 把 screen_name 存在 `user['name']`、显示名存在 `user['nick']`，原取 `name` → artist 标签显示成 `@226083260Bubai`。改为取 `nick`。
+- **SFC `<script>` 转义** — regex 内裸 `<script>` 与模板字面量内 `</script>` 触发 Vue 解析错误，分别避免 / 转义。
 
 ## [0.7.0] - 2026-07-02
 

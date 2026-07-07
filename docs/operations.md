@@ -5,7 +5,7 @@
 ### Tag Strategy
 
 Custom images are published to GHCR with **two tags**: the release tag
-(`:v0.7.0`) and `:latest`. Production deploys **pin a release tag** via
+(`:v0.7.1`) and `:latest`. Production deploys **pin a release tag** via
 `KURA_IMAGE_TAG` in `.env`; development/rolling deploys track `:latest`.
 
 Version history also lives in git tags + `KURA_VERSION` (footer label) in `.env`.
@@ -17,7 +17,7 @@ CI (`docker-publish.yml`) builds and pushes on every `v*` tag. Deployers pull a
 pinned tag — no local build needed.
 
 ```bash
-# .env (project root): KURA_IMAGE_TAG=v0.7.0
+# .env (project root): KURA_IMAGE_TAG=v0.7.1
 # Run from infra/ — --env-file is REQUIRED for ${KURA_IMAGE_TAG} to resolve
 docker compose --env-file ../.env -f docker-compose.yml pull
 docker compose --env-file ../.env -f docker-compose.yml up -d
@@ -36,7 +36,7 @@ cd sidecar && docker build -t ghcr.io/aurorainic/kura-booru-worker:latest .
 ### Production Deployment
 
 ```bash
-# Pin a tag in .env (KURA_IMAGE_TAG=v0.7.0), then (run from infra/):
+# Pin a tag in .env (KURA_IMAGE_TAG=v0.7.1), then (run from infra/):
 docker compose --env-file ../.env -f docker-compose.yml pull
 docker compose --env-file ../.env -f docker-compose.yml up -d
 ```
@@ -61,10 +61,45 @@ docker compose --env-file ../.env -f docker-compose.yml up -d
 
 ```bash
 docker image prune -f    # Remove dangling images (local)
+docker builder prune -f  # Remove dangling BuildKit cache (local)
 ```
 
 CI keeps the 3 most recent untagged versions per image in GHCR; tagged release
 versions are never auto-deleted.
+
+### Why does the image take ~4× its size on disk?
+
+A freshly built `kura-booru-web` image reports one size in `docker images`,
+but the build cache + layer storage on disk can total roughly **4×** that.
+This is expected for a multi-stage Node/Nuxt build — it is not a leak.
+
+The multiplier comes from **each stage's layers stacking independently**:
+
+| Source | Approx. size | Why it stays on disk |
+|---|---|---|
+| `deps` stage — `node_modules` | ~400–600 MB | Full `npm ci` install; kept as a cache layer so rebuilds skip `npm ci` |
+| `build` stage — `.nuxt` + `.output` | ~200–400 MB | Nuxt build artifacts; layer cached for incremental rebuilds |
+| `production` stage — final `.output` | ~150–250 MB | The image `docker images` actually reports |
+| BuildKit GHA cache mirror | ~matches build stage | `cache-from: type=gha`/`cache-to: type=gha,mode=max` keeps a second copy for CI |
+
+So the "real" ~200 MB production image plus its `deps`/`build` cache layers and
+the GHA mirror easily reach ~800 MB–1 GB on the build host — about 4× the
+reported image size. The `dev` stage (used for hot-reload, carries full
+`node_modules` + source) adds another copy if you build it locally.
+
+This is by design: the cache is what makes rebuilds take 30 s instead of 5 min.
+To reclaim space when you no longer need the cache:
+
+```bash
+docker builder prune -f          # drop dangling BuildKit cache (safe)
+docker builder prune -af         # drop ALL BuildKit cache (forces full rebuild next time)
+docker image prune -f            # drop dangling images
+```
+
+On the registry side, `docker-publish.yml`'s `cleanup-old-images` job keeps
+only the 3 most recent **untagged** versions per image and never deletes a
+**tagged** release, so GHCR storage stays bounded automatically. No manual
+registry pruning is needed for normal releases.
 
 ---
 
@@ -121,12 +156,12 @@ The `seed-admin.ts` plugin will NOT overwrite an existing admin — it only crea
 ### Before Release
 - [ ] Code merged to main branch
 - [ ] CHANGELOG.md updated
-- [ ] `KURA_VERSION` in `.env` updated (e.g. `v0.7.0`)
+- [ ] `KURA_VERSION` in `.env` updated (e.g. `v0.7.1`)
 - [ ] `.env` has all required production variables
 
 ### Build & Deploy (CI pushes images on tag)
-- [ ] Git tag created and pushed (e.g. `git tag v0.7.0 && git push origin v0.7.0`) — triggers `docker-publish.yml` to push `:v0.7.0` + `:latest` to GHCR
-- [ ] Set `KURA_IMAGE_TAG=v0.7.0` in `.env` (project root; matches the git tag)
+- [ ] Git tag created and pushed (e.g. `git tag v0.7.1 && git push origin v0.7.1`) — triggers `docker-publish.yml` to push `:v0.7.1` + `:latest` to GHCR
+- [ ] Set `KURA_IMAGE_TAG=v0.7.1` in `.env` (project root; matches the git tag)
 - [ ] Validate: `./scripts/validate-env.sh prod` (rejects empty `KURA_IMAGE_TAG`)
 - [ ] Pull pinned images: `docker compose --env-file ../.env -f docker-compose.yml pull`
 - [ ] Deploy: `docker compose --env-file ../.env -f docker-compose.yml up -d`
