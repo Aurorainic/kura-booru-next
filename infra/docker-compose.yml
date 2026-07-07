@@ -20,7 +20,7 @@
 # =============================================================================
 
 # Registry prefix for custom images. Override KURA_IMAGE_TAG in .env to pin a
-# release tag (e.g. v0.7.0); defaults to :latest for local/rolling deploys.
+# release tag (e.g. v0.7.1); defaults to :latest for local/rolling deploys.
 
 services:
   # ---------------------------------------------------------------------------
