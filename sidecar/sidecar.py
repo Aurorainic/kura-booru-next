@@ -1,7 +1,13 @@
 """Sidecar: BRPOP loop + gallery-dl download + imagehash phash.
 
-Polls Redis list kura:jobs for download tasks, processes them with
-gallery-dl and imagehash, then pushes results to kura:results:{job_id}.
+Polls Redis list kura:jobs for download tasks, downloads the image with
+gallery-dl, computes a perceptual hash with imagehash, extracts gallery-dl's
+metadata, then pushes the result to kura:results:{job_id}.
+
+Image processing is split: this sidecar owns download + phash + dims/mime
+(phash needs imagehash's exact DCT, which sharp can't reproduce bit-for-bit).
+Thumbnail/preview/LQIP generation lives in the Node pipeline (server/utils/
+pipeline.ts, sharp) — the sidecar no longer does any raster resizing.
 
 ~80 lines of core logic.
 """
@@ -197,7 +203,14 @@ def download_with_gallery_dl(url: str) -> tuple[bytes, dict]:
 
 
 def compute_phash(image_bytes: bytes) -> str:
-    """Compute perceptual hash for dedup."""
+    """Compute perceptual hash for dedup (kept here, not in Node sharp).
+
+    imagehash.phash uses scipy's DCT over Pillow-resized pixels; sharp's
+    Lanczos resize differs from Pillow's at sub-pixel precision, so a sharp
+    reimplementation drifts 6-14 Hamming bits from imagehash on the same image
+    — at or above the dedup threshold of 8. Keeping phash in imagehash preserves
+    cross-era dedup (old posts hashed with imagehash still match new ones).
+    """
     img = Image.open(BytesIO(image_bytes))
     return str(imagehash.phash(img))
 
@@ -218,7 +231,9 @@ async def process_job(r: aioredis.Redis, job: dict):
             None, download_with_gallery_dl, url
         )
 
-        # Compute phash + get dimensions in one pass (avoid decoding twice)
+        # Compute phash + get dimensions/mime in one PIL decode (avoid decoding twice).
+        # Raster resize/encode for thumbnails/LQIP is done in the Node sharp
+        # pipeline; the sidecar only reads enough to phash + report raw dims.
         img = await loop.run_in_executor(None, lambda: Image.open(BytesIO(image_bytes)))
         phash = str(imagehash.phash(img))
         width, height = img.size

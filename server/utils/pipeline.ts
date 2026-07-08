@@ -68,11 +68,20 @@ export async function processResult(result: SidecarResult): Promise<PipelineResu
       }
     }
 
-    // ── 2. Generate thumbnails ──
+    // ── 2. Generate thumbnails (sharp) + probe metadata ──
+    // sharp owns all raster image processing now — thumb/preview/LQIP.
+    // Sidecar keeps gallery-dl download + phash + raw dims/mime: phash needs
+    // imagehash's exact DCT, and migrating it to sharp breaks cross-era dedup
+    // (different Lanczos impls → ~6–14 bit Hamming drift on the same image,
+    // at/above the dedup threshold of 8). Sharp re-derives dims/mime from the
+    // uploaded bytes so they always match what we actually store.
     const sharpMod = await getSharp()
     let thumbBuffer: Buffer | null = null
     let previewBuffer: Buffer | null = null
     let lqipDataUri: string | null = null
+    let width = meta.width
+    let height = meta.height
+    let mimeType = meta.mime_type
 
     if (sharpMod) {
       const img = sharpMod.default(imageBuffer)
@@ -87,16 +96,23 @@ export async function processResult(result: SidecarResult): Promise<PipelineResu
         .webp({ quality: 40 })
         .toBuffer()
       lqipDataUri = `data:image/webp;base64,${lqipBuf.toString('base64')}`
+
+      // Re-derive dims/mime from the actual image bytes — sidecar's values
+      // come from Pillow on the downloaded file, sharp sees the same bytes so
+      // they agree; sharp wins on conflict (it's the bytes we upload).
+      const probed = await img.metadata()
+      if (probed.width && probed.height) { width = probed.width; height = probed.height }
+      if (probed.format) mimeType = `image/${probed.format === 'jpeg' ? 'jpeg' : probed.format}`
     }
 
     // ── 3. Upload to S3 ──
-    const ext = meta.mime_type?.split('/')[1] || 'png'
+    const ext = mimeType?.split('/')[1] || 'png'
     const imageKey = `${crypto.randomUUID()}.${ext}`
     const thumbKey = thumbBuffer ? `${crypto.randomUUID()}.webp` : ''
     const previewKey = previewBuffer ? `${crypto.randomUUID()}.webp` : ''
 
     await Promise.all([
-      uploadToS3(imageKey, imageBuffer, meta.mime_type || 'image/png'),
+      uploadToS3(imageKey, imageBuffer, mimeType || 'image/png'),
       thumbBuffer ? uploadToS3(thumbKey, thumbBuffer, 'image/webp') : Promise.resolve(),
       previewBuffer ? uploadToS3(previewKey, previewBuffer, 'image/webp') : Promise.resolve(),
     ])
@@ -174,13 +190,14 @@ export async function processResult(result: SidecarResult): Promise<PipelineResu
           sourceUrl: meta.source_url,
           sourceSite,
           sourceId: meta.source_id,
-          width: meta.width,
-          height: meta.height,
+          width: width ?? 0,
+          height: height ?? 0,
           fileSize: meta.file_size,
-          mimeType: meta.mime_type,
+          mimeType: mimeType || 'image/png',
           phash: result.phash || '',
           lqip: lqipDataUri,
           title: meta.title || null,
+          description: meta.description || null,
           rating: rating as any,
         })
         .returning({ id: posts.id })
