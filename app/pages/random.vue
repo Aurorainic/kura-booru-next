@@ -67,8 +67,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
         type="button"
         @click="shuffle"
         :disabled="loading"
-        class="flex items-center gap-2 px-6 py-3 rounded-[var(--radius-button)] font-medium text-sm transition-all active:scale-95"
-        style="background: var(--accent-color); color: var(--bg-primary);"
+        class="btn-primary !px-6 !py-3"
       >
         <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22" />

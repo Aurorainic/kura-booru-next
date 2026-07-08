@@ -83,7 +83,7 @@ const sourceOptions = [
 
     <!-- Results summary -->
     <div v-if="query" class="mb-4">
-      <p class="text-sm text-[var(--text-muted)]">
+      <p class="text-sm text-[var(--text-muted)]" style="animation: countUp 0.4s var(--ease-out) 0.2s both;">
         <template v-if="total > 0">找到 <span class="gradient-text font-medium">{{ total }}</span> 个结果</template>
         <template v-else>未找到 "{{ query }}" 的结果</template>
       </p>
@@ -96,7 +96,7 @@ const sourceOptions = [
       </svg>
       <p class="text-lg font-semibold mb-1">未找到结果</p>
       <p class="text-sm mb-4">尝试其他标签或减少过滤条件</p>
-      <NuxtLink to="/search" class="px-4 py-2 rounded-[var(--radius-button)] font-medium text-sm transition-all" style="background: var(--accent-color); color: var(--bg-primary);">清除搜索</NuxtLink>
+      <NuxtLink to="/search" class="btn-primary">清除搜索</NuxtLink>
     </div>
 
     <!-- Results grid -->
