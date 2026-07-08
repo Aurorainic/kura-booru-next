@@ -42,6 +42,13 @@ function tagSize(postCount: number): string {
   const size = 0.75 + ((postCount - minCount.value) / countRange.value) * 1.25
   return `${size}rem`
 }
+
+// 5.3 ← / → page navigation (tags list).
+function goToPage(p: number) {
+  if (p < 1 || p > totalPages.value) return
+  navigateTo({ path: '/tags', query: { ...(category.value ? { category: category.value } : {}), sort: sort.value, ...(p > 1 ? { page: String(p) } : {}) } })
+}
+useKeyboardShortcuts({ onPrevPage: () => goToPage(page.value - 1), onNextPage: () => goToPage(page.value + 1) })
 </script>
 
 <template>
@@ -69,55 +76,38 @@ function tagSize(postCount: number): string {
       >{{ cat.label }}</NuxtLink>
     </div>
 
-    <!-- Tag cloud -->
-    <div v-if="tags.length > 0" class="card p-6 mb-8" style="animation: pageIn var(--duration-slow) var(--ease-out);">
-      <h2 class="text-base font-semibold text-[var(--text-primary)] mb-4">标签云</h2>
+    <!-- Tag constellation (4.4): cloud IS the content — name in display font,
+         category color as text color, hover reveals translation + danbooru_name.
+         No table; pagination below. -->
+    <div v-if="tags.length > 0" class="mb-8" style="animation: pageIn var(--duration-slow) var(--ease-out);">
       <div class="flex flex-wrap gap-x-4 gap-y-3 items-baseline">
         <NuxtLink
           v-for="tag in tags"
           :key="tag.id"
           :to="`/tags/${encodeURIComponent(tag.name)}`"
-          class="inline-block rounded-[var(--radius-sm)] px-1.5 py-0.5 transition-all duration-[var(--duration-fast)] hover:scale-110"
+          class="tag-star group/tag relative inline-block rounded-[var(--radius-sm)] px-1.5 py-0.5 transition-all duration-[var(--duration-fast)] hover:scale-110"
           :style="{
             fontSize: tagSize(tag.post_count),
             color: getTagCategoryVar(tag.category),
-            background: getTagCategoryBg(tag.category),
             fontFamily: 'var(--font-display)',
+            fontWeight: 600,
             transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
           }"
         >
           {{ tag.name }}
-          <span v-if="tag.translation" class="text-[0.625rem] opacity-50 ml-0.5">{{ tag.translation }}</span>
-          <span class="text-[0.625rem] opacity-50 ml-0.5 font-mono">{{ tag.post_count }}</span>
+          <span class="text-[0.625rem] opacity-50 ml-0.5 font-mono tabular-nums">{{ tag.post_count }}</span>
+          <!-- Hover tooltip: translation + danbooru_name -->
+          <span
+            v-if="tag.translation || tag.danbooru_name"
+            class="pointer-events-none absolute left-0 top-full mt-1 z-20 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--bg-surface)] border border-[var(--border-color)] px-2 py-1 text-[0.6875rem] font-normal opacity-0 translate-y-1 transition-all duration-[var(--duration-fast)] group-hover/tag:opacity-100 group-hover/tag:translate-y-0"
+            style="color: var(--text-muted); font-family: var(--font-body);"
+          >
+            <template v-if="tag.translation">{{ tag.translation }}</template>
+            <template v-if="tag.translation && tag.danbooru_name"> · </template>
+            <template v-if="tag.danbooru_name"><span class="font-mono">{{ tag.danbooru_name }}</span></template>
+          </span>
         </NuxtLink>
       </div>
-    </div>
-
-    <!-- F-P1-2: Table view below tag cloud -->
-    <div v-if="tags.length > 0" class="card overflow-hidden mb-8">
-      <h2 class="text-base font-semibold text-[var(--text-primary)] px-4 pt-4 pb-2">全部标签</h2>
-      <table class="w-full">
-        <thead>
-          <tr class="border-b border-[var(--border-color)]">
-            <th class="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase">标签</th>
-            <th class="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase hidden sm:table-cell">翻译</th>
-            <th class="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase hidden md:table-cell">分类</th>
-            <th class="text-right px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase">数量</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="tag in tags" :key="tag.id" class="border-b border-[var(--border-color)] hover:bg-[var(--accent-subtle)] transition-colors">
-            <td class="px-4 py-2">
-              <NuxtLink :to="`/tags/${encodeURIComponent(tag.name)}`" class="font-medium text-[var(--text-primary)] hover:underline">{{ tag.name }}</NuxtLink>
-            </td>
-            <td class="px-4 py-2 text-sm text-[var(--text-muted)] hidden sm:table-cell">{{ tag.translation || '—' }}</td>
-            <td class="px-4 py-2 hidden md:table-cell">
-              <span class="text-xs px-2 py-0.5 rounded" :style="{ color: getTagCategoryVar(tag.category), background: `${getTagCategoryVar(tag.category)}/10` }">{{ getTagCategoryLabel(tag.category) }}</span>
-            </td>
-            <td class="px-4 py-2 text-right font-mono tabular-nums text-sm text-[var(--text-muted)]">{{ tag.post_count }}</td>
-          </tr>
-        </tbody>
-      </table>
     </div>
 
     <!-- Empty -->

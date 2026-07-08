@@ -1,6 +1,26 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════════════
+   6 — Display font (self-hosted woff2, optional)
+   Drop HarmonyOS Sans / Source Han Sans subsets into /public/fonts/
+   (display-latin.woff2 + display-cjk.woff2) to activate. Until then
+   --font-display falls through to the system CJK stack already in the
+   token below — no layout shift, no broken glyphs.
+   font-display: swap keeps text visible during the (optional) fetch.
+   ═══════════════════════════════════════════════════════════════ */
+@font-face {
+  font-family: "KuraDisplay";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/display-latin.woff2") format("woff2"),
+       url("/fonts/display-cjk.woff2") format("woff2");
+  /* ponytail: urls 404 until font files are added — browsers silently fall
+     back to the next family in the --font-display stack, so this is a
+     no-op upgrade path, not a regression. */
+}
+
+/* ═══════════════════════════════════════════════════════════════
    Kura Booru v2 — Design Token System
    Modernized Booru: booru skeleton + modern CSS
    ═══════════════════════════════════════════════════════════════ */
@@ -75,7 +95,7 @@
   --space-grid-gap: 0.5rem;
 
   /* ── Fonts — single unified system stack for all text ── */
-  --font-display: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
+  --font-display: "KuraDisplay", "HarmonyOS Sans", "Source Han Sans SC", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
   --font-body: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", "Consolas", monospace;
 
@@ -449,6 +469,19 @@ body::before {
   box-shadow: 0 12px 40px oklch(0% 0 0 / 0.15);
   border-radius: 8px;
 }
+
+/* 4.1 Featured card: spans 2 columns in the masonry flow (sm+).
+   column-span is the CSS-multi-column equivalent of grid-column: span 2 and
+   works with the existing columns-N layout — no JS, no layout rewrite. */
+.masonry-featured {
+  -moz-column-span: all;
+  column-span: all;
+}
+/* ponytail: column-span: 2 only applies on ≥3-column layouts; on 2-col mobile the
+   featured image would still span both columns and dominate — cap its height so
+   it reads as a header banner, not a wall. */
+.masonry-featured .img-container { max-height: 56vh; }
+.masonry-featured img { object-fit: cover; height: 100%; }
 
 .masonry-item img {
   transition: transform var(--duration-slow) var(--ease-out), filter var(--duration-fast) var(--ease-out);

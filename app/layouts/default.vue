@@ -23,6 +23,31 @@ const headInject = computed(() => settings.value?.head_inject || '')
 function goTags() { navigateTo('/tags') }
 const { cheatsheetOpen } = useKeyboardShortcuts({ onGoTags: goTags })
 
+// 4.3 Nav shrink on scroll (>100px → 56px→44px) + overflow menu state.
+const navShrunk = ref(false)
+const navMenuOpen = ref(false)
+const route = useRoute()
+const searchRouteQuery = computed(() => (route.query.q as string) || '')
+
+let onScroll: (() => void) | null = null
+let onNavClickOutside: ((e: MouseEvent) => void) | null = null
+
+onMounted(() => {
+  onScroll = () => { navShrunk.value = window.scrollY > 100 }
+  onScroll()
+  window.addEventListener('scroll', onScroll, { passive: true })
+
+  onNavClickOutside = (e: MouseEvent) => {
+    const target = e.target as HTMLElement
+    if (!target.closest('[data-nav-menu]')) navMenuOpen.value = false
+  }
+  document.addEventListener('click', onNavClickOutside)
+})
+onUnmounted(() => {
+  if (onScroll) window.removeEventListener('scroll', onScroll)
+  if (onNavClickOutside) document.removeEventListener('click', onNavClickOutside)
+})
+
 const { public: publicConfig } = useRuntimeConfig()
 const gitTag = publicConfig.gitTag
 const repoUrl = publicConfig.repoUrl || 'https://gitea.lainns.xyz/lainsaka/kura-booru-next'
@@ -98,71 +123,62 @@ useHead(headInjectEntries)
 
 <template>
   <div class="min-h-screen flex flex-col">
-    <!-- Navigation -->
-    <nav class="nav-glass sticky top-0 z-40 border-b border-[var(--border-color)]" :style="{ '--nav-h': '56px' }">
-      <div class="max-w-[var(--content-max)] mx-auto px-4 lg:px-8">
-        <div class="flex items-center justify-between h-14 gap-4">
+    <!-- Navigation (4.3 minimal: logo + large search + theme/accent on desktop;
+         secondary entries collapse into a "..." overflow menu) -->
+    <nav
+      class="nav-glass sticky top-0 z-40 border-b border-[var(--border-color)] transition-[height,padding] duration-[var(--duration-fast)]"
+      :class="navShrunk ? 'h-11' : 'h-14'"
+      :style="{ '--nav-h': navShrunk ? '44px' : '56px' }"
+    >
+      <div class="max-w-[var(--content-max)] mx-auto px-4 lg:px-8 h-full">
+        <div class="flex items-center justify-between h-full gap-4">
           <!-- Logo -->
           <NuxtLink to="/" class="flex items-center gap-2 group flex-shrink-0">
-            <img src="/logo.svg" :alt="siteTitle" class="h-8 w-8" />
-            <span class="gradient-text text-xl font-bold hidden sm:inline" style="letter-spacing: -0.02em; font-family: var(--font-display);">{{ gradientPart }}</span>
-            <span v-if="mutedPart" class="text-[var(--text-muted)] text-xl font-light hidden sm:inline" style="letter-spacing: -0.02em;">{{ mutedPart }}</span>
+            <img src="/logo.svg" :alt="siteTitle" class="w-8 h-8 transition-all" :class="navShrunk ? 'h-7 w-7' : 'h-8 w-8'" />
+            <span class="gradient-text font-bold hidden sm:inline transition-all" :class="navShrunk ? 'text-base' : 'text-xl'" style="letter-spacing: -0.02em; font-family: var(--font-display);">{{ gradientPart }}</span>
+            <span v-if="mutedPart" class="text-[var(--text-muted)] font-light hidden sm:inline transition-all" :class="navShrunk ? 'text-base' : 'text-xl'" style="letter-spacing: -0.02em;">{{ mutedPart }}</span>
           </NuxtLink>
 
-          <!-- Nav links (desktop) -->
-          <div class="hidden md:flex items-center gap-1">
-            <NuxtLink
-              to="/search"
-              class="nav-btn"
-            >
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
-              搜索
-            </NuxtLink>
-            <NuxtLink
-              to="/tags"
-              class="nav-btn"
-            >
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 8.25h13.5M5.25 8.25V18a2.25 2.25 0 0 0 2.25 2.25h10.5A2.25 2.25 0 0 0 20.25 18V8.25m-15 0V6a2.25 2.25 0 0 1 2.25-2.25h10.5A2.25 2.25 0 0 1 20.25 6v2.25m-15 0h13.5" /></svg>
-              标签
-            </NuxtLink>
-            <NuxtLink
-              to="/random"
-              class="nav-btn"
-            >
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22M18 2l4 4-4 4M2 6h1.9c1.5 0 2.9.9 3.6 2.2M22 18h-5.9a5.5 5.5 0 01-3.8-2.6l-.5-.8M18 14l4 4-4 4" /></svg>
-              随机
-            </NuxtLink>
-            <div class="w-px h-5 bg-[var(--border-color)]" />
-            <template v-if="isAdmin">
-              <NuxtLink
-                to="/admin?tab=dashboard"
-                class="nav-btn"
-                style="color: var(--accent-color);"
-              >
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg>
-                管理后台
-              </NuxtLink>
-              <form action="/logout" method="post" class="contents">
-                <button type="submit" class="nav-btn" style="color: var(--color-danger);">
-                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" /></svg>
-                  退出
-                </button>
-              </form>
-            </template>
-            <NuxtLink
-              v-else
-              to="/login"
-              class="nav-btn"
-            >
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
-              登录
-            </NuxtLink>
+          <!-- Large search box (desktop, search-as-navigation) -->
+          <div class="hidden md:block flex-1 max-w-xl mx-4">
+            <SearchBar :initial-query="searchRouteQuery" placeholder="搜索标签..." />
           </div>
 
           <!-- Theme controls -->
-          <div class="flex items-center gap-1">
+          <div class="flex items-center gap-1 flex-shrink-0">
             <AccentPicker />
             <ThemeToggle />
+            <!-- Overflow menu ("..."): secondary nav entries -->
+            <div class="relative" data-nav-menu>
+              <button
+                type="button"
+                @click="navMenuOpen = !navMenuOpen"
+                class="w-9 h-9 rounded-[var(--radius-sm)] flex items-center justify-center transition-all hover:bg-[var(--accent-subtle)] active:scale-85"
+                :class="navMenuOpen ? 'text-[var(--accent-color)]' : 'text-[var(--text-muted)]'"
+                aria-label="更多"
+                :aria-expanded="navMenuOpen"
+              >
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM18.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" /></svg>
+              </button>
+              <Transition name="nav-menu">
+                <div
+                  v-if="navMenuOpen"
+                  class="absolute top-full right-0 mt-2 w-44 rounded-[var(--radius-md)] bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-lg overflow-hidden"
+                >
+                  <NuxtLink to="/search" class="block px-4 py-3 text-sm text-[var(--text-primary)] hover:bg-[var(--accent-subtle)] transition-colors" @click="navMenuOpen = false">搜索</NuxtLink>
+                  <NuxtLink to="/tags" class="block px-4 py-3 text-sm text-[var(--text-primary)] hover:bg-[var(--accent-subtle)] transition-colors" @click="navMenuOpen = false">标签</NuxtLink>
+                  <NuxtLink to="/random" class="block px-4 py-3 text-sm text-[var(--text-primary)] hover:bg-[var(--accent-subtle)] transition-colors" @click="navMenuOpen = false">随机</NuxtLink>
+                  <div class="border-t border-[var(--border-color)]" />
+                  <template v-if="isAdmin">
+                    <NuxtLink to="/admin?tab=dashboard" class="block px-4 py-3 text-sm text-[var(--accent-color)] hover:bg-[var(--accent-subtle)] transition-colors" @click="navMenuOpen = false">管理后台</NuxtLink>
+                    <form action="/logout" method="post" class="contents">
+                      <button type="submit" class="block w-full text-left px-4 py-3 text-sm text-[var(--color-danger)] hover:bg-[var(--accent-subtle)] transition-colors">退出</button>
+                    </form>
+                  </template>
+                  <NuxtLink v-else to="/login" class="block px-4 py-3 text-sm text-[var(--text-primary)] hover:bg-[var(--accent-subtle)] transition-colors" @click="navMenuOpen = false">登录</NuxtLink>
+                </div>
+              </Transition>
+            </div>
           </div>
         </div>
       </div>
@@ -197,3 +213,13 @@ useHead(headInjectEntries)
     <KbdCheatSheet v-model="cheatsheetOpen" />
   </div>
 </template>
+
+<style scoped>
+.nav-menu-enter-active, .nav-menu-leave-active {
+  transition: all 0.2s var(--ease-out);
+}
+.nav-menu-enter-from, .nav-menu-leave-to {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.97);
+}
+</style>

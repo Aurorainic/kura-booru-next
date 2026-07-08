@@ -7,6 +7,7 @@
  *   G then T  jump to tags (the first tag on the current page)
  *   J / K     next / previous post in the gallery list (when on detail page
  *             and the post-id list was passed in via ?list=...)
+ *   ← / →     prev / next page on list views (gallery, tags, search)
  *
  * All bindings are suppressed when the active element is a form field
  * (input / textarea / select / [contenteditable]), so users can type those
@@ -18,6 +19,8 @@ export function useKeyboardShortcuts(opts: {
   onPrevPost?: () => void
   onNextPost?: () => void
   onGoTags?: () => void
+  onPrevPage?: () => void
+  onNextPage?: () => void
 } = {}) {
   const cheatsheetOpen = ref(false)
   let gPressed = false
@@ -73,6 +76,12 @@ export function useKeyboardShortcuts(opts: {
       case 'K':
         e.preventDefault()
         opts.onPrevPost?.()
+        break
+      case 'ArrowLeft':
+        opts.onPrevPage?.()
+        break
+      case 'ArrowRight':
+        opts.onNextPage?.()
         break
     }
   }

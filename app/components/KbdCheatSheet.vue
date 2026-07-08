@@ -12,6 +12,8 @@ const groups = [
     items: [
       { keys: ['J'], desc: '下一张作品（详情页）' },
       { keys: ['K'], desc: '上一张作品（详情页）' },
+      { keys: ['→'], desc: '下一页（列表页）' },
+      { keys: ['←'], desc: '上一页（列表页）' },
       { keys: ['G+T'], desc: '跳转到标签页' },
       { keys: ['Esc'], desc: '关闭弹窗 / 返回' },
     ],
