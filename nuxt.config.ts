@@ -3,8 +3,11 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
-  // ponytail: devtools 静态配置不随 NODE_ENV 自动关闭，prod 构建仍会打进客户端产物，
-  // 手机端 viewport 窄反而触发浮窗显示。按环境显式关闭。
+  // ponytail: devtools 静态配置不随 NODE_ENV 自动关闭。Nuxt 在 schema 解析阶段
+  // 读取 devtools.enabled，此时 Docker build 阶段 NODE_ENV 默认为 undefined（非
+  // production），于是 @nuxt/devtools 被注册进客户端产物——升级后线上又冒出浮窗。
+  // 根因是构建期 NODE_ENV 未设，而非配置本身。这里保留显式判断做兜底，但真正
+  // 的修复在 Dockerfile build 阶段注入 NODE_ENV=production（见 commit）。
   devtools: { enabled: process.env.NODE_ENV !== 'production' },
 
   css: ['~/../assets/css/main.css'],
