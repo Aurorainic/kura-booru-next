@@ -470,19 +470,6 @@ body::before {
   border-radius: 8px;
 }
 
-/* 4.1 Featured card: spans 2 columns in the masonry flow (sm+).
-   column-span is the CSS-multi-column equivalent of grid-column: span 2 and
-   works with the existing columns-N layout — no JS, no layout rewrite. */
-.masonry-featured {
-  -moz-column-span: all;
-  column-span: all;
-}
-/* ponytail: column-span: 2 only applies on ≥3-column layouts; on 2-col mobile the
-   featured image would still span both columns and dominate — cap its height so
-   it reads as a header banner, not a wall. */
-.masonry-featured .img-container { max-height: 56vh; }
-.masonry-featured img { object-fit: cover; height: 100%; }
-
 .masonry-item img {
   transition: transform var(--duration-slow) var(--ease-out), filter var(--duration-fast) var(--ease-out);
   width: 100%;
