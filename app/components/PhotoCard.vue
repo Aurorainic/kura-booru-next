@@ -7,11 +7,13 @@ const props = withDefaults(defineProps<{
   index?: number
   currentPage?: number
   listParam?: string
+  featured?: boolean
 }>(), {
   isAdmin: false,
   index: 0,
   currentPage: 1,
   listParam: '',
+  featured: false,
 })
 
 const previewUrl = getPreviewUrl(props.post)
@@ -35,6 +37,7 @@ onMounted(() => { showLqip.value = true })
   <NuxtLink
     :to="`/posts/${post.id}?from=gallery&page=${currentPage}${listParam ? '&list=' + listParam : ''}`"
     class="masonry-item block mb-2 cursor-zoom-in"
+    :class="{ 'masonry-featured': featured }"
     :style="{
       animation: `blurReveal var(--duration-slow) var(--ease-out) both`,
       animationDelay: `${index < 12 ? index * 60 : 0}ms`,

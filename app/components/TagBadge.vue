@@ -18,19 +18,19 @@ const props = withDefaults(defineProps<{
     v-if="link"
     :to="`/tags/${encodeURIComponent(tag.name)}`"
     :class="['tag-badge inline-flex items-baseline gap-1 group/tag', extraClass]"
+    :style="{ '--category-color': getTagCategoryVar(tag.category) }"
   >
-    <span class="w-0.5 h-3 rounded-full flex-shrink-0 self-center" :style="{ background: getTagCategoryVar(tag.category) }" />
-    <span class="name text-[var(--text-primary)] transition-colors duration-[var(--duration-instant)] group-hover/tag:text-[var(--accent-color)]" :style="{ fontFamily: 'var(--font-display)' }">{{ tag.name }}</span>
-    <span v-if="showTranslation && tag.translation" class="text-[0.75em] text-[var(--text-muted)]">{{ tag.translation }}</span>
+    <span class="name text-[var(--text-primary)] transition-colors duration-[var(--duration-instant)] group-hover/tag:text-[var(--category-color,var(--accent-color))]" :style="{ fontFamily: 'var(--font-display)' }">{{ tag.name }}</span>
+    <span v-if="showTranslation && tag.translation" class="translation text-[0.75em] text-[var(--text-muted)] opacity-0 transition-opacity duration-[var(--duration-fast)] group-hover/tag:opacity-80">{{ tag.translation }}</span>
     <span v-if="tag.post_count > 0" class="text-[0.75em] text-[var(--text-muted)] font-mono tabular-nums ml-0.5">{{ tag.post_count }}</span>
   </NuxtLink>
   <span
     v-else
     :class="['tag-badge inline-flex items-baseline gap-1', extraClass]"
+    :style="{ '--category-color': getTagCategoryVar(tag.category) }"
   >
-    <span class="w-0.5 h-3 rounded-full flex-shrink-0 self-center" :style="{ background: getTagCategoryVar(tag.category) }" />
     <span class="name text-[var(--text-primary)]" :style="{ fontFamily: 'var(--font-display)' }">{{ tag.name }}</span>
-    <span v-if="showTranslation && tag.translation" class="text-[0.75em] text-[var(--text-muted)]">{{ tag.translation }}</span>
+    <span v-if="showTranslation && tag.translation" class="translation text-[0.75em] text-[var(--text-muted)] opacity-0 transition-opacity duration-[var(--duration-fast)] group-hover/tag:opacity-80">{{ tag.translation }}</span>
     <span v-if="tag.post_count > 0" class="text-[0.75em] text-[var(--text-muted)] font-mono tabular-nums ml-0.5">{{ tag.post_count }}</span>
   </span>
 </template>

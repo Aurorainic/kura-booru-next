@@ -49,6 +49,14 @@ const ratingFilters = [
   { value: 'questionable', label: '敏感' },
   { value: 'explicit', label: '限制' },
 ]
+
+// 5.3 ← / → page navigation (gallery). Navigates by mutating the `page` query
+// param — same path the Pagination component uses.
+function goToPage(p: number) {
+  if (p < 1 || p > totalPages.value) return
+  navigateTo({ path: '/', query: { ...(rating.value ? { rating: rating.value } : {}), ...(p > 1 ? { page: String(p) } : {}), per_page: String(perPage.value) } })
+}
+useKeyboardShortcuts({ onGoTags: () => navigateTo('/tags'), onPrevPage: () => goToPage(page.value - 1), onNextPage: () => goToPage(page.value + 1) })
 </script>
 
 <template>
@@ -91,7 +99,7 @@ const ratingFilters = [
     </div>
 
     <!-- Masonry grid -->
-    <PhotoGrid v-if="posts.length > 0" :posts="posts" :is-admin="isAdmin" :current-page="page" />
+    <PhotoGrid v-if="posts.length > 0" :posts="posts" :is-admin="isAdmin" :current-page="page" :featured="page === 1" />
 
     <!-- Empty state -->
     <div v-else class="flex flex-col items-center justify-center py-24 text-[var(--text-muted)]">
