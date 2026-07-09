@@ -9,8 +9,8 @@
 
 ## Versioning & Deployment
 
-- **Version label**: `KURA_VERSION` in `.env` (e.g. `v0.7.1`). Nuxt footer reads this at runtime.
-- **Docker images**: Custom images are published to GHCR with **both** `:<version-tag>` (e.g. `v0.7.1`) **and** `:latest`. Deploys **pin a version tag** via `KURA_IMAGE_TAG` in `.env`; leaving it unset/empty tracks `:latest` (dev/rolling). See `docs/versioning.md`.
+- **Version label**: `KURA_VERSION` in `.env` (e.g. `v0.7.2`). Nuxt footer reads this at runtime.
+- **Docker images**: Custom images are published to GHCR with **both** `:<version-tag>` (e.g. `v0.7.2`) **and** `:latest`. Deploys **pin a version tag** via `KURA_IMAGE_TAG` in `.env`; leaving it unset/empty tracks `:latest` (dev/rolling). See `docs/versioning.md`.
 - **Deployment command** (run from `infra/`, `.env` at project root): `docker compose --env-file ../.env -f docker-compose.yml pull && docker compose --env-file ../.env -f docker-compose.yml up -d` — `--env-file` is **required**: `env_file:` only injects vars into containers, it does NOT feed `${VAR}` interpolation. Without it `KURA_IMAGE_TAG` silently falls back to `:latest`.
 - **Build → deploy flow** (CI): tag pushed → `docker-publish.yml` builds and pushes `:<tag>` + `:latest` to GHCR → deployer bumps `KURA_IMAGE_TAG` → `pull` + `up -d`. Local dev: `docker build -t <name>:latest .` then `up -d`.
 - **Rollback**: set `KURA_IMAGE_TAG` to a prior release tag in `.env`, then `docker compose --env-file ../.env -f docker-compose.yml pull && docker compose --env-file ../.env -f docker-compose.yml up -d` (run from `infra/`). No rebuild needed.

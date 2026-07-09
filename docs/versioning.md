@@ -1,16 +1,16 @@
 # Kura Booru — Versioning Strategy
 
 Custom Docker images are published to GHCR with **two tags**: the release tag
-(`:v0.7.1`) and `:latest`. Production deploys **pin a release tag** via
+(`:v0.7.2`) and `:latest`. Production deploys **pin a release tag** via
 `KURA_IMAGE_TAG`; development/rolling deploys track `:latest`.
 
 - `KURA_VERSION` in `.env` → the human-readable version shown in the Nuxt footer.
 - `KURA_IMAGE_TAG` in `.env` → the **image tag** the compose stack pulls. Pin it
-  to a release tag (`v0.7.1`) in production; leave unset/empty for `:latest`.
+  to a release tag (`v0.7.2`) in production; leave unset/empty for `:latest`.
 - `KURA_IMAGE_REGISTRY` in `.env` → registry prefix (defaults to
   `ghcr.io/aurorainic`). Override for a mirror or private registry.
 
-> `KURA_VERSION` and `KURA_IMAGE_TAG` are usually equal (both `v0.7.1`), but
+> `KURA_VERSION` and `KURA_IMAGE_TAG` are usually equal (both `v0.7.2`), but
 > they are independent: the footer label is a string, the image tag selects the
 > manifest. Keep them in sync on releases.
 
@@ -37,8 +37,8 @@ Forgetting `--env-file` silently falls back to `${KURA_IMAGE_TAG:-latest}` →
 
 ```bash
 # 1. Set version + image tag in .env (project root)
-KURA_VERSION=v0.7.1
-KURA_IMAGE_TAG=v0.7.1
+KURA_VERSION=v0.7.2
+KURA_IMAGE_TAG=v0.7.2
 
 # 2. Pull the pinned images from GHCR (built by docker-publish.yml on tag push)
 docker compose --env-file ../.env -f docker-compose.yml pull
@@ -95,6 +95,6 @@ See [rollback.md](rollback.md) for the full runbook.
 | `ghcr.io/aurorainic/kura-booru-web:<tag>` | `.` (project root) | Nuxt/Nitro SSR + API + Bot webhook |
 | `ghcr.io/aurorainic/kura-booru-worker:<tag>` | `sidecar/` | Python gallery-dl + phash worker |
 
-`<tag>` is `KURA_IMAGE_TAG` (release tag, e.g. `v0.7.1`) or `latest` when unset.
+`<tag>` is `KURA_IMAGE_TAG` (release tag, e.g. `v0.7.2`) or `latest` when unset.
 
 PostgreSQL 18 and Redis 8 use official images (`postgres:18-alpine`, `redis:8-alpine`).
