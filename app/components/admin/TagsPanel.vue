@@ -82,7 +82,7 @@ async function fixArtistCategories() {
   fixingArtists.value = true
   try {
     const result = await fixArtistCategoriesAPI(ssrCookie.value)
-    alert(`修复完成: ${result.total_fixed} 个标签已更正为画师分类\n(知识库: ${result.fixed_from_knowledge}, 前缀: ${result.fixed_prefixed})`)
+    alert(`修复完成: ${result.total_fixed} 个标签已更正为画师分类\n(知识库: ${result.fixed_from_knowledge}, 合并重复: ${result.merged_into_clean}, 原地改名: ${result.renamed_in_place}, 迁移关联: ${result.posts_moved})`)
     await refresh()
   } catch (e: any) {
     alert(`修复失败: ${e.message || '未知错误'}`)
