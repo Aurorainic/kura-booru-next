@@ -13,12 +13,18 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 # ── Stage 2: build ──
+# ponytail: NODE_ENV=production 是 prod 构建根因开关。Nuxt 按 NODE_ENV 决定
+# build/dev 入口、devtools、客户端产物 — 缺失 = 静默产出 dev 包(网页含 "nuxt dev"
+# 文案、左下角 dev 角标)。validate-build-stage 防误删:缺失 NODE_ENV 或非
+# production 时构建直接失败,绝不让 dev 包进入 :<tag> / :latest。
 FROM node:22-alpine AS build
 ARG KURA_VERSION
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV KURA_VERSION=${KURA_VERSION}
+ENV NODE_ENV=production
+RUN test "${NODE_ENV:-}" = "production" || { echo "FATAL: build stage requires NODE_ENV=production, got '${NODE_ENV:-unset}' — this would ship a dev bundle to GHCR"; exit 1; }
 RUN npm run build
 
 # ── Stage 3: production ──

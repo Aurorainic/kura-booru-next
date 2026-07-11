@@ -2,6 +2,28 @@
 
 本文件记录项目的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.7.4] - 2026-07-11
+
+### 修复
+- **NODE_ENV 防回归双重守卫** — 0.7.3 (`f3be09a`) 已在 Dockerfile `build` 阶段补 `ENV NODE_ENV=production` 修复 dev 包根因，但单点修复若被误删仍会静默复发。新增双重守卫：(1) `docker-publish.yml` build-push 前新增 `Assert production build guard` step，grep Dockerfile 缺该 ENV 即失败；(2) build 阶段内 `RUN test "${NODE_ENV:-}" = "production"` 兜底，缺失即 `FATAL` 退出。同步 `CLAUDE.md` / `docs/development.md` 的 Common Pitfalls，强调 bump 版本的正确流程是一次 `pull && up -d`，别盲目重跑。
+- **docker-compose 数据卷改 bind mount** — `postgres_data` / `redis_data` named volume 改为宿主机 `/data/postgres` / `/data/redis` bind mount，便于备份与运维；移除 `volumes:` 顶级声明。
+
+## [0.7.3] - 2026-07-09
+
+### 修复
+- **构建期 devtools 泄漏根因修复** (`f3be09a`, LAI-23) — `@nuxt/devtools` 是否打进客户端 bundle 由 `devtools.enabled` 决定，该值在 Nuxt schema-parse 时读 `process.env.NODE_ENV`。node:22-alpine 基础镜像在 `npm run build` 时 `NODE_ENV` 未设置，导致 `NODE_ENV !== 'production'` 恒为真，每次 bump 版本后 devtools 都被打进 prod 客户端包（网页出现 dev 标）。在 Dockerfile `build` 阶段补 `ENV NODE_ENV=production`（production 阶段虽也设，但构建期值才 gate 客户端构建）。`nuxt.config.ts` 注释同步真实根因。
+- **移除首页 column-span 置顶卡片** (`3682e8d`, LAI-23) — v0.7.2 工序4 在首页 gallery 第一页加了 `column-span:all` featured 卡片，桌面端全宽图读起来像"顶图过大"。从 `PhotoGrid`/`PhotoCard` 删除 `featured` opt-in prop，`index.vue` 不再传，删除 `.masonry-featured` CSS。gallery 恢复统一 masonry 网格。
+- **恢复详情页三栏布局** (`ca02eb3`, LAI-23) — v0.7.2 工序4 把详情页三栏（左 tags / 中图 / 右 info）改成沉浸式单栏堆叠，桌面不再是三栏。恢复 `lg:flex-row` 三栏 + sticky 侧栏 + 移动端 pill+card 堆叠；按钮统一用 `.btn-primary` / `.btn-danger` 设计 token。
+
+## [0.7.2] - 2026-07-09
+
+### 新增
+- **Theme 视觉与体验升级** (LAI-19) — 工序 1-6 全量落地：视觉系统、组件样式、交互体验重构。`PhotoGrid` 新增 `featured` 显式 opt-in prop（PR #13 修正为显式而非隐式）。
+- **Sharp 管线迁移** — `pipeline.ts` + `sidecar.py` 三项代码改动落地（缩略图/LQIP 生成链路收敛到 sharp）。
+
+### 变更
+- 镜像 tag 策略沿用 v0.7.1 的 `KURA_IMAGE_TAG` pin + `--env-file` 强制要求。
+
 ## [0.7.1] - 2026-07-07
 
 ### 新增

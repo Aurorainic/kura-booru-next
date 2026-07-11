@@ -52,6 +52,8 @@
 - **Extension CSS animation replay**: CSS animations only fire when class is added. Re-applying without removing won't replay.
 - **PG 18+ volume mount**: Use `/var/lib/postgresql` (not `/var/lib/postgresql/data`) for PG 18+ Docker images — PG 18 changed its data directory layout.
 - **`DATABASE_URL` format**: Uses `postgres://...` (postgres-js driver for Drizzle).
+- **Prod build NODE_ENV**: `NODE_ENV=production` in the Dockerfile `build` stage is the **root-cause switch** for a production bundle. Nuxt keys its build/dev entry, devtools, and client bundle on `NODE_ENV` — omit it and `nuxt build` silently emits a dev bundle (page shows "nuxt dev" text, dev badge bottom-left). The fix is one `ENV NODE_ENV=production` line, NOT a re-deploy. Two CI guards prevent regression: (1) `Assert production build guard` step greps the Dockerfile before `docker/build-push-action`, (2) `RUN test "${NODE_ENV:-}" = "production"` inside the build stage fails the build if the ENV is missing. **Bumping `KURA_VERSION` does NOT require touching this** — but if a future edit removes the `ENV NODE_ENV=production` line, both guards fire. Never "fix" the dev-bundle symptom by re-running deploy; fix the Dockerfile.
+- **Single-deploy versioning**: When releasing a new `KURA_VERSION`, the correct flow is **one** `docker-publish.yml` run (tag push → build → push `:<tag>` + `:latest`) + one `KURA_IMAGE_TAG` bump in `.env` + one `pull && up -d`. If the deployed page still shows "nuxt dev" / dev badge after this, the Dockerfile build stage lost `NODE_ENV=production` — fix that single line and re-tag, do NOT iterate blindly.
 
 ## Changelog
 

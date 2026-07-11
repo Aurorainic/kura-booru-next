@@ -57,6 +57,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Assert production build guard
+        # 根因守卫: NODE_ENV=production 是 prod 构建开关,缺失 = 静默产出 dev 包
+        # (网页含 "nuxt dev"、左下角 dev 角标)。Dockerfile 内也有 RUN test 兜底,
+        # 此处提前在 build-push 前失败,日志更清晰且不浪费 GHA 缓存。
+        run: |
+          grep -q '^ENV NODE_ENV=production' Dockerfile || { \
+            echo "FATAL: Dockerfile build stage missing 'ENV NODE_ENV=production'"; \
+            echo "Without it, nuxt build ships a dev bundle (page shows 'nuxt dev', dev badge)."; \
+            exit 1; }
+          echo "OK: Dockerfile pins NODE_ENV=production in build stage"
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
