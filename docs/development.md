@@ -72,7 +72,7 @@ PostgreSQL and Redis must be running and accessible via `DATABASE_URL` and `REDI
 ## Docker Stages (Dockerfile)
 
 1. **`deps`** — `npm ci` (cached dependency layer)
-2. **`build`** — `npm run build` (Nuxt build → `.output/`)
+2. **`build`** — `npm run build` (Nuxt build → `.output/`). **Must** set `ENV NODE_ENV=production` — Nuxt keys build/dev entry, devtools, and client bundle on `NODE_ENV`; missing it silently emits a dev bundle (page shows "nuxt dev", dev badge bottom-left). Two guards prevent regression: (a) `RUN test "${NODE_ENV:-}" = "production"` inside the stage, (b) `Assert production build guard` step in `docker-publish.yml` greps the Dockerfile before build-push.
 3. **`dev`** — Hot-reload, volume mounts. Used for development.
 4. **`production`** — Minimal image with only `.output/`. `NODE_ENV=production`, `HOST=0.0.0.0`, `PORT=3000`.
 
