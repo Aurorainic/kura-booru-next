@@ -256,7 +256,7 @@ export async function reprocessTagsAPI(mode: 'unprocessed' | 'all', ssrCookie?: 
   })
 }
 
-export async function fixArtistCategoriesAPI(ssrCookie?: string): Promise<{ fixed_from_knowledge: number; fixed_prefixed: number; total_fixed: number }> {
+export async function fixArtistCategoriesAPI(ssrCookie?: string): Promise<{ fixed_from_knowledge: number; merged_into_clean: number; renamed_in_place: number; posts_moved: number; total_fixed: number }> {
   return fetchApi('/admin/tags/fix-artist-categories', undefined, {
     method: 'POST',
     ssrCookie,

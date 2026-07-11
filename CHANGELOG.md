@@ -2,6 +2,11 @@
 
 本文件记录项目的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.7.5] - 2026-07-11
+
+### 修复
+- **`artist:` 前缀标签去重** — `fix-artist-categories` 之前对带 `artist:` 前缀的标签只做"改名"，遇到 clean 同名标签已存在时因 unique 约束失败被跳过（漏网鱼，如 `artist:みこフライ`）。改为两路处理：(a) clean 同名标签已存在 → 把 prefixed 标签的 `post_tags` 关联迁移到 clean 标签（跳过已重叠的 post，PK 兜底），确保 clean 标签 `category=artist`，删除 prefixed 标签（剩余重叠行级联删除）；(b) 无 clean 同名 → 原地改名 + 设 `category=artist`。幂等：二次运行找不到 `artist:%` 行。返回值改为 `merged_into_clean` / `renamed_in_place` / `posts_moved` 三段计数，前端 `TagsPanel` 提示同步。当前生产库 19 条 prefixed 标签全部有 clean 同名，dry-run 显示迁移 36 条 `post_tags`、0 重叠、clean 标签全转 artist。
+
 ## [0.7.4] - 2026-07-11
 
 ### 修复
