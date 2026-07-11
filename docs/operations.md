@@ -5,7 +5,7 @@
 ### Tag Strategy
 
 Custom images are published to GHCR with **two tags**: the release tag
-(`:v0.7.1`) and `:latest`. Production deploys **pin a release tag** via
+(`:v0.7.2`) and `:latest`. Production deploys **pin a release tag** via
 `KURA_IMAGE_TAG` in `.env`; development/rolling deploys track `:latest`.
 
 Version history also lives in git tags + `KURA_VERSION` (footer label) in `.env`.
@@ -17,7 +17,7 @@ CI (`docker-publish.yml`) builds and pushes on every `v*` tag. Deployers pull a
 pinned tag — no local build needed.
 
 ```bash
-# .env (project root): KURA_IMAGE_TAG=v0.7.1
+# .env (project root): KURA_IMAGE_TAG=v0.7.2
 # Run from infra/ — --env-file is REQUIRED for ${KURA_IMAGE_TAG} to resolve
 docker compose --env-file ../.env -f docker-compose.yml pull
 docker compose --env-file ../.env -f docker-compose.yml up -d
@@ -36,7 +36,7 @@ cd sidecar && docker build -t ghcr.io/aurorainic/kura-booru-worker:latest .
 ### Production Deployment
 
 ```bash
-# Pin a tag in .env (KURA_IMAGE_TAG=v0.7.1), then (run from infra/):
+# Pin a tag in .env (KURA_IMAGE_TAG=v0.7.2), then (run from infra/):
 docker compose --env-file ../.env -f docker-compose.yml pull
 docker compose --env-file ../.env -f docker-compose.yml up -d
 ```
@@ -156,12 +156,12 @@ The `seed-admin.ts` plugin will NOT overwrite an existing admin — it only crea
 ### Before Release
 - [ ] Code merged to main branch
 - [ ] CHANGELOG.md updated
-- [ ] `KURA_VERSION` in `.env` updated (e.g. `v0.7.1`)
+- [ ] `KURA_VERSION` in `.env` updated (e.g. `v0.7.2`)
 - [ ] `.env` has all required production variables
 
 ### Build & Deploy (CI pushes images on tag)
-- [ ] Git tag created and pushed (e.g. `git tag v0.7.1 && git push origin v0.7.1`) — triggers `docker-publish.yml` to push `:v0.7.1` + `:latest` to GHCR
-- [ ] Set `KURA_IMAGE_TAG=v0.7.1` in `.env` (project root; matches the git tag)
+- [ ] Git tag created and pushed (e.g. `git tag v0.7.2 && git push origin v0.7.2`) — triggers `docker-publish.yml` to push `:v0.7.2` + `:latest` to GHCR
+- [ ] Set `KURA_IMAGE_TAG=v0.7.2` in `.env` (project root; matches the git tag)
 - [ ] Validate: `./scripts/validate-env.sh prod` (rejects empty `KURA_IMAGE_TAG`)
 - [ ] Pull pinned images: `docker compose --env-file ../.env -f docker-compose.yml pull`
 - [ ] Deploy: `docker compose --env-file ../.env -f docker-compose.yml up -d`

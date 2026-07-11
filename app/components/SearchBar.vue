@@ -177,12 +177,13 @@ onUnmounted(() => {
           role="option"
           @mousedown.prevent="selectSuggestion(tag)"
           @mouseenter="selectedIndex = i"
+          :style="{ '--category-color': getTagCategoryVar(tag.category) }"
           :class="[
-            'flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors text-sm',
+            'suggest-item flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors text-sm',
             i === selectedIndex ? 'bg-[var(--accent-subtle)]' : '',
           ]"
         >
-          <span class="w-0.5 h-4 rounded-full flex-shrink-0" :style="{ background: getTagCategoryVar(tag.category) }" />
+          <span class="w-0.5 h-4 rounded-full flex-shrink-0 transition-[width] duration-[var(--duration-fast)]" :style="{ background: 'var(--category-color)' }" :class="{ 'w-1': i === selectedIndex }" />
           <span class="font-medium text-[var(--text-primary)]" :style="{ fontFamily: 'var(--font-display)' }">{{ tag.name }}</span>
           <span v-if="tag.translation" class="text-[0.75rem] text-[var(--text-muted)]">{{ tag.translation }}</span>
           <span class="ml-auto text-[0.6875rem] text-[var(--text-muted)] font-mono tabular-nums">{{ tag.post_count }}</span>

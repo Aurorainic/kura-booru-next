@@ -23,6 +23,11 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV KURA_VERSION=${KURA_VERSION}
+# nuxt.config reads process.env.NODE_ENV to decide whether @nuxt/devtools is
+# registered into the client bundle. The base node image leaves NODE_ENV unset
+# during `npm run build`, so devtools shipped to prod again after the v0.7.2
+# upgrade. Pin it here at the build stage — the production stage sets it again
+# for runtime, but the build-time value is what gates the client build.
 ENV NODE_ENV=production
 RUN test "${NODE_ENV:-}" = "production" || { echo "FATAL: build stage requires NODE_ENV=production, got '${NODE_ENV:-unset}' — this would ship a dev bundle to GHCR"; exit 1; }
 RUN npm run build

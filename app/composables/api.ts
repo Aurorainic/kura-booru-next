@@ -102,6 +102,12 @@ export async function fetchAutocomplete(prefix: string): Promise<Tag[]> {
   return fetchApi<Tag[]>('/tags/autocomplete', { q: prefix, per_page: 10 })
 }
 
+// 4.5 Popular tags (Top 10 by post_count) for the search exploration surface.
+export async function fetchPopularTags(ssrCookie?: string, perPage = 10): Promise<Tag[]> {
+  const res = await fetchApi<PaginatedResponse<Tag>>('/tags/', { sort: 'count', page: 1, per_page: perPage }, { ssrCookie })
+  return res.items
+}
+
 export async function fetchTag(name: string, ssrCookie?: string): Promise<Tag> {
   return fetchApi<Tag>(`/tags/${encodeURIComponent(name)}`, undefined, { ssrCookie })
 }

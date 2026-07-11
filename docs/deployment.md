@@ -33,7 +33,7 @@ For the complete list of all variables with descriptions and defaults, see [`inf
 | Variable | Description |
 |---|---|
 | `SITE_URL` | Your public site URL (e.g., `https://kura-booru.example.com`) |
-| `KURA_IMAGE_TAG` | Release tag to pin (e.g. `v0.7.1`); empty → `:latest` (rejected by `validate-env.sh prod`) |
+| `KURA_IMAGE_TAG` | Release tag to pin (e.g. `v0.7.2`); empty → `:latest` (rejected by `validate-env.sh prod`) |
 | `SECRET_KEY` | Generate with: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `POSTGRES_PASSWORD` | Database password |
 | `S3_ENDPOINT` / `S3_EXTERNAL_URL` | S3 storage endpoint (see S3 Configuration below) |

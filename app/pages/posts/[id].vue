@@ -195,7 +195,7 @@ useHead({
             <div v-if="isAdmin" class="mt-3 pt-3 border-t border-[var(--border-color)]">
               <form class="flex gap-1" @submit.prevent="addTag">
                 <input v-model="newTagName" type="text" placeholder="添加标签…" class="flex-1 text-xs px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]" />
-                <button type="submit" class="text-xs px-2.5 py-1.5 rounded-[var(--radius-sm)] bg-[var(--accent-color)] text-[var(--bg-primary)] font-medium">添加</button>
+                <button type="submit" class="btn-primary !text-xs !px-2.5 !py-1.5">添加</button>
               </form>
             </div>
           </div>
@@ -257,7 +257,7 @@ useHead({
           <div v-if="isAdmin" class="w-full mt-2">
             <form class="flex gap-1" @submit.prevent="addTag">
               <input v-model="newTagName" type="text" placeholder="添加标签…" class="flex-1 text-xs px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]" />
-              <button type="submit" class="text-xs px-2.5 py-1.5 rounded-[var(--radius-sm)] bg-[var(--accent-color)] text-[var(--bg-primary)] font-medium">添加</button>
+              <button type="submit" class="btn-primary !text-xs !px-2.5 !py-1.5">添加</button>
             </form>
           </div>
         </div>
@@ -306,15 +306,14 @@ useHead({
 
           <!-- Actions -->
           <div class="flex items-center gap-3 flex-wrap">
-            <a :href="originalUrl" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--radius-button)] font-medium text-sm transition-all hover:translate-y-[-1px] active:scale-95" style="background: var(--accent-color); color: var(--bg-primary);">
+            <a :href="originalUrl" target="_blank" rel="noopener noreferrer" class="btn-primary">
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
               原图
             </a>
             <button
               v-if="isAdmin"
               type="button"
-              class="inline-flex items-center gap-1.5 px-3 py-2 rounded-[var(--radius-sm)] text-sm font-medium transition-all hover:bg-[var(--color-danger)]/10"
-              style="color: var(--color-danger);"
+              class="btn-danger"
               :disabled="deleting"
               @click="deletePostAction"
             >
@@ -333,7 +332,7 @@ useHead({
             <button
               v-if="ratingSaveVisible"
               type="button"
-              class="text-xs px-2.5 py-1.5 rounded-[var(--radius-sm)] bg-[var(--accent-color)] text-[var(--bg-primary)] font-semibold active:scale-95 transition-transform"
+              class="btn-primary !text-xs !px-2.5 !py-1.5"
               :disabled="saving"
               @click="saveRating"
             >{{ saving ? '保存中…' : '保存' }}</button>
@@ -387,15 +386,14 @@ useHead({
 
           <!-- Actions -->
           <div class="flex items-center gap-3 flex-wrap">
-            <a :href="originalUrl" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-[var(--radius-button)] font-medium text-sm transition-all hover:translate-y-[-1px] active:scale-95" style="background: var(--accent-color); color: var(--bg-primary);">
+            <a :href="originalUrl" target="_blank" rel="noopener noreferrer" class="btn-primary">
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
               原图
             </a>
             <button
               v-if="isAdmin"
               type="button"
-              class="inline-flex items-center gap-1.5 px-3 py-2 rounded-[var(--radius-sm)] text-sm font-medium transition-all hover:bg-[var(--color-danger)]/10"
-              style="color: var(--color-danger);"
+              class="btn-danger"
               :disabled="deleting"
               @click="deletePostAction"
             >
@@ -414,7 +412,7 @@ useHead({
             <button
               v-if="ratingSaveVisible"
               type="button"
-              class="text-xs px-2.5 py-1.5 rounded-[var(--radius-sm)] bg-[var(--accent-color)] text-[var(--bg-primary)] font-semibold active:scale-95 transition-transform"
+              class="btn-primary !text-xs !px-2.5 !py-1.5"
               :disabled="saving"
               @click="saveRating"
             >{{ saving ? '保存中…' : '保存' }}</button>

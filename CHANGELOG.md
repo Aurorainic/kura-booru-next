@@ -18,11 +18,29 @@
 ## [0.7.2] - 2026-07-09
 
 ### 新增
-- **Theme 视觉与体验升级** (LAI-19) — 工序 1-6 全量落地：视觉系统、组件样式、交互体验重构。`PhotoGrid` 新增 `featured` 显式 opt-in prop（PR #13 修正为显式而非隐式）。
-- **Sharp 管线迁移** — `pipeline.ts` + `sidecar.py` 三项代码改动落地（缩略图/LQIP 生成链路收敛到 sharp）。
+
+- **视觉与体验升级 — Theme 工序 1-6（LAI-19）** — 基于 `docs/theme-design.md` 的设计规范，六道工序全量落地：
+  - **工序1 CSS 变量微调** — `--radius-chip=0` 与设计稿 Token 清单对齐。
+  - **工序2 动画系统升级** — 图片 `blurReveal` stagger 60ms 替代旧 cardIn；搜索结果计数 `countUp` 0.2s 延迟；统一的叙事顺序（图片→文字→标签）。
+  - **工序3 组件视觉升级** — TagBadge 加 `--category-color` 分类色竖条，hover 显示翻译；Pagination 选中态改为 accent 下划线；新增 `.btn-primary` / `.btn-ghost` / `.btn-danger` 三层按钮体系；SearchBar 建议项加分类色竖条。
+  - **工序4 布局重构** — PhotoGrid 首页第一张卡 `featured`（column-span:all 跨列 + 高度上限）；详情页三栏 → 沉浸式堆叠（图全宽 + 标签/信息滚动到下方 + 顶栏快速跳转按钮）；导航极简化（logo + 大搜索框 + 主题/强调色 + `...` 溢出菜单，滚动 >100px 收缩 56→44px）；标签页表格→标签星座图（展示字体 + 分类色文字 + hover 显示翻译/danbooru_name）；搜索页无查询时 60% 居中搜索框 + 最近搜索 + 热门标签 Top10。
+  - **工序5 交互增强** — `←` `→` 键在画廊/标签/搜索页翻页；最近搜索通过 localStorage 存储（`kura-recent-searches`）；新增 `fetchPopularTags` API。
+  - **工序6 字体系统** — `@font-face KuraDisplay`（`font-display:swap`），字体文件缺失时静默回退系统 CJK 栈；`--font-display` 前置 KuraDisplay / HarmonyOS Sans / Source Han Sans。
+
+- **Sharp 管线迁移（LAI-20 / PR #12）** — 将剩余 Python sidecar 图像元数据处理迁移到 Node sharp pipeline：
+  - Sharp 通过 `img.metadata()` 重新推导 width/height/mime，Post insert 和 S3 ContentType 使用探测值，sharp 不可用时回退 Pillow 值。
+  - 修复 description 被 sidecar 提取但从未写入 DB 的静默 bug。
+  - 记录 phash 继续留在 imagehash（不迁移）的决策原因：sharp/libvips 与 Pillow Lanczos 子像素差异导致 phash 漂移 6-14 Hamming bits，达到/超过去重阈值 8，迁移会破坏跨时代去重。
 
 ### 变更
-- 镜像 tag 策略沿用 v0.7.1 的 `KURA_IMAGE_TAG` pin + `--env-file` 强制要求。
+
+- **`docs/roadmap.md`** — 更新已完成项目。
+- **`infra/.env.example`** — `KURA_VERSION` 升级为 `v0.7.2`。
+- **`PhotoGrid.vue`** — `featured` 改为显式 opt-in prop，不再从 `currentPage` 派生，修复搜索页/标签页第一张卡永久跨列。
+
+### 修复
+
+- **PhotoGrid 跨列泄露** — `/search` 与 `/tags/[name]` 未传 `currentPage` 导致默认值 1 触发 `featured` 计算属性，所有列表页第一张卡永久 `column-span:all`。改为显式 `featured` prop + 首页传 `:featured="page === 1"`。
 
 ## [0.7.1] - 2026-07-07
 

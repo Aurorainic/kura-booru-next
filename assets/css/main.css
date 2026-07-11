@@ -1,6 +1,26 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════════════
+   6 — Display font (self-hosted woff2, optional)
+   Drop HarmonyOS Sans / Source Han Sans subsets into /public/fonts/
+   (display-latin.woff2 + display-cjk.woff2) to activate. Until then
+   --font-display falls through to the system CJK stack already in the
+   token below — no layout shift, no broken glyphs.
+   font-display: swap keeps text visible during the (optional) fetch.
+   ═══════════════════════════════════════════════════════════════ */
+@font-face {
+  font-family: "KuraDisplay";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/display-latin.woff2") format("woff2"),
+       url("/fonts/display-cjk.woff2") format("woff2");
+  /* ponytail: urls 404 until font files are added — browsers silently fall
+     back to the next family in the --font-display stack, so this is a
+     no-op upgrade path, not a regression. */
+}
+
+/* ═══════════════════════════════════════════════════════════════
    Kura Booru v2 — Design Token System
    Modernized Booru: booru skeleton + modern CSS
    ═══════════════════════════════════════════════════════════════ */
@@ -43,8 +63,9 @@
   --color-tag-meta: oklch(60% 0.01 250);
 
   /* ── Radii ── */
-  --radius-image: 4px;
-  --radius-button: 2px;
+  --radius-image: 4px;       /* 图片卡片 */
+  --radius-button: 2px;      /* 按钮 */
+  --radius-chip: 0;          /* 筛选器(下划线风格,无圆角) */
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
@@ -74,7 +95,7 @@
   --space-grid-gap: 0.5rem;
 
   /* ── Fonts — single unified system stack for all text ── */
-  --font-display: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
+  --font-display: "KuraDisplay", "HarmonyOS Sans", "Source Han Sans SC", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
   --font-body: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", "Consolas", monospace;
 
@@ -348,6 +369,7 @@ body::before {
   border: none;
   text-decoration: none;
   cursor: pointer;
+  position: relative;
   transition: color var(--duration-fast), background var(--duration-fast);
 }
 .page-btn:hover {
@@ -379,17 +401,31 @@ body::before {
   background: none;
   text-decoration: none;
   cursor: pointer;
-  transition: color var(--duration-fast), background var(--duration-fast);
+  position: relative;
+  transition: color var(--duration-fast);
+}
+.page-num::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 2px;
+  height: 2px;
+  background: var(--accent-color);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--duration-fast) var(--ease-out);
 }
 .page-num:hover {
   color: var(--text-primary);
-  background: var(--accent-subtle);
 }
+.page-num:hover::after { transform: scaleX(0.4); }
 .page-num.active {
-  color: var(--bg-primary);
-  background: var(--accent-color);
+  color: var(--accent-color);
+  background: none;
   font-weight: 600;
 }
+.page-num.active::after { transform: scaleX(1); }
 
 .page-select {
   appearance: none;
@@ -604,6 +640,87 @@ body::before {
 main {
   animation: pageIn var(--duration-normal) var(--ease-out);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Button tiers — primary / ghost / danger
+   下划线即选中:ghost 与 danger 用文字+下划线/描边,不与实心 primary 争夺注意力
+   ═══════════════════════════════════════════════════════════════ */
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-color);
+  color: var(--bg-primary);
+  border: none;
+  border-radius: var(--radius-button);
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: 0.5rem 1.25rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out),
+              transform var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+}
+.btn-primary:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-accent-glow);
+}
+.btn-primary:active { transform: translateY(0); }
+.btn-primary:disabled { opacity: 0.6; cursor: default; transform: none; box-shadow: none; }
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--accent-color);
+  font-weight: 500;
+  font-size: 0.875rem;
+  padding: 4px 0;
+  text-decoration: none;
+  cursor: pointer;
+  position: relative;
+  transition: color var(--duration-fast);
+}
+.btn-ghost::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 100%;
+  height: 2px;
+  background: var(--accent-color);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+.btn-ghost:hover { color: var(--accent-hover); }
+.btn-ghost:hover::after { transform: scaleX(0.4); }
+
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-button);
+  color: var(--color-danger);
+  font-weight: 500;
+  font-size: 0.875rem;
+  padding: 0.5rem 1rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color var(--duration-fast), background var(--duration-fast);
+}
+.btn-danger:hover {
+  border-color: var(--color-danger);
+  background: oklch(62% 0.2 25 / 0.08);
+}
+.btn-danger:disabled { opacity: 0.6; cursor: default; }
 
 /* ── Reduced motion ── */
 @media (prefers-reduced-motion: reduce) {

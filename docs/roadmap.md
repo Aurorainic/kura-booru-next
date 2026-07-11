@@ -2,16 +2,16 @@
 
 ## 待做功能
 
-- [ ] LQIP 生成（sharp 流水线在 Node pipeline 生成 20×20 webp blur → base64 → DB `lqip` 列；详情页占位也从 CSS-blur-thumb 改为真 base64 LQIP；不回填历史作品）
-- [ ] 图片 modal pan/zoom（gallery `ImageModal.vue` 修活加 v-model + pinch 用于 PhotoCard 点击弹出；详情页内联 `<Teleport>` modal 也补上 wheel zoom + drag pan + pinch）
-- [ ] 键盘导航（J/K 翻页，/ 聚焦搜索，G+T 跳转标签，? 弹出快捷键 cheatsheet modal；输入框守卫 `e.target === document.body`；SearchBar 右侧 mac 键帽 chip 显示 ⌘/Ctrl，head 内联脚本写 `kura-platform` cookie 实现 SSR anti-flash）
-- [ ] 滚动位置记忆（`app/router.options.ts` 的 `scrollBehavior(to, from, savedPosition)` + sessionStorage 按 `from.path` 存 scrollY；详情页返回按钮带 `?page=` 双保险）
-- [ ] 最近搜索（localStorage 5 条历史）
 - [ ] 相关标签（标签详情页展示共现 Top 10）
 - [ ] 端到端测试
 - [ ] 数据库定期备份 cron
 - [ ] `random_post` 深分页优化（TABLESAMPLE 或随机 UUID）
 - [ ] SSR 缓存启用（需先解决 Vary: Cookie + 缓存 key 问题）
+
+### v0.7.2
+
+- [x] **视觉与体验升级 — Theme 工序 1-6** — CSS 变量微调、动画系统升级、组件视觉升级、布局重构（PhotoGrid featuring、详情页沉浸式堆叠、导航极简+收缩、标签星座图、搜索页无查询态）、交互增强（← → 键翻页、最近搜索 localStorage、热门标签 API）、字体系统（KuraDisplay @font-face）— v0.7.2
+- [x] **Sharp 管线迁移** — width/height/mime 由 sharp `img.metadata()` 重新推导，废弃 sidecar Pillow 元数据；修复 description 未写入 DB 的 bug；phash 继续保留在 imagehash（sharp/Pillow 差异 6-14 bits，高于去重阈值 8）— v0.7.2
 
 ## 已完成功能
 
