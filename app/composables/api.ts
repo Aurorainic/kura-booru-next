@@ -38,16 +38,10 @@ export async function fetchApi<T>(
     ...((options?.headers as Record<string, string>) || {}),
   }
 
-  const ssrCookie = options?.ssrCookie
-  if (ssrCookie) {
-    headers['Cookie'] = ssrCookie
-  }
-
-  const { ssrCookie: _sc, ...fetchOptions } = options || {}
   const isBrowser = typeof window !== 'undefined'
 
   const response = await fetch(url, {
-    ...fetchOptions,
+    ...options,
     headers,
     ...(isBrowser ? { credentials: 'include' as RequestCredentials } : {}),
   })

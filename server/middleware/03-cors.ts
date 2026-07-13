@@ -9,11 +9,17 @@ export default defineEventHandler(async (event) => {
 
   // ponytail: extension origins allowed without credentials — they use X-Api-Key.
   // Only the site origin gets Allow-Credentials (cookie auth).
-  const isSiteOrigin = origin === siteUrl
-  const isExtOrigin = origin && (
-    origin.startsWith('chrome-extension://') ||
-    origin.startsWith('moz-extension://')
+  // S10: env-controlled allowlist replaces the `chrome-extension://*` /
+  // `moz-extension://*` prefix wildcard. Comma-separated exact origins.
+  const extOriginSet = new Set(
+    (process.env.ALLOWED_EXT_ORIGINS || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean),
   )
+
+  const isSiteOrigin = origin === siteUrl
+  const isExtOrigin = origin ? extOriginSet.has(origin) : false
 
   if (isSiteOrigin || isExtOrigin) {
     const headers: Record<string, string> = {

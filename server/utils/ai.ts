@@ -184,21 +184,21 @@ export async function aiProcessTagsForPost(postId: string, tagIds: string[]): Pr
   let newClassifications: TagClassification[] = []
   if (uncached.length) {
     newClassifications = await classifyTags(uncached)
-    // Cache results
-    for (const c of newClassifications) {
-      await db.insert(tagKnowledge).values({
+    if (newClassifications.length) {
+      // Bulk upsert cache: single INSERT ... ON CONFLICT covers all rows
+      await db.insert(tagKnowledge).values(newClassifications.map(c => ({
         name: c.name,
         danbooruName: c.danbooru_name,
         type: c.category,
         translation: c.translation,
         source: 'ai',
-      }).onConflictDoUpdate({
+      }))).onConflictDoUpdate({
         target: tagKnowledge.name,
         set: {
-          danbooruName: c.danbooru_name,
-          type: c.category,
-          translation: c.translation,
-          source: 'ai',
+          danbooruName: sql`excluded.danbooru_name`,
+          type: sql`excluded.type`,
+          translation: sql`excluded.translation`,
+          source: sql`excluded.source`,
           updatedAt: new Date(),
         },
       })
@@ -254,31 +254,37 @@ export async function reprocessTags(mode: 'unprocessed' | 'all'): Promise<{ proc
   for (const batch of chunk(allTags, 50)) {
     try {
       const classifications = await classifyTags(batch.map(t => t.name))
-      for (const c of classifications) {
-        // Upsert tag_knowledge
-        await db.insert(tagKnowledge).values({
+      if (classifications.length) {
+        // Bulk upsert tag_knowledge for the whole batch
+        await db.insert(tagKnowledge).values(classifications.map(c => ({
           name: c.name,
           danbooruName: c.danbooru_name,
           type: c.category,
           translation: c.translation,
           source: 'ai',
-        }).onConflictDoUpdate({
+        }))).onConflictDoUpdate({
           target: tagKnowledge.name,
           set: {
-            danbooruName: c.danbooru_name,
-            type: c.category,
-            translation: c.translation,
-            source: 'ai',
+            danbooruName: sql`excluded.danbooru_name`,
+            type: sql`excluded.type`,
+            translation: sql`excluded.translation`,
+            source: sql`excluded.source`,
             updatedAt: new Date(),
           },
         })
-        // Update tag
-        await db.update(tags).set({
-          category: c.category,
-          translation: c.translation || null,
-          danbooruName: c.danbooru_name || null,
-          aiProcessedAt: new Date(),
-        }).where(eq(tags.name, c.name))
+        // Bulk update tags for the whole batch via VALUES + UPDATE FROM
+        const values = classifications.map(c =>
+          sql`(${c.name}::text, ${c.category}::text, ${c.translation || null}::text, ${c.danbooru_name || null}::text)`,
+        )
+        await db.execute(sql`
+          UPDATE tags SET
+            category = v.category,
+            translation = v.translation,
+            danbooru_name = v.danbooru_name,
+            ai_processed_at = NOW()
+          FROM (VALUES ${sql.join(values, sql`, `)}) AS v(name, category, translation, danbooru_name)
+          WHERE tags.name = v.name
+        `)
       }
       processed += classifications.length
       failed += Math.max(0, batch.length - classifications.length)

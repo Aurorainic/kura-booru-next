@@ -468,29 +468,30 @@ bot.on('message:text', async (ctx) => {
 
     const chatId = ctx.chat?.id?.toString() || 'unknown'
 
-    // Process each URL (cap at 10)
+    // Process each URL (cap at 10). Enqueue jobs in parallel (Redis LPUSH is
+    // atomic; semaphore still serializes per chatId), then send reply + start
+    // poll in sequence — Telegram's Bot API rate-limits bursts of ctx.reply.
+    // ponytail: ctx.reply kept serial — switching to Promise.all risks 429.
     const toProcess = urls.slice(0, 10)
-    const results: string[] = []
+    const queued: { url: string; jobId: string; source: ReturnType<typeof identifySource> | ReturnType<typeof resolveSourceOrOther> }[] = []
 
-    for (const url of toProcess) {
+    await Promise.all(toProcess.map(async (url) => {
       const source = identifySource(url) || resolveSourceOrOther(url)
-
-      // Acquire semaphore only for enqueue (T-P3-3)
       await acquireSemaphore(chatId)
       try {
         const jobId = await enqueueJob({ url, source_site: source.site, source_id: source.id })
-        results.push(jobId)
-
-        // Reply with queue status
-        const msg = await ctx.reply(t('downloading', ctx.config.lang))
-
-        // Fire-and-forget polling (T-P0-2)
-        pollAndNotify(ctx.api, chatId, msg.message_id, jobId, ctx.config.lang).catch(
-          err => console.error('[bot] poll error:', err),
-        )
+        queued.push({ url, jobId, source })
       } finally {
         releaseSemaphore(chatId)
       }
+    }))
+
+    for (const { jobId } of queued) {
+      const msg = await ctx.reply(t('downloading', ctx.config.lang))
+      // Fire-and-forget polling (T-P0-2)
+      pollAndNotify(ctx.api, chatId, msg.message_id, jobId, ctx.config.lang).catch(
+        err => console.error('[bot] poll error:', err),
+      )
     }
 
     if (toProcess.length > 1) {
@@ -507,18 +508,24 @@ bot.on('message:photo', async (ctx) => {
     if (urls.length === 0) return
 
     const chatId = ctx.chat?.id?.toString() || 'unknown'
-    for (const url of urls.slice(0, 10)) {
+    const queued: { jobId: string }[] = []
+
+    await Promise.all(urls.slice(0, 10).map(async (url) => {
       const source = identifySource(url) || resolveSourceOrOther(url)
       await acquireSemaphore(chatId)
       try {
         const jobId = await enqueueJob({ url, source_site: source.site, source_id: source.id })
-        const msg = await ctx.reply(t('downloading', ctx.config.lang))
-        pollAndNotify(ctx.api, chatId, msg.message_id, jobId, ctx.config.lang).catch(
-          err => console.error('[bot] poll error:', err),
-        )
+        queued.push({ jobId })
       } finally {
         releaseSemaphore(chatId)
       }
+    }))
+
+    for (const { jobId } of queued) {
+      const msg = await ctx.reply(t('downloading', ctx.config.lang))
+      pollAndNotify(ctx.api, chatId, msg.message_id, jobId, ctx.config.lang).catch(
+        err => console.error('[bot] poll error:', err),
+      )
     }
   } catch (err) { console.error('[bot] photo handler error:', err) }
 })

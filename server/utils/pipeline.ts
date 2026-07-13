@@ -150,17 +150,16 @@ export async function processResult(result: SidecarResult): Promise<PipelineResu
     let postId: string
 
     await db.transaction(async (tx: any) => {
-      // Upsert tags inside transaction
-      for (const name of tagNames) {
-        const [tag] = await tx
-          .insert(tags)
-          .values({ name, category: 'general' as any, postCount: 1 })
+      // Bulk upsert tags in a single statement; postCount++ for both new and existing rows
+      if (tagNames.length > 0) {
+        const rows = await tx.insert(tags)
+          .values(tagNames.map(name => ({ name, category: 'general' as any, postCount: 1 })))
           .onConflictDoUpdate({
             target: tags.name,
             set: { postCount: sql`${tags.postCount} + 1` },
           })
-          .returning({ id: tags.id })
-        if (tag?.id) tagIds.push(tag.id)
+          .returning({ id: tags.id, name: tags.name })
+        for (const r of rows) tagIds.push(r.id)
       }
 
       // Artist tag: dedicated upsert with category=artist

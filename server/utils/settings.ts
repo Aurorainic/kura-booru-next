@@ -49,7 +49,8 @@ export async function isPrivateHost(hostname: string): Promise<boolean> {
 
     if (type === 6) {
       // IPv6
-      if (ip === '::1') return true
+      const lower = ip.toLowerCase()
+      if (lower === '::1' || lower === '::') return true
       // IPv4-mapped: ::ffff:x.x.x.x — extract and check IPv4
       const v4Mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
       if (v4Mapped && v4Mapped[1]) {
@@ -59,6 +60,10 @@ export async function isPrivateHost(hostname: string): Promise<boolean> {
       if (/^f[c-d]/i.test(ip)) return true
       // Link-local: fe80::/10
       if (/^fe[89ab]/i.test(ip)) return true
+      // Multicast: ff00::/8
+      if (/^ff/i.test(ip)) return true
+      // Documentation: 2001:db8::/32
+      if (/^2001:db8:/i.test(ip)) return true
       return false
     }
 
@@ -91,6 +96,14 @@ function isPrivateIPv4(ip: string): boolean {
   if (parts[0] === 172 && (parts[1] ?? 0) >= 16 && (parts[1] ?? 0) <= 31) return true
   if (parts[0] === 192 && parts[1] === 168) return true
   if (parts[0] === 169 && parts[1] === 254) return true
+  // CGNAT 100.64.0.0/10
+  if (parts[0] === 100 && (parts[1] ?? 0) >= 64 && (parts[1] ?? 0) <= 127) return true
+  // Multicast 224.0.0.0/4
+  if ((parts[0] ?? 0) >= 224 && (parts[0] ?? 0) <= 239) return true
+  // Reserved 240.0.0.0/4 (includes 255.255.255.255 broadcast)
+  if ((parts[0] ?? 0) >= 240) return true
+  // Benchmark 198.18.0.0/15
+  if (parts[0] === 198 && (parts[1] === 18 || parts[1] === 19)) return true
   return false
 }
 

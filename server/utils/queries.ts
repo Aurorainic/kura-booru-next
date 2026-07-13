@@ -222,21 +222,25 @@ export async function searchPosts(q: string, opts: {
   const perPage = clampPerPage(opts.perPage)
   const offset = (page - 1) * perPage
 
-  // Resolve include tags (B-P3-7: separate IDs for SQL, names for response)
+  // Resolve include tags (B-P3-7: separate IDs for SQL, names for response) — single IN(.) lookup
   const resolvedIncludeIds: string[] = []
   const resolvedIncludeNames: string[] = []
   const unresolved: string[] = []
-  for (const name of parsed.includeTags) {
-    const tag = await resolveTag(name)
-    if (tag) { resolvedIncludeIds.push(tag.id); resolvedIncludeNames.push(tag.name) }
-    else unresolved.push(name)
-  }
-
-  // Resolve exclude tags
-  const resolvedExcludeIds: string[] = []
-  for (const name of parsed.excludeTags) {
-    const tag = await resolveTag(name)
-    if (tag) resolvedExcludeIds.push(tag.id)
+  const allNames = [...parsed.includeTags, ...parsed.excludeTags]
+  if (allNames.length) {
+    const rows = await db.select({ id: tags.id, name: tags.name })
+      .from(tags)
+      .where(inArray(tags.name, allNames))
+    const byName = new Map(rows.map(r => [r.name, r]))
+    for (const name of parsed.includeTags) {
+      const tag = byName.get(name)
+      if (tag) { resolvedIncludeIds.push(tag.id); resolvedIncludeNames.push(tag.name) }
+      else unresolved.push(name)
+    }
+    for (const name of parsed.excludeTags) {
+      const tag = byName.get(name)
+      if (tag) resolvedExcludeIds.push(tag.id)
+    }
   }
 
   // If no include tags resolved and we have unresolved, return empty

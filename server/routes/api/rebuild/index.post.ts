@@ -11,18 +11,17 @@ export default defineEventHandler(async (event) => {
   if (!body?.paths?.length) throw createError({ statusCode: 400, statusMessage: 'paths required' })
 
   const siteUrl = process.env.SITE_URL || 'http://localhost:3000'
-  const purged: string[] = []
-  const errors: string[] = []
 
-  for (const path of body.paths) {
+  const results = await Promise.all(body.paths.map(async (path) => {
     try {
       const resp = await fetch(`${siteUrl}${path}`, { method: 'PURGE' })
-      if (resp.ok || resp.status === 204 || resp.status === 404) purged.push(path)
-      else errors.push(path)
+      return resp.ok || resp.status === 204 || resp.status === 404 ? { ok: true, path } : { ok: false, path }
     } catch {
-      errors.push(path)
+      return { ok: false, path }
     }
-  }
+  }))
+  const purged = results.filter(r => r.ok).map(r => r.path)
+  const errors = results.filter(r => !r.ok).map(r => r.path)
 
   return { purged, errors }
 })

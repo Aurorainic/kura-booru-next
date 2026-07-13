@@ -16,7 +16,6 @@ const props = withDefaults(defineProps<{
 
 const previewUrl = getPreviewUrl(props.post)
 const lqip = props.post.lqip
-const showLqip = ref(false)
 const imgLoaded = ref(false)
 const modalOpen = ref(false)
 
@@ -27,8 +26,8 @@ function onCardClick(e: MouseEvent) {
     modalOpen.value = true
   }
 }
-
-onMounted(() => { showLqip.value = true })
+// ponytail: lqip renders during SSR — base64 PNG in HTML. Trivial cost vs
+// the saved client-only flicker the previous showLqip gate added.
 </script>
 
 <template>
@@ -44,7 +43,7 @@ onMounted(() => { showLqip.value = true })
     <div class="img-container" :style="{ aspectRatio: `${post.width} / ${post.height}` }">
       <!-- LQIP blur placeholder -->
       <img
-        v-if="lqip && showLqip"
+        v-if="lqip"
         :src="lqip"
         alt=""
         aria-hidden="true"

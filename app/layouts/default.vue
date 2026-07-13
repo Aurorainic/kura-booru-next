@@ -96,6 +96,9 @@ const ATTR_RE = /(\w[\w-]*)=(?:"([^"]*)"|'([^']*)'|(\S+))/g
 const SCRIPT_CLOSE = '<' + '/script>'
 
 const headInjectEntries = computed(() => {
+  // S7: head_inject is admin-trusted but still scope it to admin viewers —
+  // anonymous visitors don't need analytics/tracking scripts.
+  if (!isAdmin.value) return {}
   const html = headInject.value
   if (!html) return {}
   const scripts: Record<string, string>[] = []

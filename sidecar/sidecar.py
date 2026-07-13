@@ -105,8 +105,10 @@ def setup_gallery_dl():
     config.set(("extractor",), "sleep-request", [0.5, 1.5])
     config.set(("extractor",), "image-range", "1-1")  # first image only
     config.set(("extractor",), "parallel", 1)
-    # SSRF: limit redirect hops (gallery-dl uses requests; no per-hop IP filter available)
-    config.set((), "max-redirects", 5)
+    # SSRF: limit redirect hops (gallery-dl uses requests; no per-hop IP filter available).
+    # ponytail: max-redirects=1 — chained redirects are the standard DNS-rebind
+    # vector. Legitimate single-hop 301/302 still works; chained hops are blocked.
+    config.set((), "max-redirects", 1)
 
     pixiv_refresh = os.environ.get("PIXIV_REFRESH_TOKEN", "")
     pixiv_phpsessid = os.environ.get("PIXIV_PHPSESSID", "")
