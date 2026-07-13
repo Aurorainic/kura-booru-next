@@ -4,5 +4,7 @@ export default defineEventHandler(async (event) => {
   if (!q) return []
   const cookie = getHeader(event, 'cookie') || ''
   const isAdmin = await getIsAdmin(cookie)
-  return autocompleteTags(q, isAdmin, Number(query.per_page) || 10)
+  // Routes through redis-search when MEILI_ENABLED=true, else SQL ILIKE
+  // (autocompleteTags / suggestTags share the same SQL fallback).
+  return suggestTags(q, isAdmin, Number(query.per_page) || 10)
 })
