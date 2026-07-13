@@ -8,7 +8,7 @@ export default defineEventHandler(async (event) => {
   const isAdmin = await getIsAdmin(cookie)
   if (!isAdmin) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
 
-  const cookies = Object.fromEntries(cookie.split(';').map(p => { const [k, ...v] = p.trim().split('='); return [k, v.join('=')] }))
+  const cookies = parseCookies(cookie)
   const token = cookies['kura_admin_session']
   if (!token) throw createError({ statusCode: 401, statusMessage: 'No session' })
 

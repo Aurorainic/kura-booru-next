@@ -1,8 +1,14 @@
 export default defineEventHandler(async (event) => {
   const apiKey = getHeader(event, 'x-api-key')
-  if (!await checkApiKey(apiKey)) throw createError({ statusCode: 401, statusMessage: 'API key required' })
+  const cookie = getHeader(event, 'cookie') || ''
+  const isAdmin = await getIsAdmin(cookie)
+  // API key OR admin session. Same gate as /api/rebuild — task results contain
+  // source URLs/IDs and error strings, so a leaked key = full read access.
+  if (!await checkApiKey(apiKey) && !isAdmin) {
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
+  }
 
-  const id = event.context.params?.id as string
+  const id = event.context.params?.id
 
   // Check job status
   const jobStatus = await redis.get(`kura:job_status:${id}`)

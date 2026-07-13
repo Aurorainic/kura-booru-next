@@ -172,7 +172,8 @@ export async function changeAdminPassword(adminId: string, newPassword: string) 
   adminCache.clear()
 }
 
-function parseCookies(header: string): Record<string, string> {
+// ponytail: exposed so other routes (e.g. change-password) can avoid re-implementing cookie parsing.
+export function parseCookies(header: string): Record<string, string> {
   const cookies: Record<string, string> = {}
   for (const part of header.split(';')) {
     const [k, ...v] = part.trim().split('=')

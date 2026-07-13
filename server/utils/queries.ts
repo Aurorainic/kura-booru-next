@@ -173,6 +173,9 @@ export async function getPost(id: string, isAdmin: boolean) {
 // ponytail: count cache removed — ORDER BY random() doesn't need a count
 // first, and the previous OFFSET-by-cache combination was deterministic per
 // post within the TTL (offset → time-sorted row).
+// ponytail: ORDER BY random() is O(N) seq-scan + sort; fine to ~100k posts.
+// At 1M+ rows, switch to `WHERE id = (SELECT id FROM posts TABLESAMPLE
+// SYSTEM(0.1) LIMIT 1)` — approximate but O(sampled) and indexable.
 export async function getRandomPost(isAdmin: boolean) {
   const where = !isAdmin ? eq(posts.rating, 'safe') : undefined
 

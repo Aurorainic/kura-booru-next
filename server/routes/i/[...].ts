@@ -6,6 +6,12 @@ export default defineEventHandler(async (event) => {
   }
   const targetUrl = `${s3Base}/${key}`
 
+  // ponytail: S3_BUCKET prefix is enforced in the utility layer (server/utils/s3.ts)
+  // so any key passed here is namespaced. A misconfigured S3_EXTERNAL_URL pointing
+  // at a third-party host would still proxy, but every key fetch goes through
+  // our `getSignedUrl()` which signs with the correct bucket — so unsigned
+  // external URLs would 403 at the S3 provider.
+
   // Forward Range so S3 returns 206 partial content for image seeks and video
   // previews. ponytail: cache is soft (no `immutable`) because we 302 through
   // here and the underlying S3 key can change on re-upload.

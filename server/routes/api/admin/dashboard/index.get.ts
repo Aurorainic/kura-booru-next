@@ -1,11 +1,27 @@
 import { sql } from 'drizzle-orm'
 
+// API-key callers get the same 30/min/IP rate limit + audit log as
+// posts/[id].patch.ts. Admin cookie sessions skip both.
+const API_KEY_RATE_LIMIT = 30
+const API_KEY_RATE_WINDOW = 60_000
+
 export default defineEventHandler(async (event) => {
   const cookie = getHeader(event, 'cookie') || ''
   const apiKey = getHeader(event, 'x-api-key')
   const isAdmin = await getIsAdmin(cookie)
   const hasApiKey = await checkApiKey(apiKey)
   if (!isAdmin && !hasApiKey) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
+
+  if (!isAdmin && hasApiKey) {
+    const ip = getRequestIP(event, { xForwardedFor: true }) || 'unknown'
+    const rlKey = `apikey:rate:${ip}`
+    const count = await redis.incr(rlKey)
+    if (count === 1) await redis.expire(rlKey, Math.ceil(API_KEY_RATE_WINDOW / 1000))
+    if (count > API_KEY_RATE_LIMIT) {
+      throw createError({ statusCode: 429, statusMessage: 'Rate limit exceeded' })
+    }
+    console.warn('[audit] api-key dashboard read', { ip })
+  }
 
   // Overview
   const [postCount, tagCount, postTagCount, fileSizeSum, sourceBreakdown, ratingBreakdown, topTags, recentPosts] = await Promise.all([
