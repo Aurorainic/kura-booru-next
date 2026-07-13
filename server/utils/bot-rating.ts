@@ -74,22 +74,42 @@ export async function confirmRating(
   lang: string,
   label: string,
 ) {
+  const baseUrl = process.env.INTERNAL_API_URL || `http://localhost:${process.env.PORT || 3000}`
+  const apiKey = process.env.BACKEND_API_KEY
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (apiKey) headers['x-api-key'] = apiKey
+
+  // Write rating to DB first. On failure, surface a ⚠️ message — do NOT fall
+  // through to the ✅ success text (would give a false confirmation). The old
+  // code had a bare `redis.set` after this that threw TypeError (redis never
+  // imported — Nitro auto-import rewrites other files' redis to `redis$1`, but
+  // this module had no import so it stayed bare `undefined`), which aborted
+  // confirmRating before the editMessageText that removes the inline keyboard.
+  // INTERNAL_API_URL already includes /api (default http://127.0.0.1:3000/api,
+  // see nuxt.config.ts runtimeConfig + logout.post.ts same convention).
+  // Do NOT add another /api here — that produces /api/api/posts/:id → 404.
   try {
-    const baseUrl = process.env.INTERNAL_API_URL || `http://localhost:${process.env.PORT || 3000}`
-    const apiKey = process.env.BACKEND_API_KEY
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (apiKey) headers['x-api-key'] = apiKey
-    const resp = await fetch(`${baseUrl}/api/posts/${postId}`, {
+    const resp = await fetch(`${baseUrl}/posts/${postId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ rating }),
     })
-    if (!resp.ok) console.error('[bot-rating] PATCH failed:', resp.status)
+    if (!resp.ok) {
+      console.error(`[bot-rating] PATCH failed: ${resp.status} for post ${postId} rating=${rating}`)
+      await api.editMessageText(
+        chatId, messageId,
+        `⚠️ ${lb('rating', lang)} ${rating} — DB update failed (${resp.status})`,
+      ).catch(() => {})
+      return
+    }
   } catch (err) {
-    console.error('[bot-rating] PATCH failed:', err)
+    console.error(`[bot-rating] PATCH error for post ${postId}:`, err)
+    await api.editMessageText(
+      chatId, messageId,
+      `⚠️ ${lb('rating', lang)} ${rating} — DB unreachable`,
+    ).catch(() => {})
+    return
   }
-
-  await (redis as any).set(`kura:confirmed_posts:${postId}`, rating, 'EX', 86400)
 
   const emoji = RATING_EMOJI[rating] || ''
   const name = RATING_LABELS[lang]?.[rating] || rating
