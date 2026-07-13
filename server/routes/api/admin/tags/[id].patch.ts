@@ -17,6 +17,14 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'No fields to update' })
   }
 
+  // Validate category against the PG enum — bad values would 500 from the DB layer.
+  // ponytail: hardcoded list mirrors the enum in app/types; if it grows, derive
+  // from the drizzle schema's text('category') annotation or a shared constant.
+  const VALID_CATEGORIES = new Set(['artist', 'character', 'copyright', 'general', 'meta'])
+  if (body.category !== undefined && !VALID_CATEGORIES.has(body.category)) {
+    throw createError({ statusCode: 400, statusMessage: `Invalid category: ${body.category}` })
+  }
+
   // Build update payload
   const updateData: Record<string, any> = {}
   if (body.category !== undefined) updateData.category = body.category

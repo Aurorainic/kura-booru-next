@@ -8,14 +8,11 @@ export default defineEventHandler(async (event) => {
   const id = event.context.params?.id as string
   if (!id) throw createError({ statusCode: 400, statusMessage: 'Post ID required' })
 
-  const post = await db.select().from(posts).where(eq(posts.id, id)).limit(1)
-  if (!post[0]) throw createError({ statusCode: 404, statusMessage: 'Not found' })
-
-  // B-P3-1: Transactional delete with bulk post_count update
-  // Run DB transaction first, then delete S3 objects (prefer orphaned S3 over broken DB refs)
   const existingPost = await db.select().from(posts).where(eq(posts.id, id)).limit(1)
   if (!existingPost[0]) throw createError({ statusCode: 404, statusMessage: 'Not found' })
 
+  // B-P3-1: Transactional delete with bulk post_count update
+  // Run DB transaction first, then delete S3 objects (prefer orphaned S3 over broken DB refs)
   await db.transaction(async (tx: any) => {
     // Bulk decrement tag post_counts
     await tx.update(tags).set({

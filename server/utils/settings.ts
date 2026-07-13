@@ -117,8 +117,3 @@ export async function checkApiKey(providedKey: string | undefined): Promise<bool
   if (a.length !== b.length) return false
   return crypto.timingSafeEqual(a, b)
 }
-
-// Validate URL-patterns match[1] / match[2] — null-safe string extraction
-export function matchGroup(match: RegExpMatchArray | null, index: number): string {
-  return match?.[index] || ''
-}

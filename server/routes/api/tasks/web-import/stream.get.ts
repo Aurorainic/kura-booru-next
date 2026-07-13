@@ -28,10 +28,15 @@ export default defineEventHandler(async (event) => {
             await redis.del(`kura:results:${taskIds[i]}`)
 
             let status: string, detail: string
-            if (parsed.status === 'ok') {
+            // Pipeline writes { success, failed, too_large, duplicate } (see processResult in pipeline.ts)
+            if (parsed.status === 'success') {
               status = 'success'
               detail = '处理完成'
               succeeded++
+            } else if (parsed.status === 'duplicate') {
+              status = 'duplicate'
+              detail = '重复图片已存在'
+              succeeded++ // already in DB — count as success from the user's perspective
             } else if (parsed.status === 'too_large') {
               status = 'too_large'
               detail = '图片过大'

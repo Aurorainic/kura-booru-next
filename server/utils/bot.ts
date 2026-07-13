@@ -125,6 +125,7 @@ const T = {
     randomCaption: (title: string) => `🎲 ${title || '(无标题)'}`,
     untitled: '(无标题)',
     multiQueued: (count: number) => `📥 已入队 ${count} 个任务`,
+    blockedPrivate: (count: number) => `⛔ 已拒绝 ${count} 个内网/私网地址`,
   },
   en: {
     welcome: '👋 Hello! Send an image URL to save to the gallery.\n\nCommands:\n/search tag — Search\n/random — Random image\n/stats — Statistics\n/autopass — Auto-mark as safe\n/lang — Switch language',
@@ -157,6 +158,7 @@ const T = {
     randomCaption: (title: string) => `🎲 ${title || 'Untitled'}`,
     untitled: 'Untitled',
     multiQueued: (count: number) => `📥 ${count} tasks queued`,
+    blockedPrivate: (count: number) => `⛔ Blocked ${count} private/internal address${count === 1 ? '' : 'es'}`,
   },
 }
 
@@ -474,9 +476,17 @@ bot.on('message:text', async (ctx) => {
     // ponytail: ctx.reply kept serial — switching to Promise.all risks 429.
     const toProcess = urls.slice(0, 10)
     const queued: { url: string; jobId: string; source: ReturnType<typeof identifySource> | ReturnType<typeof resolveSourceOrOther> }[] = []
+    const rejected: string[] = []
 
     await Promise.all(toProcess.map(async (url) => {
       const source = identifySource(url) || resolveSourceOrOther(url)
+      // SSRF pre-check: refuse private/loopback addresses before they reach the
+      // job queue. Sidecar re-validates inside the worker, but this stops
+      // queue spam from probing the internal network.
+      if (await isPrivateHost(new URL(url).hostname)) {
+        rejected.push(url)
+        return
+      }
       await acquireSemaphore(chatId)
       try {
         const jobId = await enqueueJob({ url, source_site: source.site, source_id: source.id })
@@ -485,6 +495,10 @@ bot.on('message:text', async (ctx) => {
         releaseSemaphore(chatId)
       }
     }))
+
+    if (rejected.length) {
+      await ctx.reply(t('blockedPrivate', ctx.config.lang, rejected.length)).catch(() => {})
+    }
 
     for (const { jobId } of queued) {
       const msg = await ctx.reply(t('downloading', ctx.config.lang))
@@ -509,9 +523,15 @@ bot.on('message:photo', async (ctx) => {
 
     const chatId = ctx.chat?.id?.toString() || 'unknown'
     const queued: { jobId: string }[] = []
+    const rejected: string[] = []
 
     await Promise.all(urls.slice(0, 10).map(async (url) => {
       const source = identifySource(url) || resolveSourceOrOther(url)
+      // SSRF pre-check (see message:text handler)
+      if (await isPrivateHost(new URL(url).hostname)) {
+        rejected.push(url)
+        return
+      }
       await acquireSemaphore(chatId)
       try {
         const jobId = await enqueueJob({ url, source_site: source.site, source_id: source.id })
@@ -520,6 +540,10 @@ bot.on('message:photo', async (ctx) => {
         releaseSemaphore(chatId)
       }
     }))
+
+    if (rejected.length) {
+      await ctx.reply(t('blockedPrivate', ctx.config.lang, rejected.length)).catch(() => {})
+    }
 
     for (const { jobId } of queued) {
       const msg = await ctx.reply(t('downloading', ctx.config.lang))

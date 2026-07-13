@@ -170,27 +170,13 @@ export async function getPost(id: string, isAdmin: boolean) {
   return serializePost({ ...result[0], tags: postTagRows.map(r => r.tag) })
 }
 
-// B-P2-7: Process-level cache for random post COUNT query (5 min TTL)
-let randomCountCache: { count: number; at: number } | null = null
-const RANDOM_COUNT_TTL = 300_000
-
+// ponytail: count cache removed — ORDER BY random() doesn't need a count
+// first, and the previous OFFSET-by-cache combination was deterministic per
+// post within the TTL (offset → time-sorted row).
 export async function getRandomPost(isAdmin: boolean) {
   const where = !isAdmin ? eq(posts.rating, 'safe') : undefined
 
-  let total: number
-  const now = Date.now()
-  if (!isAdmin && randomCountCache && now - randomCountCache.at < RANDOM_COUNT_TTL) {
-    total = randomCountCache.count
-  } else {
-    const countResult = await db.select({ count: sql<number>`count(*)` }).from(posts).where(where)
-    total = Number(countResult[0]?.count || 0)
-    if (!isAdmin) randomCountCache = { count: total, at: now }
-  }
-
-  if (total === 0) return null
-
-  const offset = Math.floor(Math.random() * total)
-  const result = await db.select().from(posts).where(where).orderBy(desc(posts.createdAt)).limit(1).offset(offset)
+  const result = await db.select().from(posts).where(where).orderBy(sql`random()`).limit(1)
   if (!result[0]) return null
 
   const postTagRows = await db.select({ tag: tags })
@@ -225,6 +211,7 @@ export async function searchPosts(q: string, opts: {
   // Resolve include tags (B-P3-7: separate IDs for SQL, names for response) — single IN(.) lookup
   const resolvedIncludeIds: string[] = []
   const resolvedIncludeNames: string[] = []
+  const resolvedExcludeIds: string[] = []
   const unresolved: string[] = []
   const allNames = [...parsed.includeTags, ...parsed.excludeTags]
   if (allNames.length) {
