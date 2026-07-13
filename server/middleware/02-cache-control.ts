@@ -32,8 +32,23 @@ export default defineEventHandler(async (event) => {
     return
   }
 
-  // SSR HTML — never cache at CDN (admin content leak prevention)
+  // SSR HTML — anon visitors get s-maxage 300 (mirrors nuxt.config.ts routeRules
+  // swr: 300 for /, /posts/**, /tags/**, /search). Admin visitors (cookie session)
+  // get private, no-store. /admin/** paths get no-store by routeRule already,
+  // so this branch mainly covers the home / and detail pages.
+  // ponytail: if getIsAdmin Redis fail-CLOSED (authOk=false) during SSR, fall
+  // back to no-store rather than risk leaking admin HTML into the public cache.
   if (!path.startsWith('/_nuxt/') && !path.startsWith('/i/')) {
-    response.setHeader('Cache-Control', 'private, no-store')
+    const cookie = getRequestHeader(event, 'cookie') || ''
+    let isAdmin = false
+    let authOk = true
+    try { isAdmin = await getIsAdmin(cookie) } catch {
+      authOk = false
+    }
+    if (isAdmin || !authOk) {
+      response.setHeader('Cache-Control', 'private, no-store')
+    } else {
+      response.setHeader('Cache-Control', 'public, s-maxage=300')
+    }
   }
 })
