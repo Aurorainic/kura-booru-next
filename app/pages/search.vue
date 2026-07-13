@@ -8,7 +8,7 @@ const route = useRoute()
 const query = computed(() => route.query.q as string || '')
 const source = computed(() => route.query.source as string || '')
 const page = computed(() => Math.max(1, parseInt(route.query.page as string || '1')))
-const perPageCookie = useCookie('kura-per-page')
+const perPageCookie = useCookie('kura-per-page', { sameSite: 'lax' })
 const perPage = computed(() => {
   const param = route.query.per_page as string
   if (param) return clampPerPage(parseInt(param))
@@ -75,8 +75,15 @@ onMounted(async () => {
   }
 })
 
-// Record a search into history whenever the query changes to a non-empty value.
-watch(query, (q) => { if (q) pushRecent(q) }, { immediate: false })
+// ponytail: dedupe so suggestion clicks that re-emit the same query don't
+// duplicate recents; debounce so the very first keystroke (one char) doesn't
+// pollute the list.
+let lastRecorded: string | null = null
+watch(query, (q) => {
+  if (!q || q === lastRecorded) return
+  lastRecorded = q
+  pushRecent(q)
+}, { immediate: false })
 
 // 5.3 ← / → page navigation (search results).
 function goToPage(p: number) {

@@ -38,4 +38,22 @@ export default defineNuxtConfig({
       enableAiTagProcessing: process.env.ENABLE_AI_TAG_PROCESSING || 'false',
     },
   },
+
+  routeRules: {
+    // Anon gallery + tag + search SSR — 300s stale-while-revalidate cache.
+    // Cache key excludes cookies on purpose: anon visitors see the same HTML
+    // for the same (rating, page, q). Admin paths are gated by private/no-store
+    // headers in server/middleware/02-cache-control.ts and never reach here.
+    // ponytail: nitro cache is in-process, NOT shared across replicas — fine
+    // for a single-web-instance deployment. Multi-replica would need a redis
+    // driver hook here.
+    '/': { swr: 300, headers: { 'cache-control': 'public, s-maxage=300' } },
+    '/posts/**': { swr: 300, headers: { 'cache-control': 'public, s-maxage=300' } },
+    '/tags/**': { swr: 300, headers: { 'cache-control': 'public, s-maxage=300' } },
+    '/search': { swr: 300, headers: { 'cache-control': 'public, s-maxage=300' } },
+    // Admin, login, settings, and any authed path — never cached.
+    '/admin/**': { headers: { 'cache-control': 'private, no-store' } },
+    '/login': { headers: { 'cache-control': 'private, no-store' } },
+    '/logout': { headers: { 'cache-control': 'private, no-store' } },
+  },
 })

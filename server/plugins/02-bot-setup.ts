@@ -7,9 +7,6 @@
 if (!process.env.SITE_URL) {
   console.warn('[bot-setup] SITE_URL not set, webhook registration will fail')
 }
-if (!process.env.BOT_WEBHOOK_SECRET && process.env.NODE_ENV === 'production') {
-  console.warn('[bot-setup] BOT_WEBHOOK_SECRET not set in production — webhook is unauthenticated')
-}
 
 export default defineNitroPlugin(async () => {
   if (!bot.token) {
@@ -23,9 +20,16 @@ export default defineNitroPlugin(async () => {
     return
   }
 
+  // ponytail: production webhook without BOT_WEBHOOK_SECRET = unauthenticated
+  // surface that anyone who can reach /bot/webhook can hit. Refuse to register
+  // rather than warn-and-continue (matches the SESSION_SECRET guard in auth.ts).
+  const secret = process.env.BOT_WEBHOOK_SECRET
+  if (process.env.NODE_ENV === 'production' && !secret) {
+    throw new Error('BOT_WEBHOOK_SECRET must be set in production — refusing to register an unauthenticated Telegram webhook')
+  }
+
   try {
     const webhookUrl = `${siteUrl}/bot/webhook`
-    const secret = process.env.BOT_WEBHOOK_SECRET
 
     await bot.api.setWebhook(webhookUrl, {
       secret_token: secret || undefined,

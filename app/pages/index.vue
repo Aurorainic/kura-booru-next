@@ -10,7 +10,7 @@ const page = computed(() => Math.max(1, parseInt(route.query.page as string || '
 const ratingParam = computed(() => route.query.rating as Rating | null)
 const rating = computed(() => isAdmin.value && ratingParam.value ? ratingParam.value : undefined)
 
-const perPageCookie = useCookie('kura-per-page')
+const perPageCookie = useCookie('kura-per-page', { sameSite: 'lax' })
 const perPage = computed(() => {
   const param = route.query.per_page as string
   if (param) return clampPerPage(parseInt(param))

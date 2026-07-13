@@ -5,9 +5,28 @@ import { admins } from '../schema/admins'
 import { eq } from 'drizzle-orm'
 import { redis } from './redis'
 
+// ponytail: refuse to start in production with the public dev fallback secret.
+// Without this guard, anyone reading the repo can forge kura_admin_session.
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SECRET_KEY || 'dev-secret-change-me'
+if (process.env.NODE_ENV === 'production' && SESSION_SECRET === 'dev-secret-change-me') {
+  throw new Error('SESSION_SECRET (or SECRET_KEY) must be set in production — refusing to sign admin cookies with the public dev fallback')
+}
 const SESSION_COOKIE = 'kura_admin_session'
 const MAX_AGE = parseInt(process.env.ADMIN_SESSION_MAX_AGE || '604800', 10) // 7 days
+const SESSION_COOKIE_OPTS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  path: '/',
+}
+export function setSessionCookie(event: any, token: string) {
+  setCookie(event, SESSION_COOKIE, token, { ...SESSION_COOKIE_OPTS, maxAge: MAX_AGE })
+}
+export function clearSessionCookie(event: any) {
+  // deleteCookie must match every attribute used at set time, otherwise browsers
+  // keep the cookie (CLAUDE.md cookie deletion note). Inline the unset instead.
+  setCookie(event, SESSION_COOKIE, '', { ...SESSION_COOKIE_OPTS, maxAge: 0 })
+}
 
 // ── Signed cookie with iat (B-P1-1, B-P1-2) ──
 // Format: value.iat.signature
@@ -153,7 +172,8 @@ export async function changeAdminPassword(adminId: string, newPassword: string) 
   adminCache.clear()
 }
 
-function parseCookies(header: string): Record<string, string> {
+// ponytail: exposed so other routes (e.g. change-password) can avoid re-implementing cookie parsing.
+export function parseCookies(header: string): Record<string, string> {
   const cookies: Record<string, string> = {}
   for (const part of header.split(';')) {
     const [k, ...v] = part.trim().split('=')

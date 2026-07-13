@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm'
+import { upsertTagIndex } from '../../../../utils/search/suggest'
 
 export default defineEventHandler(async (event) => {
   const cookie = getHeader(event, 'cookie') || ''
@@ -15,6 +16,14 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<{ category?: string; danbooru_name?: string; translation?: string }>(event)
   if (!body || (body.category === undefined && body.danbooru_name === undefined && body.translation === undefined)) {
     throw createError({ statusCode: 400, statusMessage: 'No fields to update' })
+  }
+
+  // Validate category against the PG enum — bad values would 500 from the DB layer.
+  // ponytail: hardcoded list mirrors the enum in app/types; if it grows, derive
+  // from the drizzle schema's text('category') annotation or a shared constant.
+  const VALID_CATEGORIES = new Set(['artist', 'character', 'copyright', 'general', 'meta'])
+  if (body.category !== undefined && !VALID_CATEGORIES.has(body.category)) {
+    throw createError({ statusCode: 400, statusMessage: `Invalid category: ${body.category}` })
   }
 
   // Build update payload
@@ -43,6 +52,10 @@ export default defineEventHandler(async (event) => {
       updatedAt: new Date(),
     },
   })
+
+  // Mirror to the redis-search index (fire-and-forget — never blocks the
+  // admin response). Failures log inside upsertTagIndex / write paths.
+  void upsertTagIndex(updated.id, updated.name, updated.category, Number(updated.postCount ?? 0))
 
   return serializeTag(updated)
 })

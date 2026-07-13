@@ -1,28 +1,11 @@
-export default defineEventHandler(async (event) => {
+export default defineEventHandler((event) => {
   if (event.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 })
   }
-
-  try {
-    const config = useRuntimeConfig()
-    const backendUrl = config.internalApiUrl
-    const cookieHeader = getHeader(event, 'cookie') || ''
-    await $fetch(`${backendUrl}/auth/logout`, {
-      method: 'POST',
-      headers: { Cookie: cookieHeader },
-    })
-  } catch {
-    // proceed to redirect anyway
-  }
-
-  // Clear session cookie — match all attributes used when setting
-  setCookie(event, 'kura_admin_session', '', {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 0,
-  })
-
+  // ponytail: this route previously did a $fetch self-call to /auth/logout to clear the
+  // session there, but that route only called deleteCookie with path-only opts (which
+  // would silently fail in non-prod because Secure mismatches). The cookie IS the
+  // session — clear it directly and redirect.
+  clearSessionCookie(event)
   return sendRedirect(event, '/', 302)
 })

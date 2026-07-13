@@ -170,27 +170,16 @@ export async function getPost(id: string, isAdmin: boolean) {
   return serializePost({ ...result[0], tags: postTagRows.map(r => r.tag) })
 }
 
-// B-P2-7: Process-level cache for random post COUNT query (5 min TTL)
-let randomCountCache: { count: number; at: number } | null = null
-const RANDOM_COUNT_TTL = 300_000
-
+// ponytail: count cache removed — ORDER BY random() doesn't need a count
+// first, and the previous OFFSET-by-cache combination was deterministic per
+// post within the TTL (offset → time-sorted row).
+// ponytail: ORDER BY random() is O(N) seq-scan + sort; fine to ~100k posts.
+// At 1M+ rows, switch to `WHERE id = (SELECT id FROM posts TABLESAMPLE
+// SYSTEM(0.1) LIMIT 1)` — approximate but O(sampled) and indexable.
 export async function getRandomPost(isAdmin: boolean) {
   const where = !isAdmin ? eq(posts.rating, 'safe') : undefined
 
-  let total: number
-  const now = Date.now()
-  if (!isAdmin && randomCountCache && now - randomCountCache.at < RANDOM_COUNT_TTL) {
-    total = randomCountCache.count
-  } else {
-    const countResult = await db.select({ count: sql<number>`count(*)` }).from(posts).where(where)
-    total = Number(countResult[0]?.count || 0)
-    if (!isAdmin) randomCountCache = { count: total, at: now }
-  }
-
-  if (total === 0) return null
-
-  const offset = Math.floor(Math.random() * total)
-  const result = await db.select().from(posts).where(where).orderBy(desc(posts.createdAt)).limit(1).offset(offset)
+  const result = await db.select().from(posts).where(where).orderBy(sql`random()`).limit(1)
   if (!result[0]) return null
 
   const postTagRows = await db.select({ tag: tags })
@@ -222,21 +211,26 @@ export async function searchPosts(q: string, opts: {
   const perPage = clampPerPage(opts.perPage)
   const offset = (page - 1) * perPage
 
-  // Resolve include tags (B-P3-7: separate IDs for SQL, names for response)
+  // Resolve include tags (B-P3-7: separate IDs for SQL, names for response) — single IN(.) lookup
   const resolvedIncludeIds: string[] = []
   const resolvedIncludeNames: string[] = []
-  const unresolved: string[] = []
-  for (const name of parsed.includeTags) {
-    const tag = await resolveTag(name)
-    if (tag) { resolvedIncludeIds.push(tag.id); resolvedIncludeNames.push(tag.name) }
-    else unresolved.push(name)
-  }
-
-  // Resolve exclude tags
   const resolvedExcludeIds: string[] = []
-  for (const name of parsed.excludeTags) {
-    const tag = await resolveTag(name)
-    if (tag) resolvedExcludeIds.push(tag.id)
+  const unresolved: string[] = []
+  const allNames = [...parsed.includeTags, ...parsed.excludeTags]
+  if (allNames.length) {
+    const rows = await db.select({ id: tags.id, name: tags.name })
+      .from(tags)
+      .where(inArray(tags.name, allNames))
+    const byName = new Map(rows.map(r => [r.name, r]))
+    for (const name of parsed.includeTags) {
+      const tag = byName.get(name)
+      if (tag) { resolvedIncludeIds.push(tag.id); resolvedIncludeNames.push(tag.name) }
+      else unresolved.push(name)
+    }
+    for (const name of parsed.excludeTags) {
+      const tag = byName.get(name)
+      if (tag) resolvedExcludeIds.push(tag.id)
+    }
   }
 
   // If no include tags resolved and we have unresolved, return empty

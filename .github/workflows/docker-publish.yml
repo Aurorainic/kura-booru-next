@@ -31,6 +31,7 @@ jobs:
           - image: kura-booru-web
             context: .
             dockerfile: Dockerfile
+            target: production
           - image: kura-booru-worker
             context: sidecar
             dockerfile: sidecar/Dockerfile
@@ -73,6 +74,7 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
           push: true
           build-args: |
             KURA_VERSION=${{ steps.meta.outputs.version }}

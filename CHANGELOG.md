@@ -2,6 +2,12 @@
 
 本文件记录项目的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.7.6] - 2026-07-13
+
+### 修复
+- **Bot 分级选择倒计时不消失** — `confirmRating` 末尾裸用未导入的 `redis` 抛 `TypeError`，在覆盖 inline keyboard 的 `editMessageText` 之前中断函数。删除该死代码行（`kura:confirmed_posts:*` 全仓零读取方）。PATCH 写库失败时改为 `return` + 显示 `⚠️`，不再显示假的 `✅` 确认。
+- **Bot 分级 rating 未生效** — PATCH URL 重复 `/api`（`.../api/api/posts/:id`）返回 404，评级从未写库。改为 `${baseUrl}/posts/${postId}`，与 `INTERNAL_API_URL` 既有约定一致。
+
 ## [0.7.5] - 2026-07-11
 
 ### 修复

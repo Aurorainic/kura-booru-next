@@ -16,6 +16,14 @@ export default defineEventHandler(async (event) => {
 
   const cleanAlias = body.alias_name.trim().toLowerCase()
 
+  // Pre-check uniqueness — the schema has a unique index on alias_name, but
+  // relying on it would surface a 500 from a DB error; the caller can act on 409.
+  const existing = await db.select({ id: tagAliases.id }).from(tagAliases)
+    .where(eq(tagAliases.aliasName, cleanAlias)).limit(1)
+  if (existing[0]) {
+    throw createError({ statusCode: 409, statusMessage: 'Alias already exists' })
+  }
+
   const [created] = await db.insert(tagAliases).values({
     aliasName: cleanAlias,
     tagId: body.tag_id,

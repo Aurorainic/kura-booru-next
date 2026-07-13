@@ -3,7 +3,9 @@ import { createClient } from 'redis'
 // ponytail: single connection reused across Nitro — fine for personal site
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379/0'
 
-const _client = createClient({ url: redisUrl })
+// Exported so the lifecycle plugin can quit on shutdown. Outside callers
+// must go through getRedis() — the lazy-singleton wrapper handles connect().
+export const _client = createClient({ url: redisUrl })
 _client.on('error', (err) => console.error('[redis]', err))
 
 let _connected = false
@@ -27,7 +29,8 @@ export const redis = new Proxy({} as ReturnType<typeof createClient>, {
 
 // Dedicated client for blocking operations (BRPOP) — separate from shared proxy
 // to prevent BRPOP from blocking the shared connection for all other Redis commands.
-let _blockingClient: ReturnType<typeof createClient> | null = null
+// Exported so the lifecycle plugin can quit on shutdown.
+export let _blockingClient: ReturnType<typeof createClient> | null = null
 export async function getBlockingRedis() {
   if (!_blockingClient) {
     _blockingClient = createClient({ url: redisUrl })

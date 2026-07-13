@@ -4,31 +4,42 @@ import type { TagCategory } from '~/types'
 const { ssrCookie } = useSsrContext()
 const route = useRoute()
 const page = Math.max(1, parseInt(route.query.page as string || '1'))
-const searchQuery = ref('')
-const categoryFilter = ref<TagCategory | ''>('')
-const aiStatusFilter = ref<'all' | 'unprocessed' | 'processed'>('all')
-const sortKey = ref<'post_count' | 'name' | 'created_at'>('post_count')
+// ponytail: filters live in the URL so refresh / deep-link / browser back
+// survives, and the backend does the work — `ai_status` was previously filtered
+// client-side which silently truncated `total` to whatever fit on page 1.
+const searchQuery = ref((route.query.q as string) || '')
+const categoryFilter = ref<TagCategory | ''>((route.query.category as TagCategory | '') || '')
+const aiStatusFilter = ref<'all' | 'unprocessed' | 'processed'>(((route.query.ai_status as any) || 'all'))
+const sortKey = ref<'post_count' | 'name' | 'created_at'>(((route.query.sort as any) || 'post_count'))
 
-const { data, refresh } = await useAsyncData('admin-tags', async () => {
+async function refetch() {
   try {
     return await fetchAdminTags({
       q: searchQuery.value || undefined,
       page,
       per_page: 50,
       category: categoryFilter.value || undefined,
+      ai_status: aiStatusFilter.value === 'all' ? undefined : aiStatusFilter.value,
       sort: sortKey.value,
     }, ssrCookie.value)
   } catch {
     return { items: [], total: 0, page: 1, per_page: 50, total_pages: 0 }
   }
-})
+}
 
-const tags = computed(() => {
-  const items = data.value?.items || []
-  // Client-side AI status filter (no backend support yet)
-  if (aiStatusFilter.value === 'unprocessed') return items.filter(t => !t.ai_processed_at)
-  if (aiStatusFilter.value === 'processed') return items.filter(t => !!t.ai_processed_at)
-  return items
+const { data, refresh } = await useAsyncData('admin-tags', refetch)
+
+const tags = computed(() => data.value?.items || [])
+
+// Push filter state into the URL so reload/back works
+watch([searchQuery, categoryFilter, aiStatusFilter, sortKey], () => {
+  const next: Record<string, string> = {}
+  if (searchQuery.value) next.q = searchQuery.value
+  if (categoryFilter.value) next.category = categoryFilter.value
+  if (aiStatusFilter.value !== 'all') next.ai_status = aiStatusFilter.value
+  if (sortKey.value !== 'post_count') next.sort = sortKey.value
+  if (page > 1) next.page = String(page)
+  navigateTo({ path: route.path, query: next }, { replace: true })
 })
 
 // Inline editing state

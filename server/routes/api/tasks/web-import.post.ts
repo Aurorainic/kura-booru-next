@@ -9,10 +9,14 @@ export default defineEventHandler(async (event) => {
 
   const results = await Promise.all(body.urls.slice(0, 50).map(async (url) => {
     try {
+      let host: string
+      try { host = new URL(url).hostname }
+      catch { return { status: 'error', url, error: 'invalid URL' } }
+      if (await isPrivateHost(host)) return { status: 'error', url, error: 'private/reserved host' }
       const jobId = await enqueueJob({ url })
-      return { task_id: jobId, status: 'queued' }
+      return { task_id: jobId, status: 'queued' as const, url }
     } catch (e: any) {
-      return { status: 'error', error: e.message }
+      return { status: 'error' as const, url, error: e.message }
     }
   }))
 

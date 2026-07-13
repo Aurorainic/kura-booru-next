@@ -111,6 +111,10 @@ export async function processResult(result: SidecarResult): Promise<PipelineResu
     const thumbKey = thumbBuffer ? `${crypto.randomUUID()}.webp` : ''
     const previewKey = previewBuffer ? `${crypto.randomUUID()}.webp` : ''
 
+    // ponytail: 3 concurrent S3 uploads per pipeline run. With a single worker
+    // this is fine. If a worker pool is added later, cap at e.g. 2 concurrent
+    // to avoid saturating the S3 connection pool — image is the largest
+    // (full-resolution), thumb+preview can wait.
     await Promise.all([
       uploadToS3(imageKey, imageBuffer, mimeType || 'image/png'),
       thumbBuffer ? uploadToS3(thumbKey, thumbBuffer, 'image/webp') : Promise.resolve(),
@@ -150,17 +154,16 @@ export async function processResult(result: SidecarResult): Promise<PipelineResu
     let postId: string
 
     await db.transaction(async (tx: any) => {
-      // Upsert tags inside transaction
-      for (const name of tagNames) {
-        const [tag] = await tx
-          .insert(tags)
-          .values({ name, category: 'general' as any, postCount: 1 })
+      // Bulk upsert tags in a single statement; postCount++ for both new and existing rows
+      if (tagNames.length > 0) {
+        const rows = await tx.insert(tags)
+          .values(tagNames.map(name => ({ name, category: 'general' as any, postCount: 1 })))
           .onConflictDoUpdate({
             target: tags.name,
             set: { postCount: sql`${tags.postCount} + 1` },
           })
-          .returning({ id: tags.id })
-        if (tag?.id) tagIds.push(tag.id)
+          .returning({ id: tags.id, name: tags.name })
+        for (const r of rows) tagIds.push(r.id)
       }
 
       // Artist tag: dedicated upsert with category=artist

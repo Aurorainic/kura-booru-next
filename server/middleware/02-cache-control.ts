@@ -9,17 +9,21 @@ export default defineEventHandler(async (event) => {
     // Don't override if handler already set Cache-Control (SSE, etc.)
     if (response.getHeader('Cache-Control')) return
 
-    // Check admin status
+    // Check admin status. On auth failure, fail-CLOSED for cache: skip CDN
+    // caching entirely (s-maxage=0) instead of treating the visitor as admin
+    // — over-private would silently bypass CDN and hammer the origin during
+    // a Redis outage, but a wrong-content-cache leak is worse.
     const cookie = getRequestHeader(event, 'cookie') || ''
     let isAdmin = false
+    let authOk = true
     try { isAdmin = await getIsAdmin(cookie) } catch {
-      // Fail-closed for caching: treat as admin to use private/no-store
-      // (better to over-cache privately than leak admin content publicly)
-      isAdmin = true
+      authOk = false
     }
 
     if (isAdmin) {
       response.setHeader('Cache-Control', 'private, no-store')
+    } else if (!authOk) {
+      response.setHeader('Cache-Control', 'no-store')
     } else if (path === '/api/posts/random') {
       response.setHeader('Cache-Control', 'public, s-maxage=10')
     } else {
@@ -28,8 +32,28 @@ export default defineEventHandler(async (event) => {
     return
   }
 
-  // SSR HTML — never cache at CDN (admin content leak prevention)
+  // SSR HTML — anon visitors get s-maxage 300 (mirrors nuxt.config.ts routeRules
+  // swr: 300 for /, /posts/**, /tags/**, /search). Admin visitors (cookie session)
+  // get private, no-store. /admin/**, /login, /logout get no-store by routeRule
+  // already, so this branch mainly covers the home / and detail pages.
+  // ponytail: if getIsAdmin Redis fail-CLOSED (authOk=false) during SSR, fall
+  // back to no-store rather than risk leaking admin HTML into the public cache.
   if (!path.startsWith('/_nuxt/') && !path.startsWith('/i/')) {
-    response.setHeader('Cache-Control', 'private, no-store')
+    // Authenticated paths — never cache.
+    if (path.startsWith('/admin') || path === '/login' || path === '/logout') {
+      response.setHeader('Cache-Control', 'private, no-store')
+      return
+    }
+    const cookie = getRequestHeader(event, 'cookie') || ''
+    let isAdmin = false
+    let authOk = true
+    try { isAdmin = await getIsAdmin(cookie) } catch {
+      authOk = false
+    }
+    if (isAdmin || !authOk) {
+      response.setHeader('Cache-Control', 'private, no-store')
+    } else {
+      response.setHeader('Cache-Control', 'public, s-maxage=300')
+    }
   }
 })

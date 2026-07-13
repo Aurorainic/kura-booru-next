@@ -6,21 +6,17 @@ export default defineEventHandler(async (event) => {
 
   const path = event.context.params?._?.toString() || ''
 
-  // /api/tags/autocomplete
-  if (path === 'autocomplete') {
-    const q = query.q as string
-    if (!q) return []
-    return autocompleteTags(q, isAdmin, Number(query.per_page) || 10)
-  }
-
-  // /api/tags/:name
-  if (path) {
+  // /api/tags/:name — the dedicated /api/tags/autocomplete.get.ts handles that
+  // exact path; route the catch-all around it so a tag literally named
+  // "autocomplete" is still resolvable.
+  if (path && path !== 'autocomplete') {
     const tag = await getTagByName(path, isAdmin)
     if (!tag) throw createError({ statusCode: 404, statusMessage: 'Tag not found' })
     return tag
   }
 
-  // /api/tags (list)
+  // /api/tags (list) — falls through here for both path === '' and the
+  // autocomplete branch (which has its own route file and never reaches us).
   return listTags({
     category: query.category as any,
     sort: query.sort as string || 'count',

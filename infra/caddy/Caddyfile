@@ -16,6 +16,16 @@ your-domain.example.com {
 		Referrer-Policy "strict-origin-when-cross-origin"
 	}
 
+	# Anon SSR HTML cache — 300s TTL. Responses marked private/no-store by
+	# the app middleware bypass automatically. Requires the cache-handler
+	# module: `xcaddy build v2.10.0 --with github.com/caddyserver/cache-handler
+	# --with github.com/caddy-dns/cloudflare`. See infra/caddy/README-bake.md
+	# (added in same change) for the build command.
+	@cacheable default
+	cache {
+		ttl 300
+	}
+
 	reverse_proxy 127.0.0.1:3000 {
 		fail_duration 30s
 		max_fails 3
