@@ -11,13 +11,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const token = await createSession(admin.id)
-  setCookie(event, 'kura_admin_session', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: SESSION_MAX_AGE, // keep cookie lifetime in sync with session token MAX_AGE
-  })
+  setSessionCookie(event, token)
 
   return { ok: true, is_admin: true }
 })

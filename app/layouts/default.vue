@@ -56,8 +56,8 @@ const enableAi = publicConfig.enableAiTagProcessing === 'true'
 // Accent hue from cookie (SSR anti-flash)
 const accentCookie = useCookie('kura-accent-hue')
 let accentHue = parseInt(accentCookie.value || '', 10)
-if (isNaN(accentHue) || accentHue < 0 || accentHue > 360) accentHue = 175
-const accentHueEnd = accentHue + 25
+if (isNaN(accentHue) || accentHue < 0 || accentHue > 360) accentHue = ACCENT_HUE_DEFAULT
+const accentHueEnd = accentEndHue(accentHue)
 
 // Platform detection for keycap display (⌘ vs Ctrl) — SSR anti-flash via cookie.
 usePlatform()
@@ -153,7 +153,7 @@ useHead(headInjectEntries)
               <button
                 type="button"
                 @click="navMenuOpen = !navMenuOpen"
-                class="w-9 h-9 rounded-[var(--radius-sm)] flex items-center justify-center transition-all hover:bg-[var(--accent-subtle)] active:scale-85"
+                class="w-9 h-9 rounded-[var(--radius-sm)] flex items-center justify-center transition-all hover:bg-[var(--accent-subtle)] active:scale-90"
                 :class="navMenuOpen ? 'text-[var(--accent-color)]' : 'text-[var(--text-muted)]'"
                 aria-label="更多"
                 :aria-expanded="navMenuOpen"

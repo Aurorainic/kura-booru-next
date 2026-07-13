@@ -11,7 +11,7 @@ const props = withDefaults(defineProps<{
 
 const PER_PAGE_OPTIONS = [20, 40, 100]
 const PER_PAGE_COOKIE_KEY = 'kura-per-page'
-const perPageCookie = useCookie(PER_PAGE_COOKIE_KEY)
+const perPageCookie = useCookie(PER_PAGE_COOKIE_KEY, { sameSite: 'lax' })
 
 const pages = computed(() => {
   const total = props.totalPages

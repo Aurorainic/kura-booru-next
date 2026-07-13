@@ -47,7 +47,7 @@ const activeTheme = computed(() => themes.find(t => t.key === current.value) ?? 
   <button
     type="button"
     @click="cycle"
-    class="relative flex items-center justify-center w-9 h-9 rounded-[var(--radius-sm)] transition-all duration-[var(--duration-instant)] hover:bg-[var(--accent-subtle)] active:scale-85 group"
+    class="relative flex items-center justify-center w-9 h-9 rounded-[var(--radius-sm)] transition-all duration-[var(--duration-instant)] hover:bg-[var(--accent-subtle)] active:scale-90 group"
     :aria-label="`切换主题(当前：${activeTheme.label})`"
     :title="`主题：${activeTheme.label}`"
   >

@@ -30,11 +30,15 @@ export default defineEventHandler(async (event) => {
         .onConflictDoUpdate({ target: tags.name, set: { name: cleanName } })
         .returning()
       if (!tag) throw createError({ statusCode: 500, statusMessage: 'Tag creation failed' })
-      // Ensure post_tag exists — use onConflictDoNothing to avoid TOCTOU race
-      await db.insert(postTags).values({ postId: id, tagId: tag.id })
+      // Only increment when the link is actually new — onConflictDoNothing is a
+      // no-op for an existing (postId, tagId) row, and unconditionally +1 would
+      // inflate post_count every time a client re-submits the same tag.
+      const inserted = await db.insert(postTags).values({ postId: id, tagId: tag.id })
         .onConflictDoNothing()
-      // Increment post_count
-      await db.update(tags).set({ postCount: sql`post_count + 1` }).where(eq(tags.id, tag.id))
+        .returning({ postId: postTags.postId })
+      if (inserted.length > 0) {
+        await db.update(tags).set({ postCount: sql`post_count + 1` }).where(eq(tags.id, tag.id))
+      }
     }
   }
 

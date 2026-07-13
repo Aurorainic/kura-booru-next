@@ -25,6 +25,6 @@ export default defineEventHandler(async (event) => {
   if (!match) throw createError({ statusCode: 401, statusMessage: 'Current password incorrect' })
 
   await changeAdminPassword(adminRows[0].id, body.new_password)
-  deleteCookie(event, 'kura_admin_session', { path: '/', secure: true, httpOnly: true, sameSite: 'lax' })
+  clearSessionCookie(event)
   return { ok: true }
 })

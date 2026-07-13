@@ -7,7 +7,7 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null
 function updateHue(value: number) {
   currentHue.value = value
   document.documentElement.style.setProperty('--accent-hue', String(value))
-  document.documentElement.style.setProperty('--accent-hue-end', String(value + 25))
+  document.documentElement.style.setProperty('--accent-hue-end', String(accentEndHue(value)))
 }
 
 function onSliderChange(e: Event) {
@@ -42,7 +42,7 @@ onUnmounted(() => {
     <button
       type="button"
       @click="showSlider = !showSlider"
-      class="w-9 h-9 rounded-[var(--radius-sm)] flex items-center justify-center transition-all hover:bg-[var(--accent-subtle)] active:scale-85"
+      class="w-9 h-9 rounded-[var(--radius-sm)] flex items-center justify-center transition-all hover:bg-[var(--accent-subtle)] active:scale-90"
       aria-label="选择强调色"
       title="强调色"
     >

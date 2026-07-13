@@ -15,13 +15,10 @@ export default defineEventHandler(async (event) => {
 
   const parsed = JSON.parse(raw)
 
-  // Security: strip image_bytes_b64 and phash from public response
+  // Security: strip image_bytes_b64 and phash from public response. phash lives
+  // at the top level of SidecarResult (server/utils/queue.ts), not on metadata —
+  // a metadata.phash destructure would silently no-op.
   const { image_bytes_b64, phash, ...safeResult } = parsed
-  // Also strip from metadata if present
-  if (safeResult.metadata?.phash) {
-    const { phash: _, ...safeMeta } = safeResult.metadata
-    safeResult.metadata = safeMeta
-  }
 
   const statusMap: Record<string, string> = {
     ok: 'complete',
