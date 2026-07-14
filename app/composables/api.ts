@@ -262,6 +262,35 @@ export async function fetchTagKnowledge(page = 1, perPage = 50): Promise<Paginat
   return fetchApi<PaginatedResponse<any>>('/admin/tags/knowledge', { page, per_page: perPage })
 }
 
+// ── Admin Extension Keys (v0.7.8) ──
+
+export interface ExtensionKey {
+  id: string
+  name: string
+  keyPrefix: string
+  createdBy: string
+  createdAt: string
+  lastUsedAt: string | null
+  revokedAt: string | null
+  active: boolean
+}
+
+export async function fetchExtensionKeys(ssrCookie?: string): Promise<ExtensionKey[]> {
+  return fetchApi<ExtensionKey[]>('/admin/extension-keys/', undefined, { ssrCookie })
+}
+
+export async function createExtensionKey(name: string): Promise<ExtensionKey & { raw_key: string }> {
+  return fetchApi('/admin/extension-keys/', undefined, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+}
+
+export async function revokeExtensionKey(id: string): Promise<{ ok: boolean }> {
+  return fetchApi(`/admin/extension-keys/${id}`, undefined, { method: 'DELETE' })
+}
+
 // ── Admin Settings ──
 
 export async function fetchAdminSettings(ssrCookie?: string): Promise<Record<string, string>> {
