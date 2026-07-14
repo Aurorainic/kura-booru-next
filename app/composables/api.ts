@@ -43,6 +43,7 @@ export async function fetchApi<T>(
   const response = await fetch(url, {
     ...options,
     headers,
+    ...(options?.signal ? { signal: options.signal } : {}),
     ...(isBrowser ? { credentials: 'include' as RequestCredentials } : {}),
   })
 
@@ -92,8 +93,8 @@ export async function fetchTags(
   return fetchApi<PaginatedResponse<Tag>>('/tags/', { category, sort, page, per_page: perPage }, { ssrCookie })
 }
 
-export async function fetchAutocomplete(prefix: string): Promise<Tag[]> {
-  return fetchApi<Tag[]>('/tags/autocomplete', { q: prefix, per_page: 10 })
+export async function fetchAutocomplete(prefix: string, signal?: AbortSignal): Promise<Tag[]> {
+  return fetchApi<Tag[]>('/tags/autocomplete', { q: prefix, per_page: 10 }, { signal })
 }
 
 // 4.5 Popular tags (Top 10 by post_count) for the search exploration surface.
