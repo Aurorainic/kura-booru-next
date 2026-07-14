@@ -1,12 +1,82 @@
 /**
+ * Pure renumber math, extracted so it's testable without a DB.
+ *
+ * Given the survivors (id + current page_index) of a series and the id of
+ * the page being deleted (at deletedPageIndex), returns a map of
+ * survivorId → new page_index. Survivors after the deleted slot shift down
+ * by 1; survivors before keep their index. Caller also needs new page_count
+ * = survivors.length (i.e. the input list already excludes the deleted row).
+ *
+ * `null` page_index on a survivor is treated as "before everything" (legacy
+ * row that lost its index) — it's left untouched.
+ */
+export function renumberSeriesPageIndex(
+  survivors: Array<{ id: string; pageIndex: number | null }>,
+  deletedPageIndex: number,
+): Map<string, number | null> {
+  const out = new Map<string, number | null>()
+  for (const s of survivors) {
+    if (s.pageIndex === null) {
+      out.set(s.id, null)
+    } else if (s.pageIndex > deletedPageIndex) {
+      out.set(s.id, s.pageIndex - 1)
+    } else {
+      out.set(s.id, s.pageIndex)
+    }
+  }
+  return out
+}
+
+// ponytail: one runnable self-check — fails if the renumber math drifts.
+// Run with: npx tsx server/utils/series-admin.ts
+async function _selfCheck() {
+  // delete page 2 from a 1,2,3 series → 1 stays, 3→2
+  const m1 = renumberSeriesPageIndex(
+    [{ id: 'a', pageIndex: 1 }, { id: 'c', pageIndex: 3 }],
+    2,
+  )
+  if (m1.get('a') !== 1 || m1.get('c') !== 2) {
+    console.error('FAIL renumber middle:', m1); process.exit(1)
+  }
+  // delete page 1 (anchor) → everything shifts down
+  const m2 = renumberSeriesPageIndex(
+    [{ id: 'b', pageIndex: 2 }, { id: 'c', pageIndex: 3 }],
+    1,
+  )
+  if (m2.get('b') !== 1 || m2.get('c') !== 2) {
+    console.error('FAIL renumber anchor:', m2); process.exit(1)
+  }
+  // delete last page → nothing shifts
+  const m3 = renumberSeriesPageIndex(
+    [{ id: 'a', pageIndex: 1 }, { id: 'b', pageIndex: 2 }],
+    3,
+  )
+  if (m3.get('a') !== 1 || m3.get('b') !== 2) {
+    console.error('FAIL renumber tail:', m3); process.exit(1)
+  }
+  // null pageIndex survivor untouched
+  const m4 = renumberSeriesPageIndex(
+    [{ id: 'a', pageIndex: null }],
+    2,
+  )
+  if (m4.get('a') !== null) {
+    console.error('FAIL renumber null:', m4); process.exit(1)
+  }
+  console.log('series-admin renumber self-check: OK')
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  void _selfCheck()
+}
+
+/**
  * v0.7.8 PR-C: shared admin post-delete logic with series renumber.
  *
- * Two route handlers call this:
- *   - server/routes/api/admin/posts/[id].delete.ts (admin endpoint)
- *   - server/routes/api/posts/[id].delete.ts     (public path, admin-gated)
- *
- * Both must apply the same series renumber rules — splitting them risks
- * one admin path leaving page_index gaps while the other doesn't.
+ * Called from server/routes/api/posts/[id].delete.ts. Series path: delete
+ * the row + UPDATE every survivor with page_index > deleted's page_index to
+ * page_index - 1, and stamp page_count = new survivor count. Transactional
+ * so a reader can't see a gap. Pure renumber math lives in
+ * renumberSeriesPageIndex() above; this function applies it row by row.
  */
 import { eq, asc, sql } from 'drizzle-orm'
 import { posts, postTags, tags } from '../schema'
