@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
     const fails = await redis.incr(failKey)
     if (fails === 1) await redis.expire(failKey, 300)
     if (fails >= 5) {
-      await redis.set(lockKey, '1', 'EX', 60)
+      await redis.set(lockKey, '1', { EX: 60 })
       await redis.del(failKey)
     }
     throw createError({ statusCode: 401, statusMessage: 'Invalid credentials' })
