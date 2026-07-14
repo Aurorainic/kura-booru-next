@@ -94,3 +94,22 @@ export async function verifyExtensionKey(raw: string | undefined | null): Promis
 
   return { id: row.id, name: row.name, createdBy: row.createdBy }
 }
+
+// ponytail: invariant self-check. Runs once at module load — catches the
+// trivial breakages (prefix drift, hash mismatch, generator regression)
+// without spinning up a DB. Run with `npx tsx server/utils/extension-auth.ts`
+// or via `nuxt typecheck`. No-op in production.
+if (process.env.NODE_ENV !== 'production') {
+  ;(async () => {
+    const a = generateExtensionKey()
+    const b = generateExtensionKey()
+    const assert = (cond: boolean, msg: string) => { if (!cond) console.warn(`[extension-auth] self-check: ${msg}`) }
+    assert(a.raw.startsWith(EXT_KEY_PREFIX), 'raw has prefix')
+    assert(a.raw.length === EXT_KEY_PREFIX.length + 32, 'raw is 32 chars + prefix')
+    assert(a.raw !== b.raw, 'generator produces unique keys')
+    assert(a.hash === hashKey(a.raw), 'hash is deterministic')
+    assert(a.hash !== b.hash, 'different keys hash differently')
+    assert(a.prefix === a.raw.slice(0, 12), 'prefix is first 12 chars')
+    assert(a.raw === `${EXT_KEY_PREFIX}${a.raw.slice(EXT_KEY_PREFIX.length)}`, 'strip round-trips')
+  })()
+}
