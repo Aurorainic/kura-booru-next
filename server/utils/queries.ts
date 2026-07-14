@@ -29,6 +29,10 @@ export function serializePost(p: any): any {
     created_at: p.createdAt,
     lqip: p.lqip ?? null,
     tags: p.tags?.map((t: any) => serializeTag(t)),
+    // v0.7.8 PR-C: present only when post is part of a multi-image series.
+    // Single-image posts (series_id IS NULL) omit this key entirely so old
+    // clients don't have to special-case it.
+    ...(p.series ? { series: p.series } : {}),
   }
 }
 
@@ -167,7 +171,39 @@ export async function getPost(id: string, isAdmin: boolean) {
     .innerJoin(tags, eq(postTags.tagId, tags.id))
     .where(eq(postTags.postId, id))
 
-  return serializePost({ ...result[0], tags: postTagRows.map(r => r.tag) })
+  const post = serializePost({ ...result[0], tags: postTagRows.map(r => r.tag) })
+
+  // v0.7.8 PR-C: if this post belongs to a series, fetch the sibling pages
+  // for the series nav. Single-image posts return unchanged.
+  if (post && result[0].seriesId) {
+    const pages = await db
+      .select({
+        id: posts.id,
+        pageIndex: posts.pageIndex,
+        thumbKey: posts.thumbKey,
+        width: posts.width,
+        height: posts.height,
+      })
+      .from(posts)
+      .where(eq(posts.seriesId, result[0].seriesId))
+      .orderBy(asc(posts.pageIndex))
+    post.series = {
+      id: result[0].seriesId,
+      // ponytail: trust the stored page_count, but fall back to actual
+      // survivor count if a row was deleted out-of-band (admin path
+      // should keep these in sync — this is a safety net).
+      page_count: result[0].pageCount ?? pages.length,
+      pages: pages.map(p => ({
+        id: p.id,
+        page_index: p.pageIndex,
+        thumb_key: p.thumbKey,
+        width: p.width,
+        height: p.height,
+      })),
+    }
+  }
+
+  return post
 }
 
 // ponytail: count cache removed — ORDER BY random() doesn't need a count
