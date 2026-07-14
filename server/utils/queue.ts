@@ -11,25 +11,44 @@ export interface SidecarJob {
   force_rating?: 'safe' | 'questionable' | 'explicit'
 }
 
+export interface SidecarPage {
+  page_index: number
+  image_bytes_b64: string
+  phash: string
+  width: number
+  height: number
+  mime_type: string
+  file_size: number
+}
+
+export interface SidecarMetadata {
+  width: number
+  height: number
+  mime_type: string
+  file_size: number
+  title?: string
+  description?: string
+  source_url: string
+  source_site: string
+  source_id: string
+  tag_names: string[]
+  artist_name?: string
+  // v0.7.8 PR-C: multi-image Pixiv illust. When is_multi=true, the older
+  // flat width/height/mime_type/file_size fields above are the *first* page's
+  // values (kept for back-compat). Each page also carries its own phash +
+  // dims so pipeline.ts can split into N rows sharing series_id.
+  is_multi?: boolean
+  page_count?: number
+  pages?: SidecarPage[]
+}
+
 export interface SidecarResult {
   status: 'ok' | 'error' | 'too_large'
   image_bytes_b64?: string
   phash?: string
   error?: string
   max_size?: number
-  metadata?: {
-    width: number
-    height: number
-    mime_type: string
-    file_size: number
-    title?: string
-    description?: string
-    source_url: string
-    source_site: string
-    source_id: string
-    tag_names: string[]
-    artist_name?: string
-  }
+  metadata?: SidecarMetadata
 }
 
 /** Pipeline result — what the pipeline worker writes back after processing a sidecar result */
