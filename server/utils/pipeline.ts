@@ -28,7 +28,7 @@ const RATING_RANK: Record<string, number> = { safe: 0, questionable: 1, explicit
 
 // PipelineResult is now re-exported from queue.ts — use that single source of truth
 
-export async function processResult(result: SidecarResult): Promise<PipelineResult> {
+export async function processResult(result: SidecarResult, forceRating?: 'safe' | 'questionable' | 'explicit'): Promise<PipelineResult> {
   if (result.status === 'error') {
     return { status: 'failed', error: result.error || 'Unknown error' }
   }
@@ -130,10 +130,14 @@ export async function processResult(result: SidecarResult): Promise<PipelineResu
     const tagIds: string[] = []
 
     // ── 5. Apply auto-rating (before Post insert, so rating is correct from start) ──
+    // ponytail: force_rating (from extension key path) bypasses the rule scan
+    // entirely — user-specified rating wins, no auto_rating return value.
     let rating = 'safe'
     let autoRating: string | null = null
 
-    if (tagNames.length > 0) {
+    if (forceRating) {
+      rating = forceRating
+    } else if (tagNames.length > 0) {
       const rules = await db
         .select()
         .from(autoRatingRules)

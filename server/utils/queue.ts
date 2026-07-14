@@ -6,6 +6,9 @@ export interface SidecarJob {
   url: string
   source_site?: string
   source_id?: string
+  // v0.7.8: if set, pipeline skips auto-rating and uses this verbatim.
+  // Restricted to extension key auth path (admin web uses defaults).
+  force_rating?: 'safe' | 'questionable' | 'explicit'
 }
 
 export interface SidecarResult {
@@ -43,6 +46,15 @@ export interface PipelineResult {
 export async function enqueueJob(job: Omit<SidecarJob, 'id'>): Promise<string> {
   const id = crypto.randomUUID()
   await (redis as any).lpush('kura:jobs', JSON.stringify({ id, ...job }))
+  // ponytail: persist optional job-level metadata (force_rating) so the
+  // pipeline worker can pick it up when processing the sidecar result.
+  // Sidecar only sees { url, source_site, source_id } — extra fields would
+  // be ignored / dropped.
+  const meta: Record<string, unknown> = {}
+  if (job.force_rating) meta.force_rating = job.force_rating
+  if (Object.keys(meta).length > 0) {
+    await redis.set(`kura:job_meta:${id}`, JSON.stringify(meta), 'EX', 3600)
+  }
   return id
 }
 
