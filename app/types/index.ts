@@ -20,6 +20,23 @@ export interface Post {
   created_at: string
   lqip?: string | null
   tags?: Tag[]
+  // v0.7.8 PR-C: present only on multi-image posts. Mirrors the
+  // server-side series shape from server/utils/queries.ts → getPost().
+  series?: PostSeries
+}
+
+export interface PostSeriesPage {
+  id: string
+  page_index: number
+  thumb_key: string
+  width: number
+  height: number
+}
+
+export interface PostSeries {
+  id: string
+  page_count: number
+  pages: PostSeriesPage[]
 }
 
 export interface Tag {
