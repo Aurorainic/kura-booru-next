@@ -175,7 +175,17 @@ export async function getPost(id: string, isAdmin: boolean) {
 
   // v0.7.8 PR-C: if this post belongs to a series, fetch the sibling pages
   // for the series nav. Single-image posts return unchanged.
+  //
+  // SECURITY: anonymous viewers must only see `safe` siblings — non-safe
+  // existence is hidden (the project's content-rating contract: non-safe
+  // returns 404, never 403). So the sibling fetch is gated to safe rows
+  // for anon, mirroring the post's own access level. page_count is the
+  // VISIBLE count (pages.length), never the stored hint — otherwise anon
+  // could infer "this series has 5 pages but I only see 2" → metadata leak
+  // about hidden non-safe pages.
   if (post && result[0].seriesId) {
+    const siblingConds = [eq(posts.seriesId, result[0].seriesId)]
+    if (!isAdmin) siblingConds.push(eq(posts.rating, 'safe'))
     const pages = await db
       .select({
         id: posts.id,
@@ -185,21 +195,24 @@ export async function getPost(id: string, isAdmin: boolean) {
         height: posts.height,
       })
       .from(posts)
-      .where(eq(posts.seriesId, result[0].seriesId))
+      .where(and(...siblingConds))
       .orderBy(asc(posts.pageIndex))
-    post.series = {
-      id: result[0].seriesId,
-      // ponytail: trust the stored page_count, but fall back to actual
-      // survivor count if a row was deleted out-of-band (admin path
-      // should keep these in sync — this is a safety net).
-      page_count: result[0].pageCount ?? pages.length,
-      pages: pages.map(p => ({
-        id: p.id,
-        page_index: p.pageIndex,
-        thumb_key: p.thumbKey,
-        width: p.width,
-        height: p.height,
-      })),
+    // Only attach the series nav if there's >1 visible page. A series with
+    // 1 visible page (anon viewing the lone safe page of a non-safe series)
+    // would render an empty "1 / 1" strip with nothing to navigate to —
+    // hide it instead so the existence of hidden siblings isn't telegraphed.
+    if (pages.length > 1) {
+      post.series = {
+        id: result[0].seriesId,
+        page_count: pages.length,
+        pages: pages.map(p => ({
+          id: p.id,
+          page_index: p.pageIndex,
+          thumb_key: p.thumbKey,
+          width: p.width,
+          height: p.height,
+        })),
+      }
     }
   }
 
@@ -230,8 +243,23 @@ export async function getPostBySource(sourceSite: string, sourceId: string, isAd
   const conditions = [eq(posts.sourceSite, sourceSite as any), eq(posts.sourceId, sourceId)]
   if (!isAdmin) conditions.push(eq(posts.rating, 'safe'))
 
-  const result = await db.select().from(posts).where(and(...conditions)).limit(1)
-  return serializePost(result[0])
+  // v0.7.8 PR-C: after multi-image series, a (source_site, source_id) tuple
+  // can match multiple rows — a legacy single-image row (page_index IS NULL)
+  // and up to 5 series pages. Without an ORDER BY the planner picks any row;
+  // with NULLs-last default ordering the legacy row would win over the
+  // series anchor, returning a stale post for a re-imported illust.
+  // Anchor (page_index=1) first, then NULL (legacy single-image), then the
+  // rest. CreatedAt breaks ties deterministically.
+  const result = await db.select().from(posts)
+    .where(and(...conditions))
+    .orderBy(sql`CASE WHEN ${posts.pageIndex} = 1 THEN 0 WHEN ${posts.pageIndex} IS NULL THEN 1 ELSE 2 END, ${posts.createdAt} ASC`)
+    .limit(1)
+  if (!result[0]) return serializePost(null)
+
+  // Mirror getPost: if the matched row is part of a series, attach the
+  // sibling-pages `series` field so bot/by-source clients see the same
+  // surface as the detail-page API.
+  return getPost(result[0].id, isAdmin)
 }
 
 // ── Search ──

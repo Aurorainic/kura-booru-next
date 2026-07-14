@@ -277,24 +277,45 @@ async function processMultiImageResult(
   // Sort pages by page_index so we always insert the series anchor (page_index=1) first.
   const sortedPages = [...pages].sort((a, b) => a.page_index - b.page_index)
 
-  // Detect existing series for this source. If the anchor (page_index=1) row
-  // already exists, reuse its series_id and treat this import as idempotent.
-  // Unique constraint (source_site, source_id, page_index) is the final guard
-  // against duplicate series inserts — see catch below.
+  // Detect existing series for this source. If the anchor (page_index=1)
+  // row already exists, reuse its series_id and treat this import as
+  // idempotent. Unique constraint (source_site, source_id, page_index) is
+  // the final guard against duplicate series inserts — see catch below.
+  //
+  // Also detect a legacy single-image import (page_index IS NULL, pre-PR-C)
+  // of the same source: its row coexists with new series rows because NULLs
+  // are distinct under the unique index. If found, adopt it — stamp its
+  // page_index=1 and series_id=own.id so it becomes the anchor instead of
+  // inserting a duplicate. Otherwise by-source lookup would non-determin-
+  // ically return either the stale single-image row or the new anchor.
   const existingAnchor = await db
-    .select({ id: posts.id })
+    .select({ id: posts.id, seriesId: posts.seriesId })
     .from(posts)
-    .where(sql`${posts.sourceSite} = ${sourceSite} AND ${posts.sourceId} = ${meta.source_id} AND ${posts.pageIndex} = 1`)
+    .where(sql`${posts.sourceSite} = ${sourceSite} AND ${posts.sourceId} = ${meta.source_id} AND (${posts.pageIndex} = 1 OR ${posts.pageIndex} IS NULL)`)
+    .orderBy(sql`CASE WHEN ${posts.pageIndex} = 1 THEN 0 ELSE 1 END`)
     .limit(1)
 
-  let seriesId: string | null
-  if (existingAnchor[0]) {
-    seriesId = existingAnchor[0].id
+  // ponytail: pre-generate the series_id BEFORE any insert. The old pattern
+  // (insert anchor with series_id=NULL, then UPDATE series_id=own.id in the
+  // same tx) created a cross-worker read-back race: a concurrent loser of
+  // the 23505 recovery could read winner.seriesId=NULL (between the winner's
+  // INSERT and its UPDATE, or if the winner's tx rolled back). Pre-generating
+  // the UUID means every page in this import — and every concurrent loser —
+  // can stamp the known series_id up-front, no read-back.
+  let seriesId: string
+  if (existingAnchor[0]?.seriesId) {
+    seriesId = existingAnchor[0].seriesId
+  } else if (existingAnchor[0]) {
+    // Legacy NULL row exists but has no series_id yet — adopt it: it'll be
+    // re-stamped as the anchor (page_index=1, series_id=its-own-id) below.
+    seriesId = crypto.randomUUID()
   } else {
-    // We are the first import of this illust. After we insert page_index=1,
-    // that row's id becomes series_id for every page in this transaction.
-    seriesId = null  // marker; insertOnePage stamps series_id=id on the anchor row
+    // First import of this illust. Anchor (page_index=1) will stamp this id.
+    seriesId = crypto.randomUUID()
   }
+  const adoptLegacyId: string | null = existingAnchor[0] && !existingAnchor[0].seriesId
+    ? existingAnchor[0]!.id
+    : null
 
   // Per-page result containers.
   const pageResults: Array<{ page_index: number; status: 'success' | 'duplicate' | 'failed'; post_id?: string; error?: string }> = []
@@ -320,13 +341,8 @@ async function processMultiImageResult(
         pageCount: declaredPageCount,
         forceRating,
         sourceSite,
+        adoptLegacyId: page.page_index === 1 ? adoptLegacyId : null,
       })
-
-      // If we just inserted the anchor page_index=1, its postId becomes the
-      // series_id — refresh our local so subsequent pages get the right FK.
-      if (seriesId === null && page.page_index === 1) {
-        seriesId = newId
-      }
 
       pageResults.push({ page_index: page.page_index, status: 'success', post_id: newId })
     } catch (err: any) {
@@ -342,9 +358,11 @@ async function processMultiImageResult(
         const winnerId = winner[0]?.id
         const winnerSeriesId = winner[0]?.seriesId
         if (winnerId) {
-          // If we were the would-be anchor, hand off to the winner's series_id.
-          if (seriesId === null && page.page_index === 1) {
-            seriesId = winnerSeriesId ?? winnerId
+          // Concurrent winner stamped the series_id up-front (pre-generated
+          // UUID), so it's never NULL here. Defensive fallback kept for
+          // rows inserted by pre-fix code that still has series_id=NULL.
+          if (page.page_index === 1 && winnerSeriesId) {
+            seriesId = winnerSeriesId
           }
           pageResults.push({ page_index: page.page_index, status: 'duplicate', post_id: winnerId })
         } else {
@@ -354,6 +372,20 @@ async function processMultiImageResult(
       }
       pageResults.push({ page_index: page.page_index, status: 'failed', error: err.message || 'insert error' })
     }
+  }
+
+  // v0.7.8 PR-C: page_count is denormalized — every row stores the series
+  // total. If some pages failed (sharp/S3/non-23505 error), the declared
+  // page_count on the survivors is now wrong. Reconcile to the ACTUAL
+  // number of successfully-inserted rows in this series so getPost's nav
+  // shows the real count. (getPost also clamps to visible-page count, but
+  // the stored hint should be correct for admin viewers who see all rows.)
+  const successCount = pageResults.filter(r => r.status === 'success' || r.status === 'duplicate').length
+  if (successCount > 0) {
+    await db.update(posts)
+      .set({ pageCount: successCount })
+      .where(eq(posts.seriesId, seriesId))
+      .catch(err => console.error('[pipeline] page_count reconcile failed:', err))
   }
 
   const anchorPage = pageResults.find(r => r.page_index === 1)
@@ -374,9 +406,13 @@ async function processMultiImageResult(
  * but takes page-specific dims/phash and stamps series_id/page_index/page_count
  * on the row. Returns the inserted post id.
  *
- * If `seriesId` is null, this is the anchor page (page_index=1) being
- * inserted without a known series anchor yet — caller must UPDATE the row
- * to set series_id=id afterward (the series is born from its first page).
+ * `seriesId` is a pre-generated UUID shared by every page in this import
+ * (see processMultiImageResult) — never null. This eliminates the old
+ * "insert anchor with NULL, then UPDATE own.id" read-back race.
+ *
+ * If `adoptLegacyId` is set, this is the anchor (page_index=1) AND a legacy
+ * single-image row (page_index IS NULL) of the same source exists: UPDATE
+ * that row in place to become the anchor instead of inserting a duplicate.
  *
  * Side effect on success: AI tag processing runs non-blocking on each page.
  */
@@ -384,13 +420,14 @@ async function insertOnePage(args: {
   imageBuffer: Buffer
   meta: NonNullable<SidecarResult['metadata']>
   page: NonNullable<NonNullable<SidecarResult['metadata']>['pages']>[number]
-  seriesId: string | null
+  seriesId: string
   pageIndex: number
   pageCount: number
   forceRating?: 'safe' | 'questionable' | 'explicit'
   sourceSite: 'pixiv' | 'twitter' | 'danbooru' | 'other'
+  adoptLegacyId?: string | null
 }): Promise<string> {
-  const { imageBuffer, meta, page, seriesId, pageIndex, pageCount, forceRating, sourceSite } = args
+  const { imageBuffer, meta, page, seriesId, pageIndex, pageCount, forceRating, sourceSite, adoptLegacyId } = args
 
   // ── phash dedup (per page) ──
   if (page.phash && /^[0-9a-f]+$/i.test(page.phash) && page.phash.length >= 4) {
@@ -472,8 +509,8 @@ async function insertOnePage(args: {
     }
   }
 
-  // ── Insert Post with series metadata. Default series_id is null on the
-  //    anchor row — we'll UPDATE in the same transaction after we know its id. ──
+  // ── Insert Post (or adopt legacy row). seriesId is a pre-generated UUID,
+  //    never null — no read-back race. ──
   let postId: string
   await db.transaction(async (tx: any) => {
     if (tagNames.length > 0) {
@@ -501,36 +538,59 @@ async function insertOnePage(args: {
       if (tag?.id && !tagIds.includes(tag.id)) tagIds.push(tag.id)
     }
 
-    const [post] = await tx.insert(posts)
-      .values({
-        s3Key: imageKey,
-        thumbKey: thumbKey || imageKey,
-        previewKey: previewKey || imageKey,
-        sourceUrl: meta.source_url,
-        sourceSite,
-        sourceId: meta.source_id,
-        width: width ?? 0,
-        height: height ?? 0,
-        fileSize: page.file_size,
-        mimeType: mimeType || 'image/png',
-        phash: page.phash,
-        lqip: lqipDataUri,
-        title: meta.title || null,
-        description: meta.description || null,
-        rating: rating as any,
-        seriesId: seriesId,          // null when this is the anchor being born
-        pageIndex,
-        pageCount,
-      })
-      .returning({ id: posts.id })
-    postId = post.id
-
-    // Anchor: stamp series_id = own id, finalize page_count. Run only when
-    // we don't already know it (i.e. we're the first page of the series).
-    if (seriesId === null && pageIndex === 1) {
-      await tx.update(posts)
-        .set({ seriesId: postId, pageCount })
-        .where(eq(posts.id, postId))
+    if (adoptLegacyId && pageIndex === 1) {
+      // Legacy single-image row of the same source exists (page_index IS
+      // NULL). Promote it to the anchor: stamp series_id=its-own-id +
+      // page_index=1 + page_count, and rewrite its S3/dims to this page's
+      // (page 1) values. No new row inserted.
+      const [updated] = await tx.update(posts)
+        .set({
+          s3Key: imageKey,
+          thumbKey: thumbKey || imageKey,
+          previewKey: previewKey || imageKey,
+          sourceUrl: meta.source_url,
+          sourceSite,
+          sourceId: meta.source_id,
+          width: width ?? 0,
+          height: height ?? 0,
+          fileSize: page.file_size,
+          mimeType: mimeType || 'image/png',
+          phash: page.phash,
+          lqip: lqipDataUri,
+          title: meta.title || null,
+          description: meta.description || null,
+          rating: rating as any,
+          seriesId: adoptLegacyId,
+          pageIndex,
+          pageCount,
+        })
+        .where(eq(posts.id, adoptLegacyId))
+        .returning({ id: posts.id })
+      postId = updated.id
+    } else {
+      const [post] = await tx.insert(posts)
+        .values({
+          s3Key: imageKey,
+          thumbKey: thumbKey || imageKey,
+          previewKey: previewKey || imageKey,
+          sourceUrl: meta.source_url,
+          sourceSite,
+          sourceId: meta.source_id,
+          width: width ?? 0,
+          height: height ?? 0,
+          fileSize: page.file_size,
+          mimeType: mimeType || 'image/png',
+          phash: page.phash,
+          lqip: lqipDataUri,
+          title: meta.title || null,
+          description: meta.description || null,
+          rating: rating as any,
+          seriesId,
+          pageIndex,
+          pageCount,
+        })
+        .returning({ id: posts.id })
+      postId = post.id
     }
 
     if (tagIds.length > 0) {

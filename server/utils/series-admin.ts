@@ -93,20 +93,39 @@ export async function deletePostAndRenumberSeries(id: string) {
     await tx.delete(postTags).where(eq(postTags.postId, id))
 
     if (t.seriesId && t.pageIndex !== null) {
-      const survivors = await tx
-        .select({ id: posts.id, pageIndex: posts.pageIndex })
+      // Set-based renumber in ONE statement: every survivor after the
+      // deleted page_index shifts down by 1; page_count is recomputed to
+      // the new survivor count. Replaces the old per-row UPDATE loop (N
+      // round-trips). The same statement re-anchors if the deleted row was
+      // the anchor (page_index=1): the new lowest survivor's id becomes the
+      // series_id for every row — without this, getPost's sibling SELECT
+      // would return zero rows and the nav would silently vanish.
+      const newCount = await tx
+        .select({ count: sql<number>`count(*)` })
         .from(posts)
-        .where(eq(posts.seriesId, t.seriesId))
-        .orderBy(asc(posts.pageIndex))
+        .where(sql`${posts.seriesId} = ${t.seriesId} AND ${posts.id} <> ${id}`)
+      const survivorCount = Number(newCount[0]?.count || 0)
 
-      const newCount = survivors.length - 1
-      const remaining = survivors.filter((s: { id: string; pageIndex: number | null }) => s.id !== id)
-      for (const s of remaining) {
-        const newPageIndex = s.pageIndex !== null && s.pageIndex > (t.pageIndex ?? 0)
-          ? s.pageIndex - 1
-          : s.pageIndex
-        await tx.update(posts).set({ pageCount: newCount, pageIndex: newPageIndex }).where(eq(posts.id, s.id))
-      }
+      // Re-anchor target: the lowest page_index survivor (after the deleted
+      // row is gone). If the deleted row wasn't the anchor, series_id is
+      // unchanged; we just need the renumber + page_count rewrite.
+      const lowestSurvivor = survivorCount > 0
+        ? await tx.select({ id: posts.id })
+            .from(posts)
+            .where(sql`${posts.seriesId} = ${t.seriesId} AND ${posts.id} <> ${id}`)
+            .orderBy(asc(posts.pageIndex))
+            .limit(1)
+        : []
+      const isAnchorDelete = t.pageIndex === 1
+      const newAnchorId = isAnchorDelete && lowestSurvivor[0] ? lowestSurvivor[0]!.id : null
+
+      await tx.update(posts)
+        .set({
+          pageCount: survivorCount,
+          pageIndex: sql`CASE WHEN ${posts.pageIndex} > ${t.pageIndex} THEN ${posts.pageIndex} - 1 ELSE ${posts.pageIndex} END`,
+          ...(newAnchorId ? { seriesId: newAnchorId } : {}),
+        })
+        .where(sql`${posts.seriesId} = ${t.seriesId} AND ${posts.id} <> ${id}`)
     }
 
     await tx.delete(posts).where(eq(posts.id, id))
