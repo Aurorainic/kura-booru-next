@@ -25,7 +25,7 @@
       color: #94a3b8;
       margin-bottom: 4px;
     }
-    input {
+    input, select {
       width: 100%;
       padding: 8px 10px;
       border: 1px solid #334155;
@@ -36,9 +36,7 @@
       margin-bottom: 12px;
       outline: none;
     }
-    input:focus {
-      border-color: #06b6d4;
-    }
+    input:focus, select:focus { border-color: #06b6d4; }
     button {
       width: 100%;
       padding: 8px;
@@ -63,6 +61,13 @@
       animation: kura-pop 0.3s ease;
     }
     #status.error { color: #f87171; }
+    .hint {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: -8px;
+      margin-bottom: 12px;
+      line-height: 1.4;
+    }
     @keyframes kura-pop {
       from { opacity: 0; transform: scale(0.8); }
       to   { opacity: 1; transform: scale(1); }
@@ -75,8 +80,17 @@
   <label for="server-url">服务器地址</label>
   <input type="url" id="server-url" placeholder="https://kura.example.com" />
 
-  <label for="api-key">API 密钥</label>
-  <input type="password" id="api-key" placeholder="X-Api-Key value" />
+  <label for="api-key">API 密钥 (kb_ext_…)</label>
+  <input type="password" id="api-key" placeholder="从 admin 后台生成" />
+  <div class="hint">到 Kura 管理后台 → 扩展密钥 → 生成新 Key,把明文粘贴到这里。Key 只显示一次。</div>
+
+  <label for="content-type">内容评级 (默认让服务器自动判定)</label>
+  <select id="content-type">
+    <option value="auto">自动 (由 Auto-Rating 规则决定)</option>
+    <option value="safe">公开 (safe)</option>
+    <option value="questionable">敏感 (questionable)</option>
+    <option value="explicit">限制 (explicit)</option>
+  </select>
 
   <button id="save-btn">保存</button>
   <div id="status"></div>
