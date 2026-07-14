@@ -15,7 +15,7 @@ import { db } from './db'
 import { extensionKeys } from './schema'
 
 export const EXT_KEY_PREFIX = 'kb_ext_'
-const KEY_RANDOM_BYTES = 24 // 32 base62 chars
+const KEY_RANDOM_BYTES = 32
 
 export interface ExtensionKeyContext {
   id: string
@@ -31,7 +31,10 @@ function hashKey(raw: string): string {
 }
 
 function base62(bytes: number): string {
-  // ponytail: base62 alphabet, no padding. 24 bytes -> 32 chars (since log(62)/log(256) ≈ 0.729).
+  // ponytail: base62 alphabet, no padding. 32 random bytes → up to 43 chars
+  // (log₆₂(2²⁵⁶) ≈ 43.5). Caller always slices to 32, so this never truncates
+  // — unlike the previous 24-byte version which silently dropped trailing chars
+  // when the high bit set, biasing the distribution (security review fix).
   const alpha = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
   const buf = randomBytes(bytes)
   let n = 0n
@@ -41,7 +44,7 @@ function base62(bytes: number): string {
     out = alpha[Number(n % 62n)] + out
     n /= 62n
   }
-  return out.slice(0, 32)
+  return out.slice(0, 43)
 }
 
 /**
@@ -50,7 +53,7 @@ function base62(bytes: number): string {
  * visible prefix for UI identification.
  */
 export function generateExtensionKey(): { raw: string; prefix: string; hash: string } {
-  const raw = `${EXT_KEY_PREFIX}${base62(KEY_RANDOM_BYTES)}`
+  const raw = `${EXT_KEY_PREFIX}${base62(32).slice(0, 32)}`
   return { raw, prefix: raw.slice(0, 12), hash: hashKey(raw) }
 }
 

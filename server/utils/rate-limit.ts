@@ -25,8 +25,10 @@ export async function rateLimit(bucket: string, limit: number, windowSec: number
       remaining: Math.max(0, limit - count),
       resetSec: ttl > 0 ? ttl : windowSec,
     }
-  } catch {
+  } catch (e) {
     // ponytail: fail-open. Redis hiccup shouldn't block legit extension users.
+    // Warn so the bypass is observable when it happens (security review MED).
+    console.warn(`[rate-limit] Redis fail-open for bucket=${bucket}:`, (e as Error).message)
     return { ok: true, remaining: limit, resetSec: windowSec }
   }
 }

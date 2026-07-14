@@ -53,7 +53,7 @@ export async function enqueueJob(job: Omit<SidecarJob, 'id'>): Promise<string> {
   const meta: Record<string, unknown> = {}
   if (job.force_rating) meta.force_rating = job.force_rating
   if (Object.keys(meta).length > 0) {
-    await redis.set(`kura:job_meta:${id}`, JSON.stringify(meta), 'EX', 3600)
+    await redis.set(`kura:job_meta:${id}`, JSON.stringify(meta), { EX: 3600 })
   }
   return id
 }

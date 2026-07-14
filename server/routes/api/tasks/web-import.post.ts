@@ -1,6 +1,6 @@
-import { requireAdminOrExtensionKey } from '../../utils/auth-helpers'
-import { rateLimit } from '../../utils/rate-limit'
-import { redis } from '../../utils/redis'
+import { requireAdminOrExtensionKey } from '../../../utils/auth-helpers'
+import { rateLimit } from '../../../utils/rate-limit'
+import { redis } from '../../../utils/redis'
 
 const VALID_RATINGS = new Set(['safe', 'questionable', 'explicit'])
 
@@ -22,33 +22,37 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<{ urls?: string[]; force_rating?: string }>(event)
   if (!body?.urls?.length) throw createError({ statusCode: 400, statusMessage: 'urls required' })
 
-  // ponytail: force_rating is gated by canForceRating (admin opts in at key
-  // creation). Even when allowed, every use is appended to an audit log so
-  // abuse is visible in Redis. Without the gate, any kb_ext_ holder could
-  // downgrade explicit→safe for free. Admin sessions skip force_rating (they
-  // go through normal auto-rating; manual override is in the admin UI).
-  let forceRating: 'safe' | 'questionable' | 'explicit' | undefined
-  if (auth.kind === 'extension' && body.force_rating && VALID_RATINGS.has(body.force_rating)) {
-    const ctx = (event.context as any).extensionKey
-    if (ctx?.canForceRating) {
-      forceRating = body.force_rating as 'safe' | 'questionable' | 'explicit'
-      // ponytail: best-effort audit trail. Fail-open on Redis error — would
-      // rather allow a logged bypass than block legit imports if Redis hiccups.
-      redis.lpush(
-        'kura:ext_force_rating_audit',
-        JSON.stringify({
-          at: new Date().toISOString(),
-          keyId: auth.keyId,
-          keyName: ctx.name,
-          rating: forceRating,
-          urlCount: body.urls.length,
-        }),
-      ).catch(() => { /* swallow — observability, not auth */ })
-      // Keep last 1000 entries (atomic trim via RPOP/LTRIM after push).
-      redis.ltrim('kura:ext_force_rating_audit', 0, 999).catch(() => {})
-    }
-    // else: silently fall back to auto-rating — UI showed the option but key
-    // isn't authorized. (Alternative: 403; silent skip is friendlier.)
+  // ponytail: force_rating requires the key have canForceRating (admin opt-in
+  // at key creation). Without it, we DON'T silently ignore the user's selection
+  // — we surface it as per-URL error so the extension UI can show "this key
+  // can't override rating" instead of pretending it worked. Admin sessions
+  // skip force_rating (they go through normal auto-rating; manual override is
+  // in the admin UI after import).
+  const requestedForceRating = auth.kind === 'extension'
+    && body.force_rating
+    && VALID_RATINGS.has(body.force_rating)
+    ? body.force_rating as 'safe' | 'questionable' | 'explicit'
+    : undefined
+  const forceRatingBlocked = requestedForceRating !== undefined
+    && !(auth.kind === 'extension' && auth.canForceRating)
+
+  const forceRating = requestedForceRating && !forceRatingBlocked ? requestedForceRating : undefined
+
+  if (forceRating) {
+    // ponytail: best-effort audit trail. Fail-open on Redis error — would
+    // rather allow a logged bypass than block legit imports if Redis hiccups.
+    ;(redis as any).lpush(
+      'kura:ext_force_rating_audit',
+      JSON.stringify({
+        at: new Date().toISOString(),
+        keyId: auth.keyId,
+        keyName: auth.kind === 'extension' ? auth.keyName : 'unknown',
+        rating: forceRating,
+        urlCount: body.urls.length,
+      }),
+    ).catch(() => { /* swallow — observability, not auth */ })
+    // Keep last 1000 entries (atomic trim via RPOP/LTRIM after push).
+    ;(redis as any).ltrim('kura:ext_force_rating_audit', 0, 999).catch(() => {})
   }
 
   const results = await Promise.all(body.urls.slice(0, 50).map(async (url) => {
@@ -57,6 +61,14 @@ export default defineEventHandler(async (event) => {
       try { host = new URL(url).hostname }
       catch { return { status: 'error', url, error: 'invalid URL' } }
       if (await isPrivateHost(host)) return { status: 'error', url, error: 'private/reserved host' }
+
+      // ponytail: per-URL rejection when key lacks force_rating cap. UI can
+      // distinguish this from server errors and prompt the user to get an
+      // admin to re-issue the key with can_force_rating=true.
+      if (forceRatingBlocked) {
+        return { status: 'error', url, error: 'key_not_authorized_for_force_rating' }
+      }
+
       const jobId = await enqueueJob({
         url,
         ...(forceRating ? { force_rating: forceRating } : {}),

@@ -19,6 +19,18 @@ document.addEventListener("DOMContentLoaded", function () {
     var apiKey = apiKeyInput.value.trim();
     var contentType = contentTypeInput.value || "auto";
 
+    // ponytail: surface a typo (e.g. pasting BACKEND_API_KEY) immediately
+    // instead of letting the user discover it via 401 on every import.
+    if (apiKey && apiKey.indexOf("kb_ext_") !== 0) {
+      statusDiv.textContent = "Key 应以 kb_ext_ 开头 — 去 admin 后台生成";
+      statusDiv.className = "error";
+      setTimeout(function () {
+        statusDiv.textContent = "";
+        statusDiv.className = "";
+      }, 3000);
+      return;
+    }
+
     chrome.storage.sync.set({
       serverUrl: serverUrl,
       apiKey: apiKey,
