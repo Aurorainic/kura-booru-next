@@ -4,6 +4,7 @@ CREATE TABLE "extension_keys" (
   "key_hash" varchar(64) NOT NULL UNIQUE,
   "key_prefix" varchar(12) NOT NULL,
   "created_by" text NOT NULL,
+  "can_force_rating" boolean DEFAULT false NOT NULL,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
   "last_used_at" timestamp with time zone,
   "revoked_at" timestamp with time zone

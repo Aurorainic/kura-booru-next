@@ -7,16 +7,15 @@ export default defineEventHandler(async (event) => {
   const isAdmin = await getIsAdmin(cookie)
   if (!isAdmin) throw createError({ statusCode: 401, statusMessage: 'Admin required' })
 
-  const body = await readBody<{ name?: string }>(event)
+  const body = await readBody<{ name?: string; can_force_rating?: boolean }>(event)
   const name = String(body?.name || '').trim()
   if (!name || name.length > 64) {
     throw createError({ statusCode: 400, statusMessage: 'name required (1-64 chars)' })
   }
+  // ponytail: default false. Admin must explicitly opt in to granting a key
+  // the power to bypass auto-rating. Stops accidental policy-bypass.
+  const canForceRating = body?.can_force_rating === true
 
-  // Ponytail: identity is best-effort from session. The extension key auth
-  // path doesn't have a "current admin" concept; for audit purposes the key
-  // records who created it (the admin session at the time of generation).
-  // We pass through the username from the session if extractable, else 'admin'.
   const createdBy = await getAdminUsernameFromCookie(cookie) || 'admin'
 
   const { raw, prefix, hash } = generateExtensionKey()
@@ -26,10 +25,12 @@ export default defineEventHandler(async (event) => {
     keyHash: hash,
     keyPrefix: prefix,
     createdBy,
+    canForceRating,
   }).returning({
     id: extensionKeys.id,
     name: extensionKeys.name,
     keyPrefix: extensionKeys.keyPrefix,
+    canForceRating: extensionKeys.canForceRating,
     createdAt: extensionKeys.createdAt,
   })
 

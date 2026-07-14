@@ -39,11 +39,16 @@ async function handleImport(url) {
       var data = await resp.json();
       // v0.7.8: response shape is { results: [{ task_id, status, url }, ...] }
       var first = data.results && data.results[0];
-      if (!first || !first.task_id) {
+      if (!first) {
         return { success: false, error: "返回格式异常" };
       }
+      // ponytail: error result has no task_id — surface its message first so
+      // admin/extension users see "private/reserved host" instead of "格式异常".
       if (first.status === "error") {
         return { success: false, error: first.error || "服务端拒绝" };
+      }
+      if (!first.task_id) {
+        return { success: false, error: "返回格式异常" };
       }
       return { success: true, taskId: first.task_id };
     }

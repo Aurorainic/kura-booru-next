@@ -21,6 +21,9 @@ export interface ExtensionKeyContext {
   id: string
   name: string
   createdBy: string
+  // ponytail: gate for force_rating — admin opts in at key creation so a
+  // default low-trust key can't bypass auto-rating (security review fix).
+  canForceRating: boolean
 }
 
 function hashKey(raw: string): string {
@@ -68,6 +71,7 @@ export async function verifyExtensionKey(raw: string | undefined | null): Promis
     id: extensionKeys.id,
     name: extensionKeys.name,
     createdBy: extensionKeys.createdBy,
+    canForceRating: extensionKeys.canForceRating,
     keyHash: extensionKeys.keyHash,
     revokedAt: extensionKeys.revokedAt,
   })
@@ -92,7 +96,12 @@ export async function verifyExtensionKey(raw: string | undefined | null): Promis
     .where(eq(extensionKeys.id, row.id))
     .catch(() => { /* swallow — observability, not auth */ })
 
-  return { id: row.id, name: row.name, createdBy: row.createdBy }
+  return {
+    id: row.id,
+    name: row.name,
+    createdBy: row.createdBy,
+    canForceRating: row.canForceRating,
+  }
 }
 
 // ponytail: invariant self-check. Runs once at module load — catches the

@@ -9,15 +9,17 @@ const { data: keys, refresh } = await useAsyncData('extension-keys', async () =>
 })
 
 const newName = ref('')
-const justCreatedKey = ref<{ id: string; name: string; raw_key: string } | null>(null)
+const newCanForceRating = ref(false)
+const justCreatedKey = ref<{ id: string; name: string; raw_key: string; canForceRating: boolean } | null>(null)
 const copied = ref(false)
 
 async function createKey() {
   const name = newName.value.trim()
   if (!name) return
   try {
-    justCreatedKey.value = await createExtensionKey(name)
+    justCreatedKey.value = await createExtensionKey(name, newCanForceRating.value)
     newName.value = ''
+    newCanForceRating.value = false
     await refresh()
   } catch (e: any) {
     alert(`创建失败: ${e.message || e}`)
@@ -76,6 +78,10 @@ function formatDate(s: string | null | undefined): string {
           @click="createKey"
         >生成</button>
       </div>
+      <label class="flex items-center gap-2 text-xs text-[var(--text-muted)] cursor-pointer select-none mt-1">
+        <input v-model="newCanForceRating" type="checkbox" class="w-3.5 h-3.5 accent-[var(--accent-color)]" />
+        <span>允许此 Key 在导入时覆盖内容评级 (force_rating)</span>
+      </label>
     </div>
 
     <!-- Newly created key (one-time reveal) -->
@@ -115,6 +121,7 @@ function formatDate(s: string | null | undefined): string {
               <span class="font-medium text-sm">{{ key.name }}</span>
               <span v-if="!key.active" class="text-[0.625rem] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400">已吊销</span>
               <span v-else class="text-[0.625rem] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">活跃</span>
+              <span v-if="key.canForceRating" class="text-[0.625rem] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400" title="此 Key 允许 force_rating 覆盖">force_rating</span>
             </div>
             <div class="text-xs text-[var(--text-muted)] mt-0.5 flex items-center gap-3 flex-wrap">
               <code class="font-mono">{{ key.keyPrefix }}…</code>

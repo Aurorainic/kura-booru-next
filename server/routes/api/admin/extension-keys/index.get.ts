@@ -13,6 +13,7 @@ export default defineEventHandler(async (event) => {
     name: extensionKeys.name,
     keyPrefix: extensionKeys.keyPrefix,
     createdBy: extensionKeys.createdBy,
+    canForceRating: extensionKeys.canForceRating,
     createdAt: extensionKeys.createdAt,
     lastUsedAt: extensionKeys.lastUsedAt,
     revokedAt: extensionKeys.revokedAt,

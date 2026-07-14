@@ -269,6 +269,7 @@ export interface ExtensionKey {
   name: string
   keyPrefix: string
   createdBy: string
+  canForceRating: boolean
   createdAt: string
   lastUsedAt: string | null
   revokedAt: string | null
@@ -279,11 +280,11 @@ export async function fetchExtensionKeys(ssrCookie?: string): Promise<ExtensionK
   return fetchApi<ExtensionKey[]>('/admin/extension-keys/', undefined, { ssrCookie })
 }
 
-export async function createExtensionKey(name: string): Promise<ExtensionKey & { raw_key: string }> {
+export async function createExtensionKey(name: string, canForceRating = false): Promise<ExtensionKey & { raw_key: string }> {
   return fetchApi('/admin/extension-keys/', undefined, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, can_force_rating: canForceRating }),
   })
 }
 
