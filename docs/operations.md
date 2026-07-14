@@ -234,6 +234,22 @@ The Nuxt server handles `/i/*` internally (proxying to `S3_EXTERNAL_URL`). The r
 
 ---
 
-## Extension API Key Rotation
+## Extension API Key Management (v0.7.8+)
 
-When rotating `BACKEND_API_KEY`, notify all extension users — they must manually update the API Key in their extension popup settings. The old key stops working immediately upon nuxt container restart.
+Extension keys are per-admin (kb_ext_ prefix), distinct from BACKEND_API_KEY
+(service-level, shared with the bot). Generate/revoke via admin UI:
+
+- Generate: `/admin?tab=extension` → enter name → 生成. Copy raw value (shown ONCE).
+- Revoke: same panel → click 吊销 next to key. Takes effect immediately.
+
+Old (pre-v0.7.8) extension used `BACKEND_API_KEY` directly — that path is no
+longer supported by the new extension code. Operators with existing extension
+users should:
+
+1. Upgrade server to v0.7.8+ (migration adds extension_keys table)
+2. Issue one kb_ext_ key per extension user via admin UI
+3. Have each user paste their key into the extension popup
+
+If you must rotate `BACKEND_API_KEY` (e.g. compromised), it no longer affects
+extension users — they have their own keys. Rotate via `Settings` → `Password`
+in admin UI, or by revoking individual keys in the extension panel.

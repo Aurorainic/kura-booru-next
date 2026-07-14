@@ -41,8 +41,21 @@ async function startPipelineWorker() {
 
       const sidecarResult = JSON.parse(raw)
 
+      // Read optional job metadata (force_rating from extension key path).
+      // Best-effort — missing key means default (admin) path.
+      let forceRating: 'safe' | 'questionable' | 'explicit' | undefined
+      try {
+        const metaRaw = await redis.get(`kura:job_meta:${jobId}`)
+        if (metaRaw) {
+          const meta = JSON.parse(metaRaw)
+          if (meta.force_rating === 'safe' || meta.force_rating === 'questionable' || meta.force_rating === 'explicit') {
+            forceRating = meta.force_rating
+          }
+        }
+      } catch { /* malformed meta is non-fatal */ }
+
       // Process through pipeline
-      const pipeResult = await processResult(sidecarResult)
+      const pipeResult = await processResult(sidecarResult, forceRating)
 
       // Overwrite raw sidecar result with safe pipeline result (5 min TTL)
       await (redis as any).set(

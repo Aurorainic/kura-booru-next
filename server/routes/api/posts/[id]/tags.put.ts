@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
     if (cleanNames.length) {
       // B-P3-2: Use onConflictDoUpdate to avoid TOCTOU race
       const upserted = await db.insert(tags).values(
-        cleanNames.map(name => ({ name, category: 'general' })),
+        cleanNames.map(name => ({ name, category: 'general' as const })),
       )
         .onConflictDoUpdate({ target: tags.name, set: { name: sql`excluded.name` } })
         .returning({ id: tags.id })

@@ -16,6 +16,10 @@ const selectedIndex = ref(-1)
 const loading = ref(false)
 const inputEl = ref<HTMLInputElement | null>(null)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+// ponytail: one in-flight AbortController per input run. Replaced on every
+// keystroke so the previous request is cancelled — debounce alone can't
+// stop a slow A from resolving after a fast B and clobbering the UI.
+let inFlight: AbortController | null = null
 
 // `/` keycap hint shown when input is empty and idle.
 const { isMac } = usePlatform()
@@ -25,6 +29,7 @@ const showKeycap = computed(() => !query.value && !loading.value)
 function onInput(value: string) {
   query.value = value
   if (debounceTimer) clearTimeout(debounceTimer)
+  if (inFlight) { inFlight.abort(); inFlight = null }
 
   const parts = value.split(/[\s+]+/)
   const currentTag = (parts[parts.length - 1] || '').replace(/^-/, '')
@@ -36,16 +41,24 @@ function onInput(value: string) {
   }
 
   debounceTimer = setTimeout(async () => {
+    const controller = new AbortController()
+    inFlight = controller
     loading.value = true
     try {
-      const results = await fetchAutocomplete(currentTag)
+      const results = await fetchAutocomplete(currentTag, controller.signal)
+      // Drop result if a newer keystroke already replaced us.
+      if (inFlight !== controller) return
       suggestions.value = results
       showSuggestions.value = true
       selectedIndex.value = -1
-    } catch {
+    } catch (err) {
+      if (controller.signal.aborted) return
       suggestions.value = []
     } finally {
-      loading.value = false
+      if (inFlight === controller) {
+        loading.value = false
+        inFlight = null
+      }
     }
   }, 250)
 }
@@ -110,6 +123,7 @@ function onBlur() {
 
 onUnmounted(() => {
   if (debounceTimer) clearTimeout(debounceTimer)
+  if (inFlight) { inFlight.abort(); inFlight = null }
 })
 </script>
 

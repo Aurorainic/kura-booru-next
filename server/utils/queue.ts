@@ -6,6 +6,40 @@ export interface SidecarJob {
   url: string
   source_site?: string
   source_id?: string
+  // v0.7.8: if set, pipeline skips auto-rating and uses this verbatim.
+  // Restricted to extension key auth path (admin web uses defaults).
+  force_rating?: 'safe' | 'questionable' | 'explicit'
+}
+
+export interface SidecarPage {
+  page_index: number
+  image_bytes_b64: string
+  phash: string
+  width: number
+  height: number
+  mime_type: string
+  file_size: number
+}
+
+export interface SidecarMetadata {
+  width: number
+  height: number
+  mime_type: string
+  file_size: number
+  title?: string
+  description?: string
+  source_url: string
+  source_site: string
+  source_id: string
+  tag_names: string[]
+  artist_name?: string
+  // v0.7.8 PR-C: multi-image Pixiv illust. When is_multi=true, the older
+  // flat width/height/mime_type/file_size fields above are the *first* page's
+  // values (kept for back-compat). Each page also carries its own phash +
+  // dims so pipeline.ts can split into N rows sharing series_id.
+  is_multi?: boolean
+  page_count?: number
+  pages?: SidecarPage[]
 }
 
 export interface SidecarResult {
@@ -14,19 +48,7 @@ export interface SidecarResult {
   phash?: string
   error?: string
   max_size?: number
-  metadata?: {
-    width: number
-    height: number
-    mime_type: string
-    file_size: number
-    title?: string
-    description?: string
-    source_url: string
-    source_site: string
-    source_id: string
-    tag_names: string[]
-    artist_name?: string
-  }
+  metadata?: SidecarMetadata
 }
 
 /** Pipeline result — what the pipeline worker writes back after processing a sidecar result */
@@ -43,6 +65,15 @@ export interface PipelineResult {
 export async function enqueueJob(job: Omit<SidecarJob, 'id'>): Promise<string> {
   const id = crypto.randomUUID()
   await (redis as any).lpush('kura:jobs', JSON.stringify({ id, ...job }))
+  // ponytail: persist optional job-level metadata (force_rating) so the
+  // pipeline worker can pick it up when processing the sidecar result.
+  // Sidecar only sees { url, source_site, source_id } — extra fields would
+  // be ignored / dropped.
+  const meta: Record<string, unknown> = {}
+  if (job.force_rating) meta.force_rating = job.force_rating
+  if (Object.keys(meta).length > 0) {
+    await redis.set(`kura:job_meta:${id}`, JSON.stringify(meta), { EX: 3600 })
+  }
   return id
 }
 

@@ -78,7 +78,10 @@ export async function suggestTags(prefix: string, isAdmin: boolean, perPage = 10
 
 async function redisSuggestTags(prefix: string, isAdmin: boolean, perPage: number) {
   const rc = await getRedis() as any
-  const safe = String(prefix || '').replace(/[^\w一-龥-]/g, '').slice(0, 64)
+  // ponytail: \p{L}\p{N} covers all Unicode letters + digits, including CJK
+  // Extension B (U+20000+). The old \w/一-龥 regex silently dropped rare
+  // kanji / extension ideographs, breaking autocomplete on tags like 𠮷野家.
+  const safe = String(prefix || '').replace(/[^\p{L}\p{N}]/gu, '').slice(0, 64)
   if (!safe) return []
   // FT.SEARCH @name:%…% — substring with typo tolerance (default 1 char).
   // Overshoot 2x; safe-filter drops rows whose posts are all non-safe.

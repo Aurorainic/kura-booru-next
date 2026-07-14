@@ -28,9 +28,18 @@ const RATING_RANK: Record<string, number> = { safe: 0, questionable: 1, explicit
 
 // PipelineResult is now re-exported from queue.ts — use that single source of truth
 
-export async function processResult(result: SidecarResult): Promise<PipelineResult> {
+export async function processResult(result: SidecarResult, forceRating?: 'safe' | 'questionable' | 'explicit'): Promise<PipelineResult> {
   if (result.status === 'error') {
     return { status: 'failed', error: result.error || 'Unknown error' }
+  }
+
+  // v0.7.8 PR-C: multi-image Pixiv illusts come back as a single sidecar
+  // result with metadata.pages[] and metadata.is_multi=true. Dispatch to
+  // the single-image path per page in series order, collecting the post ids
+  // into a single response. Order matters: page_index 1 is the series
+  // anchor (its id becomes series_id) so we MUST insert it first.
+  if (result.metadata?.is_multi && result.metadata.pages?.length) {
+    return processMultiImageResult(result, forceRating)
   }
 
   if (!result.image_bytes_b64 || !result.metadata) {
@@ -130,10 +139,14 @@ export async function processResult(result: SidecarResult): Promise<PipelineResu
     const tagIds: string[] = []
 
     // ── 5. Apply auto-rating (before Post insert, so rating is correct from start) ──
+    // ponytail: force_rating (from extension key path) bypasses the rule scan
+    // entirely — user-specified rating wins, no auto_rating return value.
     let rating = 'safe'
     let autoRating: string | null = null
 
-    if (tagNames.length > 0) {
+    if (forceRating) {
+      rating = forceRating
+    } else if (tagNames.length > 0) {
       const rules = await db
         .select()
         .from(autoRatingRules)
@@ -233,4 +246,364 @@ export async function processResult(result: SidecarResult): Promise<PipelineResu
     console.error('[pipeline] processResult error:', err)
     return { status: 'failed', error: err.message || 'Pipeline error' }
   }
+}
+
+/**
+ * v0.7.8 PR-C: process a multi-image Pixiv illust end-to-end.
+ *
+ * Returns the standard single-post PipelineResult shape, but post_id points
+ * at the series anchor (page_index=1). The remaining N-1 page ids are
+ * available via the original result.metadata.pages lookup; they aren't in
+ * the response shape because the bot only cares about "did the import
+ * succeed". The series id of the anchor IS the series_id of the whole set,
+ * so bot-side API lookup `/api/posts/by-source?source_id=...` returns the
+ * first page and the detail page's series nav reveals the rest.
+ */
+async function processMultiImageResult(
+  result: SidecarResult,
+  forceRating?: 'safe' | 'questionable' | 'explicit',
+): Promise<PipelineResult> {
+  if (!result.metadata) {
+    return { status: 'failed', error: 'No metadata for multi-image result' }
+  }
+  const meta = result.metadata
+  const pages = meta.pages ?? []
+  if (!pages.length) return { status: 'failed', error: 'Multi-image result with zero pages' }
+
+  const VALID_SOURCES = new Set(['pixiv', 'twitter', 'danbooru', 'other'])
+  const sourceSite = VALID_SOURCES.has(meta.source_site) ? meta.source_site as any : 'other' as any
+  const declaredPageCount = meta.page_count ?? pages.length
+
+  // Sort pages by page_index so we always insert the series anchor (page_index=1) first.
+  const sortedPages = [...pages].sort((a, b) => a.page_index - b.page_index)
+
+  // Detect existing series for this source. If the anchor (page_index=1)
+  // row already exists, reuse its series_id and treat this import as
+  // idempotent. Unique constraint (source_site, source_id, page_index) is
+  // the final guard against duplicate series inserts — see catch below.
+  //
+  // Also detect a legacy single-image import (page_index IS NULL, pre-PR-C)
+  // of the same source: its row coexists with new series rows because NULLs
+  // are distinct under the unique index. If found, adopt it — stamp its
+  // page_index=1 and series_id=own.id so it becomes the anchor instead of
+  // inserting a duplicate. Otherwise by-source lookup would non-determin-
+  // ically return either the stale single-image row or the new anchor.
+  const existingAnchor = await db
+    .select({ id: posts.id, seriesId: posts.seriesId })
+    .from(posts)
+    .where(sql`${posts.sourceSite} = ${sourceSite} AND ${posts.sourceId} = ${meta.source_id} AND (${posts.pageIndex} = 1 OR ${posts.pageIndex} IS NULL)`)
+    .orderBy(sql`CASE WHEN ${posts.pageIndex} = 1 THEN 0 ELSE 1 END`)
+    .limit(1)
+
+  // ponytail: pre-generate the series_id BEFORE any insert. The old pattern
+  // (insert anchor with series_id=NULL, then UPDATE series_id=own.id in the
+  // same tx) created a cross-worker read-back race: a concurrent loser of
+  // the 23505 recovery could read winner.seriesId=NULL (between the winner's
+  // INSERT and its UPDATE, or if the winner's tx rolled back). Pre-generating
+  // the UUID means every page in this import — and every concurrent loser —
+  // can stamp the known series_id up-front, no read-back.
+  let seriesId: string
+  if (existingAnchor[0]?.seriesId) {
+    seriesId = existingAnchor[0].seriesId
+  } else if (existingAnchor[0]) {
+    // Legacy NULL row exists but has no series_id yet — adopt it: it'll be
+    // re-stamped as the anchor (page_index=1, series_id=its-own-id) below.
+    seriesId = crypto.randomUUID()
+  } else {
+    // First import of this illust. Anchor (page_index=1) will stamp this id.
+    seriesId = crypto.randomUUID()
+  }
+  const adoptLegacyId: string | null = existingAnchor[0] && !existingAnchor[0].seriesId
+    ? existingAnchor[0]!.id
+    : null
+
+  // Per-page result containers.
+  const pageResults: Array<{ page_index: number; status: 'success' | 'duplicate' | 'failed'; post_id?: string; error?: string }> = []
+
+  for (const page of sortedPages) {
+    const imageBuffer = Buffer.from(page.image_bytes_b64, 'base64')
+
+    // Per-page MAX_IMAGE_SIZE check (sidecar already filtered too-larges, but
+    // belt-and-suspenders in case env changes between sidecar and pipeline).
+    const maxSize = parseInt(process.env.MAX_IMAGE_SIZE || '0', 10)
+    if (maxSize > 0 && imageBuffer.length > maxSize) {
+      pageResults.push({ page_index: page.page_index, status: 'failed', error: 'too_large' })
+      continue
+    }
+
+    try {
+      const newId = await insertOnePage({
+        imageBuffer,
+        meta,
+        page,
+        seriesId,
+        pageIndex: page.page_index,
+        pageCount: declaredPageCount,
+        forceRating,
+        sourceSite,
+        adoptLegacyId: page.page_index === 1 ? adoptLegacyId : null,
+      })
+
+      pageResults.push({ page_index: page.page_index, status: 'success', post_id: newId })
+    } catch (err: any) {
+      // 23505 = unique violation on (source_site, source_id, page_index).
+      // Meaning: a concurrent worker (or a retry from this same illust) won
+      // the race to insert this page_index. Re-SELECT to get the canonical row.
+      if (err?.code === '23505') {
+        const winner = await db
+          .select({ id: posts.id, seriesId: posts.seriesId })
+          .from(posts)
+          .where(sql`${posts.sourceSite} = ${sourceSite} AND ${posts.sourceId} = ${meta.source_id} AND ${posts.pageIndex} = ${page.page_index}`)
+          .limit(1)
+        const winnerId = winner[0]?.id
+        const winnerSeriesId = winner[0]?.seriesId
+        if (winnerId) {
+          // Concurrent winner stamped the series_id up-front (pre-generated
+          // UUID), so it's never NULL here. Defensive fallback kept for
+          // rows inserted by pre-fix code that still has series_id=NULL.
+          if (page.page_index === 1 && winnerSeriesId) {
+            seriesId = winnerSeriesId
+          }
+          pageResults.push({ page_index: page.page_index, status: 'duplicate', post_id: winnerId })
+        } else {
+          pageResults.push({ page_index: page.page_index, status: 'failed', error: 'unique violation but row not found' })
+        }
+        continue
+      }
+      pageResults.push({ page_index: page.page_index, status: 'failed', error: err.message || 'insert error' })
+    }
+  }
+
+  // v0.7.8 PR-C: page_count is denormalized — every row stores the series
+  // total. If some pages failed (sharp/S3/non-23505 error), the declared
+  // page_count on the survivors is now wrong. Reconcile to the ACTUAL
+  // number of successfully-inserted rows in this series so getPost's nav
+  // shows the real count. (getPost also clamps to visible-page count, but
+  // the stored hint should be correct for admin viewers who see all rows.)
+  const successCount = pageResults.filter(r => r.status === 'success' || r.status === 'duplicate').length
+  if (successCount > 0) {
+    await db.update(posts)
+      .set({ pageCount: successCount })
+      .where(eq(posts.seriesId, seriesId))
+      .catch(err => console.error('[pipeline] page_count reconcile failed:', err))
+  }
+
+  const anchorPage = pageResults.find(r => r.page_index === 1)
+  if (!anchorPage?.post_id) {
+    return { status: 'failed', error: 'series anchor (page_index=1) did not insert', source_site: meta.source_site, source_id: meta.source_id }
+  }
+
+  return {
+    status: 'success',
+    post_id: anchorPage.post_id,
+    source_site: meta.source_site,
+    source_id: meta.source_id,
+  }
+}
+
+/**
+ * Insert one page from a multi-image illust. Mirrors the single-image path
+ * but takes page-specific dims/phash and stamps series_id/page_index/page_count
+ * on the row. Returns the inserted post id.
+ *
+ * `seriesId` is a pre-generated UUID shared by every page in this import
+ * (see processMultiImageResult) — never null. This eliminates the old
+ * "insert anchor with NULL, then UPDATE own.id" read-back race.
+ *
+ * If `adoptLegacyId` is set, this is the anchor (page_index=1) AND a legacy
+ * single-image row (page_index IS NULL) of the same source exists: UPDATE
+ * that row in place to become the anchor instead of inserting a duplicate.
+ *
+ * Side effect on success: AI tag processing runs non-blocking on each page.
+ */
+async function insertOnePage(args: {
+  imageBuffer: Buffer
+  meta: NonNullable<SidecarResult['metadata']>
+  page: NonNullable<NonNullable<SidecarResult['metadata']>['pages']>[number]
+  seriesId: string
+  pageIndex: number
+  pageCount: number
+  forceRating?: 'safe' | 'questionable' | 'explicit'
+  sourceSite: 'pixiv' | 'twitter' | 'danbooru' | 'other'
+  adoptLegacyId?: string | null
+}): Promise<string> {
+  const { imageBuffer, meta, page, seriesId, pageIndex, pageCount, forceRating, sourceSite, adoptLegacyId } = args
+
+  // ── phash dedup (per page) ──
+  if (page.phash && /^[0-9a-f]+$/i.test(page.phash) && page.phash.length >= 4) {
+    const prefix = page.phash.slice(0, 4)
+    const candidates = await db
+      .select({ id: posts.id, phash: posts.phash })
+      .from(posts)
+      .where(sql`left(${posts.phash}, 4) = ${prefix}`)
+    const dupId = findDuplicateByPhash(candidates as { id: string; phash: string }[], page.phash)
+    if (dupId) {
+      // ponytail: don't throw pipeline-fatal — return the dup id and let the
+      // caller decide. For multi-image that means "this page already exists,
+      // skip it". We signal via thrown error so the loop's try-catch sees it.
+      const e: any = new Error('duplicate')
+      e.code = 'PIPELINE_DUP'
+      e.dupId = dupId
+      throw e
+    }
+  }
+
+  // ── Thumbnail + preview + LQIP (sharp; same pattern as single-image) ──
+  const sharpMod = await getSharp()
+  let thumbBuffer: Buffer | null = null
+  let previewBuffer: Buffer | null = null
+  let lqipDataUri: string | null = null
+  let width = page.width
+  let height = page.height
+  let mimeType = page.mime_type
+
+  if (sharpMod) {
+    const img = sharpMod.default(imageBuffer)
+    ;[thumbBuffer, previewBuffer] = await Promise.all([
+      img.clone().resize(300, 300, { fit: 'inside' }).webp({ quality: 80 }).toBuffer(),
+      img.clone().resize(1280, undefined, { fit: 'inside' }).webp({ quality: 85 }).toBuffer(),
+    ])
+    const lqipBuf = await img.clone()
+      .resize(20, 20, { fit: 'cover' })
+      .blur(2)
+      .webp({ quality: 40 })
+      .toBuffer()
+    lqipDataUri = `data:image/webp;base64,${lqipBuf.toString('base64')}`
+
+    const probed = await img.metadata()
+    if (probed.width && probed.height) { width = probed.width; height = probed.height }
+    if (probed.format) mimeType = `image/${probed.format === 'jpeg' ? 'jpeg' : probed.format}`
+  }
+
+  // ── S3 upload ──
+  const ext = mimeType?.split('/')[1] || 'png'
+  const imageKey = `${crypto.randomUUID()}.${ext}`
+  const thumbKey = thumbBuffer ? `${crypto.randomUUID()}.webp` : ''
+  const previewKey = previewBuffer ? `${crypto.randomUUID()}.webp` : ''
+
+  await Promise.all([
+    uploadToS3(imageKey, imageBuffer, mimeType || 'image/png'),
+    thumbBuffer ? uploadToS3(thumbKey, thumbBuffer, 'image/webp') : Promise.resolve(),
+    previewBuffer ? uploadToS3(previewKey, previewBuffer, 'image/webp') : Promise.resolve(),
+  ])
+
+  // ── Tag upserts + auto-rating (mirrors single-image path; identical shapes) ──
+  const tagNames = [...new Set((meta.tag_names || []).map((n: string) => n.toLowerCase().trim()).filter(Boolean))]
+  const artistName = meta.artist_name ? String(meta.artist_name).toLowerCase().trim() : ''
+  const tagIds: string[] = []
+
+  let rating = 'safe'
+  if (forceRating) {
+    rating = forceRating
+  } else if (tagNames.length > 0) {
+    const rules = await db
+      .select()
+      .from(autoRatingRules)
+      .where(inArray(autoRatingRules.tagName, tagNames))
+    for (const rule of rules) {
+      const targetRating = rule.targetRating as string
+      const rank = RATING_RANK[targetRating] ?? 0
+      if (rank > (RATING_RANK[rating] ?? 0)) {
+        rating = targetRating
+      }
+    }
+  }
+
+  // ── Insert Post (or adopt legacy row). seriesId is a pre-generated UUID,
+  //    never null — no read-back race. ──
+  let postId: string
+  await db.transaction(async (tx: any) => {
+    if (tagNames.length > 0) {
+      const rows = await tx.insert(tags)
+        .values(tagNames.map(name => ({ name, category: 'general' as any, postCount: 1 })))
+        .onConflictDoUpdate({
+          target: tags.name,
+          set: { postCount: sql`${tags.postCount} + 1` },
+        })
+        .returning({ id: tags.id, name: tags.name })
+      for (const r of rows) tagIds.push(r.id)
+    }
+    if (artistName) {
+      const [tag] = await tx.insert(tags)
+        .values({ name: artistName, category: 'artist' as any, postCount: 1 })
+        .onConflictDoUpdate({
+          target: tags.name,
+          set: {
+            postCount: sql`${tags.postCount} + 1`,
+            category: 'artist' as any,
+            aiProcessedAt: new Date(),
+          },
+        })
+        .returning({ id: tags.id })
+      if (tag?.id && !tagIds.includes(tag.id)) tagIds.push(tag.id)
+    }
+
+    if (adoptLegacyId && pageIndex === 1) {
+      // Legacy single-image row of the same source exists (page_index IS
+      // NULL). Promote it to the anchor: stamp series_id=its-own-id +
+      // page_index=1 + page_count, and rewrite its S3/dims to this page's
+      // (page 1) values. No new row inserted.
+      const [updated] = await tx.update(posts)
+        .set({
+          s3Key: imageKey,
+          thumbKey: thumbKey || imageKey,
+          previewKey: previewKey || imageKey,
+          sourceUrl: meta.source_url,
+          sourceSite,
+          sourceId: meta.source_id,
+          width: width ?? 0,
+          height: height ?? 0,
+          fileSize: page.file_size,
+          mimeType: mimeType || 'image/png',
+          phash: page.phash,
+          lqip: lqipDataUri,
+          title: meta.title || null,
+          description: meta.description || null,
+          rating: rating as any,
+          seriesId: adoptLegacyId,
+          pageIndex,
+          pageCount,
+        })
+        .where(eq(posts.id, adoptLegacyId))
+        .returning({ id: posts.id })
+      postId = updated.id
+    } else {
+      const [post] = await tx.insert(posts)
+        .values({
+          s3Key: imageKey,
+          thumbKey: thumbKey || imageKey,
+          previewKey: previewKey || imageKey,
+          sourceUrl: meta.source_url,
+          sourceSite,
+          sourceId: meta.source_id,
+          width: width ?? 0,
+          height: height ?? 0,
+          fileSize: page.file_size,
+          mimeType: mimeType || 'image/png',
+          phash: page.phash,
+          lqip: lqipDataUri,
+          title: meta.title || null,
+          description: meta.description || null,
+          rating: rating as any,
+          seriesId,
+          pageIndex,
+          pageCount,
+        })
+        .returning({ id: posts.id })
+      postId = post.id
+    }
+
+    if (tagIds.length > 0) {
+      await tx.insert(postTags)
+        .values(tagIds.map(tid => ({ postId, tagId: tid })))
+        .onConflictDoNothing()
+    }
+  })
+
+  if (process.env.ENABLE_AI_TAG_PROCESSING === 'true') {
+    try { await aiProcessTagsForPost(postId!, tagIds) }
+    catch (e) { console.warn('[pipeline] AI tag processing failed (non-blocking):', e) }
+  }
+
+  return postId!
 }

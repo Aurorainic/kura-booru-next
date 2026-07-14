@@ -240,6 +240,14 @@ useHead({
           </div>
         </div>
 
+        <!-- v0.7.8 PR-C: series nav (only rendered when this post is part of a multi-image series) -->
+        <PostSeriesNav
+          v-if="post.series"
+          :series="post.series"
+          :current-post-id="post.id"
+          :is-admin="isAdmin"
+        />
+
         <!-- Mobile: tags as pills (below image) -->
         <div class="lg:hidden mt-4 flex flex-wrap gap-2">
           <template v-for="tag in post.tags" :key="tag.id">

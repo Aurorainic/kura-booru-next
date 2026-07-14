@@ -2,6 +2,19 @@
 
 本文件记录项目的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.7.8] - 2026-07-XX
+
+### 新增
+- **Extension 独立 API Key 体系** — `extension_keys` 表 + `kb_ext_<32 base62>` 格式 key；admin UI (`/admin?tab=extension`) 生成/吊销；与 `BACKEND_API_KEY` 完全隔离，支持单用户吊销与审计。修复 v0.7.x 历史遗留：extension 之前直接复用部署者级 `BACKEND_API_KEY`，会把服务密钥泄露给所有安装者。
+- **Extension 内容评级覆盖** — popup 新增 contentType 下拉（自动 / safe / questionable / explicit）；导入时通过 `force_rating` 字段绕过 AI auto-rating 规则。
+- **Pixiv 多图 Series** — 单个 Pixiv 多图 illust（上限 5 张，静态图）导入后拆成 N 行共享 `series_id` 的 post；详情页 hero 下方新增缩略图带 `PostSeriesNav`（"1 / 5" 计数 + 横向缩略图，点击跳页，数字键 1..9 直跳）。Ugoira 动图退化为首帧单图。Admin 可在缩略图 hover × 删除单页，剩余页 `page_index` 连续重排。读路径双轨：`series_id IS NULL` 的旧 604 个 post 保持单图响应 shape，新增多图 post 才带 `series` 字段。无 backfill、无独立 `/series/*` 路由。
+
+### 变更（破坏性）
+- **Extension 端点迁移** — `POST /api/tasks/` → `POST /api/tasks/web-import`；body 从 `{ source_url }` 改为 `{ urls: [...], force_rating? }`；返回从 `{ task_id }` 改为 `{ results: [{ task_id, status, url }] }`。同步更新 popup.html/popup.js 和 35 个 extension 测试。
+
+### 修复
+- **Service worker 返回格式异常处理顺序** — error result 没有 task_id 时先于"格式异常"分支返回服务端 error 消息。
+
 ## [0.7.6] - 2026-07-13
 
 ### 修复

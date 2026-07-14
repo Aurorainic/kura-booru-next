@@ -38,7 +38,13 @@ export default defineEventHandler(async (event) => {
   // already, so this branch mainly covers the home / and detail pages.
   // ponytail: if getIsAdmin Redis fail-CLOSED (authOk=false) during SSR, fall
   // back to no-store rather than risk leaking admin HTML into the public cache.
+  //
+  // CLAUDE.md pitfall: never cache SSR HTML without `Vary: Cookie`. Admin
+  // HTML (e.g. /posts/[id] with PostSeriesNav admin delete buttons) must not
+  // leak to anon through a cookieless CDN cache key. We set Vary on every SSR
+  // HTML response so the CDN keys the cache by cookie presence.
   if (!path.startsWith('/_nuxt/') && !path.startsWith('/i/')) {
+    response.setHeader('Vary', 'Cookie')
     // Authenticated paths — never cache.
     if (path.startsWith('/admin') || path === '/login' || path === '/logout') {
       response.setHeader('Cache-Control', 'private, no-store')

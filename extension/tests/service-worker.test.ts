@@ -21,8 +21,8 @@ beforeEach(async () => {
   vi.useFakeTimers();
   // Default: configured. Tests override storage / fetch as needed.
   chrome = makeChrome({
-    storage: { serverUrl: "https://kura.example.com", apiKey: "key-123" },
-    fetch: async () => jsonResponse({ task_id: "t-1" }),
+    storage: { serverUrl: "https://kura.example.com", apiKey: "kb_ext_abc", contentType: "auto" },
+    fetch: async () => jsonResponse({ results: [{ task_id: "t-1", status: "queued", url: "https://www.pixiv.net/artworks/1" }] }),
   });
   installChrome(chrome);
   await loadScript(SCRIPT);
@@ -42,13 +42,13 @@ describe("handleImport (IMPORT_URL)", () => {
     expect(res).toEqual({ success: false, error: "未配置" });
   });
 
-  it("posts to /api/tasks/ with X-Api-Key and source_url, returns taskId on 200", async () => {
+  it("posts to /api/tasks/web-import with X-Api-Key and urls array, returns taskId on 200", async () => {
     const calls: any[] = [];
     chrome = makeChrome({
-      storage: { serverUrl: "https://kura.example.com/", apiKey: "key-123" },
+      storage: { serverUrl: "https://kura.example.com/", apiKey: "kb_ext_abc", contentType: "auto" },
       fetch: async (input: any, init: any) => {
         calls.push({ input, init });
-        return jsonResponse({ task_id: "t-42" });
+        return jsonResponse({ results: [{ task_id: "t-42", status: "queued", url: "https://www.pixiv.net/artworks/99" }] });
       },
     });
     installChrome(chrome);
@@ -57,11 +57,28 @@ describe("handleImport (IMPORT_URL)", () => {
     const res = await dispatchMessage(chrome, { type: "IMPORT_URL", url: "https://www.pixiv.net/artworks/99" });
 
     expect(calls).toHaveLength(1);
-    expect(calls[0].input).toBe("https://kura.example.com/api/tasks/");
+    expect(calls[0].input).toBe("https://kura.example.com/api/tasks/web-import");
     expect(calls[0].init.method).toBe("POST");
-    expect(calls[0].init.headers["X-Api-Key"]).toBe("key-123");
-    expect(JSON.parse(calls[0].init.body)).toEqual({ source_url: "https://www.pixiv.net/artworks/99" });
+    expect(calls[0].init.headers["X-Api-Key"]).toBe("kb_ext_abc");
+    // No force_rating when contentType is "auto"
+    expect(JSON.parse(calls[0].init.body)).toEqual({ urls: ["https://www.pixiv.net/artworks/99"] });
     expect(res).toEqual({ success: true, taskId: "t-42" });
+  });
+
+  it("includes force_rating when contentType is set to a rating value", async () => {
+    const calls: any[] = [];
+    chrome = makeChrome({
+      storage: { serverUrl: "https://kura.example.com", apiKey: "kb_ext_abc", contentType: "questionable" },
+      fetch: async (input: any, init: any) => {
+        calls.push({ input, init });
+        return jsonResponse({ results: [{ task_id: "t-99", status: "queued", url: "u" }] });
+      },
+    });
+    installChrome(chrome);
+    await loadScript(SCRIPT);
+
+    await dispatchMessage(chrome, { type: "IMPORT_URL", url: "u" });
+    expect(JSON.parse(calls[0].init.body)).toEqual({ urls: ["u"], force_rating: "questionable" });
   });
 
   it("returns API 密钥无效 on 401", async () => {
@@ -76,6 +93,18 @@ describe("handleImport (IMPORT_URL)", () => {
     expect(res).toEqual({ success: false, error: "API 密钥无效" });
   });
 
+  it("returns 请求过快 on 429", async () => {
+    chrome = makeChrome({
+      storage: { serverUrl: "https://kura.example.com", apiKey: "k" },
+      fetch: async () => new Response("{}", { status: 429 }),
+    });
+    installChrome(chrome);
+    await loadScript(SCRIPT);
+
+    const res = await dispatchMessage(chrome, { type: "IMPORT_URL", url: "u" });
+    expect(res).toEqual({ success: false, error: "请求过快,请稍后再试" });
+  });
+
   it("returns HTTP <status> on other non-ok", async () => {
     chrome = makeChrome({
       storage: { serverUrl: "https://kura.example.com", apiKey: "k" },
@@ -86,6 +115,18 @@ describe("handleImport (IMPORT_URL)", () => {
 
     const res = await dispatchMessage(chrome, { type: "IMPORT_URL", url: "u" });
     expect(res).toEqual({ success: false, error: "HTTP 500" });
+  });
+
+  it("returns 服务端拒绝 when server returns results[0].status === 'error'", async () => {
+    chrome = makeChrome({
+      storage: { serverUrl: "https://kura.example.com", apiKey: "k" },
+      fetch: async () => jsonResponse({ results: [{ status: "error", url: "u", error: "private/reserved host" }] }),
+    });
+    installChrome(chrome);
+    await loadScript(SCRIPT);
+
+    const res = await dispatchMessage(chrome, { type: "IMPORT_URL", url: "u" });
+    expect(res).toEqual({ success: false, error: "private/reserved host" });
   });
 
   it("returns 网络错误 when fetch throws", async () => {
@@ -104,13 +145,13 @@ describe("handleImport (IMPORT_URL)", () => {
     const calls: any[] = [];
     chrome = makeChrome({
       storage: { serverUrl: "https://kura.example.com///", apiKey: "k" },
-      fetch: async (input: any) => { calls.push(input); return jsonResponse({ task_id: "t" }); },
+      fetch: async (input: any) => { calls.push(input); return jsonResponse({ results: [{ task_id: "t", status: "queued", url: "u" }] }); },
     });
     installChrome(chrome);
     await loadScript(SCRIPT);
 
     await dispatchMessage(chrome, { type: "IMPORT_URL", url: "u" });
-    expect(calls[0]).toBe("https://kura.example.com/api/tasks/");
+    expect(calls[0]).toBe("https://kura.example.com/api/tasks/web-import");
   });
 });
 

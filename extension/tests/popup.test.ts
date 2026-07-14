@@ -60,6 +60,13 @@ describe("popup settings load", () => {
     vi.runAllTicks();
     expect((dom.window.document.getElementById("server-url") as HTMLInputElement).value).toBe("https://kura.example.com");
     expect((dom.window.document.getElementById("api-key") as HTMLInputElement).value).toBe("key-abc");
+    expect((dom.window.document.getElementById("content-type") as HTMLSelectElement).value).toBe("auto");
+  });
+
+  it("loads saved contentType selection when present", () => {
+    const { dom } = setupPopup({ serverUrl: "https://kura.example.com", apiKey: "k", contentType: "explicit" });
+    vi.runAllTicks();
+    expect((dom.window.document.getElementById("content-type") as HTMLSelectElement).value).toBe("explicit");
   });
 
   it("leaves inputs empty when nothing stored", () => {
@@ -67,24 +74,28 @@ describe("popup settings load", () => {
     vi.runAllTicks();
     expect((dom.window.document.getElementById("server-url") as HTMLInputElement).value).toBe("");
     expect((dom.window.document.getElementById("api-key") as HTMLInputElement).value).toBe("");
+    expect((dom.window.document.getElementById("content-type") as HTMLSelectElement).value).toBe("auto");
   });
 });
 
 describe("popup save", () => {
-  it("trims trailing slashes from serverUrl and persists both fields", () => {
+  it("trims trailing slashes from serverUrl and persists all three fields", () => {
     const { dom, storageData } = setupPopup();
     vi.runAllTicks();
 
     const urlInput = dom.window.document.getElementById("server-url") as HTMLInputElement;
     const keyInput = dom.window.document.getElementById("api-key") as HTMLInputElement;
+    const typeInput = dom.window.document.getElementById("content-type") as HTMLSelectElement;
     urlInput.value = "https://kura.example.com////";
-    keyInput.value = "  key-xyz  ";
+    keyInput.value = "  kb_ext_xyz  ";
+    typeInput.value = "questionable";
 
     dom.window.document.getElementById("save-btn")!.click();
     vi.runAllTicks();
 
     expect(storageData.serverUrl).toBe("https://kura.example.com");
-    expect(storageData.apiKey).toBe("key-xyz");
+    expect(storageData.apiKey).toBe("kb_ext_xyz");
+    expect(storageData.contentType).toBe("questionable");
   });
 
   it("shows 已保存！ status and clears it after 2000ms", () => {
