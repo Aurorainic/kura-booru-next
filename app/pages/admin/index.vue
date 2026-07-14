@@ -58,6 +58,7 @@ const PasswordPanel = defineAsyncComponent(() => import('~/components/admin/Pass
       <TagsPanel v-else-if="currentTab === 'tags'" />
       <AutoRatingPanel v-else-if="currentTab === 'auto-rating'" />
       <AiAssistantPanel v-else-if="currentTab === 'ai'" />
+      <ExtensionKeysPanel v-else-if="currentTab === 'extension'" />
       <SettingsPanel v-else-if="currentTab === 'settings'" />
       <PasswordPanel v-else-if="currentTab === 'password'" />
     </div>
