@@ -38,15 +38,19 @@ export default defineEventHandler(async (event) => {
 
   const forceRating = requestedForceRating && !forceRatingBlocked ? requestedForceRating : undefined
 
-  if (forceRating) {
+  if (forceRating && auth.kind === 'extension') {
     // ponytail: best-effort audit trail. Fail-open on Redis error — would
     // rather allow a logged bypass than block legit imports if Redis hiccups.
+    // Narrowed on auth.kind so TS sees keyId/keyName (only the extension
+    // branch can produce a requestedForceRating anyway, but the if above
+    // doesn't statically prove that — an explicit narrow keeps the audit
+    // log clean and avoids the (admin path) ? `unknown` ? workaround).
     ;(redis as any).lpush(
       'kura:ext_force_rating_audit',
       JSON.stringify({
         at: new Date().toISOString(),
         keyId: auth.keyId,
-        keyName: auth.kind === 'extension' ? auth.keyName : 'unknown',
+        keyName: auth.keyName,
         rating: forceRating,
         urlCount: body.urls.length,
       }),
