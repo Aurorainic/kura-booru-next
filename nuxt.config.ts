@@ -40,18 +40,22 @@ export default defineNuxtConfig({
   },
 
   routeRules: {
-    // Anon gallery + tag + search SSR — 300s stale-while-revalidate cache.
-    // Cache key excludes cookies on purpose: anon visitors see the same HTML
-    // for the same (rating, page, q). Admin paths are gated by private/no-store
-    // headers in server/middleware/02-cache-control.ts and never reach here.
-    // ponytail: nitro cache is in-process, NOT shared across replicas — fine
-    // for a single-web-instance deployment. Multi-replica would need a redis
-    // driver hook here.
-    '/': { swr: 300, headers: { 'cache-control': 'public, s-maxage=300' } },
-    '/posts/**': { swr: 300, headers: { 'cache-control': 'public, s-maxage=300' } },
-    '/tags/**': { swr: 300, headers: { 'cache-control': 'public, s-maxage=300' } },
-    '/search': { swr: 300, headers: { 'cache-control': 'public, s-maxage=300' } },
-    // Admin, login, settings, and any authed path — never cached.
+    // SSR HTML cache is fully controlled by
+    // server/middleware/02-cache-control.ts, which inspects the request
+    // cookie on every SSR: anon → `public, s-maxage=300` (CDN-cacheable),
+    // admin → `private, no-store` (never cached), Redis-down → no-store
+    // (fail-closed to avoid leaking admin HTML).
+    //
+    // Do NOT add `swr: 300` back here. v0.7.2 introduced Nitro's in-process
+    // SWR cache keyed on URL only — no cookie in the cache key — so the anon
+    // HTML Nitro cached for `/` was served back to a just-logged-in admin on
+    // full page reload (login.vue does `window.location.href = '/'`), leaving
+    // them in the stale `isAdmin=false` state. The middleware can't undo this
+    // because SWR short-circuits the request in the Nitro hook chain before
+    // any middleware runs.
+    //
+    // Admin/login/logout paths stay explicitly no-store at the route level too,
+    // as a belt-and-suspenders guard for any proxy that ignores Vary: Cookie.
     '/admin/**': { headers: { 'cache-control': 'private, no-store' } },
     '/login': { headers: { 'cache-control': 'private, no-store' } },
     '/logout': { headers: { 'cache-control': 'private, no-store' } },

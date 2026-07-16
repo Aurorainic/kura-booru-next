@@ -12,7 +12,10 @@ async function submit() {
   try {
     const result = await login(username.value, password.value)
     if (result.is_admin) {
-      await navigateTo('/')
+      // Full reload so SSR middleware re-reads the kura_admin_session cookie
+      // and populates isAdmin correctly. Client-side navigateTo would keep
+      // the stale isAdmin=false from the initial SSR.
+      window.location.href = '/'
     } else {
       error.value = '登录成功但无管理员权限'
     }

@@ -13,6 +13,7 @@
 - **Extension 端点迁移** — `POST /api/tasks/` → `POST /api/tasks/web-import`；body 从 `{ source_url }` 改为 `{ urls: [...], force_rating? }`；返回从 `{ task_id }` 改为 `{ results: [{ task_id, status, url }] }`。同步更新 popup.html/popup.js 和 35 个 extension 测试。
 
 ### 修复
+- **Admin 登录后状态丢失** — v0.7.7 在 `nuxt.config.ts` routeRules 给 `/`、`/posts/**`、`/tags/**`、`/search` 加了 Nitro 进程内 SWR 缓存（`swr: 300`），但缓存键只含 URL、不含 cookie。匿名访问留下的 SSR HTML 被缓存后，admin 登录后全量重载直接命中该缓存条目，middleware 来不及纠正即返回 `isAdmin=false` 的旧 HTML。修复：移除 routeRules 的 `swr` + 静态 `cache-control` headers，SSR HTML 缓存完全由 `server/middleware/02-cache-control.ts` 按 cookie 控制；CDN 层仍缓存 anon、跳过 admin，缓存收益不损失。
 - **Service worker 返回格式异常处理顺序** — error result 没有 task_id 时先于"格式异常"分支返回服务端 error 消息。
 
 ## [0.7.6] - 2026-07-13

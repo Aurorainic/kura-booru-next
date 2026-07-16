@@ -9,6 +9,26 @@ export default defineEventHandler(async (event) => {
     // Don't override if handler already set Cache-Control (SSE, etc.)
     if (response.getHeader('Cache-Control')) return
 
+    // v0.7.8: auth endpoints are login-state probes — NEVER CDN-cache.
+    // A cached {is_admin:false} served to a just-logged-in admin makes the
+    // client think it's still logged out. /api/auth/* must always be
+    // private, no-store so the response reflects the caller's real session.
+    if (path.startsWith('/api/auth/')) {
+      response.setHeader('Cache-Control', 'private, no-store')
+      response.setHeader('Vary', 'Cookie')
+      return
+    }
+
+    // /api/admin/** is admin-only data (dashboard, extension keys, full
+    // settings incl. secrets). 401 for anon, private body for admin — never
+    // cache either outcome. Vary: Cookie so the two responses don't share
+    // a CDN key.
+    if (path.startsWith('/api/admin/')) {
+      response.setHeader('Cache-Control', 'private, no-store')
+      response.setHeader('Vary', 'Cookie')
+      return
+    }
+
     // Check admin status. On auth failure, fail-CLOSED for cache: skip CDN
     // caching entirely (s-maxage=0) instead of treating the visitor as admin
     // — over-private would silently bypass CDN and hammer the origin during
@@ -21,13 +41,24 @@ export default defineEventHandler(async (event) => {
     }
 
     if (isAdmin) {
+      // Admin sees non-safe posts / private data on the same paths anon does.
+      // Vary: Cookie so the CDN keys the anon (cached) and admin (no-store)
+      // responses separately — otherwise an admin response could poison the
+      // anon cache entry or vice versa.
       response.setHeader('Cache-Control', 'private, no-store')
+      response.setHeader('Vary', 'Cookie')
     } else if (!authOk) {
       response.setHeader('Cache-Control', 'no-store')
     } else if (path === '/api/posts/random') {
+      // ponytail: random is session-independent (always a safe post) but
+      // changes every request — short TTL so the CDN doesn't pin one post.
       response.setHeader('Cache-Control', 'public, s-maxage=10')
     } else {
+      // Anon, session-independent (safe-only) data. Vary: Cookie anyway so a
+      // subsequent admin request on the same path doesn't get served this
+      // anon-cached body.
       response.setHeader('Cache-Control', 'public, s-maxage=60')
+      response.setHeader('Vary', 'Cookie')
     }
     return
   }
