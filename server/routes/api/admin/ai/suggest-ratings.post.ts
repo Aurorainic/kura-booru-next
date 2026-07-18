@@ -21,8 +21,11 @@ export default defineEventHandler(async (event) => {
     const errors: string[] = []
     let results: Awaited<ReturnType<typeof suggestRatings>> = []
     try {
-      results = await suggestRatings(normalizedScope, limit)
-      await updateAiJobProgress(jobId, { done: results.length, total: limit })
+      results = await suggestRatings(normalizedScope, limit, (examined, total) => {
+        // Per-post incremental progress — the old code only updated once at
+        // the end with results.length, so progress sat at 0 until completion.
+        updateAiJobProgress(jobId, { done: examined, total })
+      })
     } catch (e: any) {
       errors.push(e?.message || String(e))
       await updateAiJobProgress(jobId, { errors })

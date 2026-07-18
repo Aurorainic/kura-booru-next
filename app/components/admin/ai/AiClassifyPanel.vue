@@ -77,7 +77,13 @@ async function applyClassification(s: TagClassificationSuggestion) {
       translation: s.translation || undefined,
     }, props.ssrCookie)
     classifyResults.value = classifyResults.value.filter(r => r.tag_name !== s.tag_name)
-    toast.success(`已应用: ${s.tag_name}`)
+    // Confidence-aware toast: low-confidence classifications get a heads-up
+    // so the admin knows to double-check the result before trusting it.
+    if (s.confidence < 0.5) {
+      toast.info(`已应用（置信度低 ${Math.round(s.confidence * 100)}%，建议人工复核）: ${s.tag_name}`)
+    } else {
+      toast.success(`已应用: ${s.tag_name}`)
+    }
   } catch (e: any) {
     toast.error(`应用失败: ${e.message || '未知错误'}`)
   } finally {

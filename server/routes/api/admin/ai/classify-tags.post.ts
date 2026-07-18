@@ -42,8 +42,25 @@ export default defineEventHandler(async (event) => {
     const errors: string[] = []
     let classifications: Awaited<ReturnType<typeof classifyTags>> = []
     try {
-      classifications = await classifyTags(tagRows.map(t => t.name))
-      await updateAiJobProgress(jobId, { done: classifications.length })
+      // classifyTags internally batches in chunks of 25; report progress
+      // per chunk so the UI shows incremental advancement instead of a
+      // single 0 -> 100 jump at the end.
+      const allNames = tagRows.map(t => t.name)
+      const batchSize = 25
+      classifications = []
+      for (let i = 0; i < allNames.length; i += batchSize) {
+        const batch = allNames.slice(i, i + batchSize)
+        try {
+          const partial = await classifyTags(batch)
+          classifications.push(...partial)
+        } catch (e: any) {
+          errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${e?.message || String(e)}`)
+        }
+        await updateAiJobProgress(jobId, {
+          done: Math.min(i + batchSize, allNames.length),
+          errors: errors.length ? errors : undefined,
+        })
+      }
     } catch (e: any) {
       errors.push(e?.message || String(e))
       await updateAiJobProgress(jobId, { errors })

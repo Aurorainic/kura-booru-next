@@ -5,7 +5,7 @@
  */
 
 import type { Rating, TagCategory } from '~/types'
-import { isNull } from 'drizzle-orm'
+import { isNull, asc } from 'drizzle-orm'
 
 // ── Types ──
 
@@ -155,46 +155,66 @@ async function callAi(messages: AiMessage[], opts?: { json?: boolean; temperatur
 
 // ── Tag classification (capability ①) ──
 
-const CLASSIFY_SYSTEM_PROMPT = `You are a booru/anime image tag classifier. Given a list of tag names, classify each into one of 5 categories and provide Chinese translation + Danbooru canonical English name.
+const CLASSIFY_SYSTEM_PROMPT = `You are a booru/anime image tag classifier for a personal anime art gallery (Kura Booru). Tags come from multiple sources (Pixiv, Twitter, Danbooru) and may be in Japanese, English, or romanized form.
 
 Categories:
-- artist: The creator/illustrator of the artwork
-- character: A specific fictional character (e.g. hatsune_miku, rem_(re:zero))
-- copyright: A specific franchise/work (e.g. vocaloid, re:zero, genshin_impact)
-- general: General descriptive tags (e.g. long_hair, blue_eyes, school_uniform)
-- meta: Meta information tags (e.g. highres, transparent_background, scan)
+- artist: The creator/illustrator (e.g. 藤原, redjuice, mika_pikazo)
+- character: A specific fictional character (e.g. hatsune_miku, rem_(re:zero), 美樹さやか)
+- copyright: A specific franchise/work (e.g. vocaloid, re:zero, genshin_impact, project_sekai)
+- general: Visual/descriptive attributes (e.g. long_hair, blue_eyes, school_uniform, 着物)
+- meta: Technical/image metadata (e.g. highres, transparent_background, scan, monochrome)
 
 Return JSON: { "tags": [{ "name": "original_tag_name", "category": "artist|character|copyright|general|meta", "translation": "中文翻译", "danbooru_name": "canonical_english_name", "confidence": 0.0_to_1.0 }] }
 
 Rules:
-- Preserve the original tag name exactly as given
-- For danbooru_name, use the standard Danbooru tag name if known, otherwise leave empty string
-- For translation, provide a concise Chinese translation, empty string if uncertain
-- Category must be exactly one of: artist, character, copyright, general, meta
-- confidence reflects how certain the classification is (0.0 = pure guess, 1.0 = certain)`
+- Preserve the original tag name exactly as given (output "name" must match input)
+- For danbooru_name: use the standard Danbooru wiki tag name if you are confident (e.g. "初音ミク" -> "hatsune_miku"). If unsure, leave empty string - do NOT guess
+- For translation: provide a concise Chinese translation. For artist names, transliterate (e.g. "redjuice" -> "redjuice", "藤原" -> "藤原"). For general tags, translate the concept (e.g. "long_hair" -> "长发"). Empty string if truly uncertain
+- Category assignment priority: if a tag could be either character or copyright, prefer copyright if it names a franchise, character if it names an individual
+- confidence: 0.9+ = certain (well-known tag), 0.7-0.9 = fairly confident, 0.5-0.7 = educated guess, <0.5 = uncertain. Use <0.5 sparingly for genuinely ambiguous tags
+
+Examples:
+Input: ["hatsune_miku", "初音ミク", "long_hair", "redjuice", "highres"]
+Output: { "tags": [
+  { "name": "hatsune_miku", "category": "character", "translation": "初音未来", "danbooru_name": "hatsune_miku", "confidence": 0.95 },
+  { "name": "初音ミク", "category": "character", "translation": "初音未来", "danbooru_name": "hatsune_miku", "confidence": 0.95 },
+  { "name": "long_hair", "category": "general", "translation": "长发", "danbooru_name": "long_hair", "confidence": 0.95 },
+  { "name": "redjuice", "category": "artist", "translation": "redjuice", "danbooru_name": "redjuice", "confidence": 0.9 },
+  { "name": "highres", "category": "meta", "translation": "高清", "danbooru_name": "highres", "confidence": 0.95 }
+]}`
 
 export async function classifyTags(tagNames: string[]): Promise<TagClassification[]> {
   if (!tagNames.length) return []
-  const raw = await callAi(
-    [
-      { role: 'system', content: CLASSIFY_SYSTEM_PROMPT },
-      { role: 'user', content: JSON.stringify(tagNames) },
-    ],
-    { json: true },
-  )
-  try {
-    const parsed = JSON.parse(raw)
-    return (parsed.tags || []).map((t: any) => ({
-      name: String(t.name || ''),
-      category: validateCategory(t.category),
-      translation: String(t.translation || ''),
-      danbooru_name: String(t.danbooru_name || ''),
-      confidence: clampConfidence(t.confidence, 0.7),
-    }))
-  } catch {
-    console.error('[ai] classifyTags: failed to parse AI response')
-    return []
+  // ponytail: batch cap at 25 tags per API call. Long lists (50+) caused
+  // degraded quality (skipped tags, hallucinated entries) and increased
+  // JSON parse failures. 25 keeps the response compact and reliable.
+  const results: TagClassification[] = []
+  for (const batch of chunk(tagNames, 25)) {
+    const raw = await callAi(
+      [
+        { role: 'system', content: CLASSIFY_SYSTEM_PROMPT },
+        { role: 'user', content: JSON.stringify(batch) },
+      ],
+      { json: true },
+    )
+    try {
+      const parsed = JSON.parse(raw)
+      const mapped = (parsed.tags || []).map((t: any) => ({
+        name: String(t.name || ''),
+        category: validateCategory(t.category),
+        translation: String(t.translation || ''),
+        danbooru_name: String(t.danbooru_name || ''),
+        confidence: clampConfidence(t.confidence, 0.7),
+      }))
+      // Only keep entries whose name matches one of the input tags
+      // (AI sometimes hallucinates extra tags or returns names in a different form)
+      const inputSet = new Set(batch)
+      results.push(...mapped.filter((c: TagClassification) => inputSet.has(c.name)))
+    } catch {
+      console.error('[ai] classifyTags: failed to parse AI response for batch')
+    }
   }
+  return results
 }
 
 function clampConfidence(v: any, dflt: number): number {
@@ -354,11 +374,30 @@ export async function reprocessTags(mode: 'unprocessed' | 'all'): Promise<{ proc
 
 export async function suggestMerges(scope: 'all' | { category: TagCategory }): Promise<MergeSuggestion[]> {
   const where = scope === 'all' ? undefined : eq(tags.category, scope.category as any)
-  // Get tags with post_count > 0, limit to reasonable set
-  const tagRows = await db.select().from(tags)
-    .where(where)
-    .orderBy(desc(tags.postCount))
-    .limit(200)
+  // ponytail: duplicates are most common among LOW-count tags (typos, variant
+  // romanizations, partial names). The previous code ordered by post_count DESC
+  // and took the top 200 - exactly the tags least likely to need merging.
+  // Strategy: take a mix - top 50 by count (canonical candidates) + bottom 150
+  // by count ascending (likely duplicates). Exclude zero-count tags (orphans
+  // with no posts can't be "duplicates" of anything meaningful).
+  const [highCount, lowCount] = await Promise.all([
+    db.select().from(tags)
+      .where(where ? and(where, sql`${tags.postCount} > 0`) : sql`${tags.postCount} > 0`)
+      .orderBy(desc(tags.postCount))
+      .limit(50),
+    db.select().from(tags)
+      .where(where ? and(where, sql`${tags.postCount} > 0`) : sql`${tags.postCount} > 0`)
+      .orderBy(asc(tags.postCount))
+      .limit(150),
+  ])
+
+  // Deduplicate (a tag might appear in both if count is near the boundary)
+  const seen = new Set<string>()
+  const tagRows = [...highCount, ...lowCount].filter(t => {
+    if (seen.has(t.id)) return false
+    seen.add(t.id)
+    return true
+  })
 
   if (!tagRows.length) return []
 
@@ -369,9 +408,13 @@ export async function suggestMerges(scope: 'all' | { category: TagCategory }): P
       role: 'system',
       content: `You are a booru tag system analyzer. Given a list of tags, identify groups of tags that likely refer to the same concept and should be merged. Consider: spelling variants, translations, abbreviated forms, character name variants.
 
-Return JSON: { "groups": [{ "canonical_name": "best_tag_name", "aliases": ["alt1", "alt2"], "reason": "brief explanation", "confidence": 0.0_to_1.0 }] }
+Rules:
+- Only suggest merging tags WITHIN THE SAME category (e.g. two 'character' tags can merge, but a 'character' tag should never merge with an 'artist' tag even if names are similar)
+- Only suggest merges you are confident about (confidence >= 0.6)
+- canonical_name should be the most correct/standard form (prefer higher post_count, proper romanization)
+- If no merges are needed, return { "groups": [] }
 
-Only suggest merges you are confident about (confidence >= 0.6). If no merges are needed, return { "groups": [] }`,
+Return JSON: { "groups": [{ "canonical_name": "best_tag_name", "aliases": ["alt1", "alt2"], "reason": "brief explanation", "confidence": 0.0_to_1.0 }] }`,
     },
     { role: 'user', content: tagInfo.join('\n') },
   ], { json: true })
@@ -399,26 +442,53 @@ export async function suggestRatingForPost(postId: string): Promise<RatingSugges
     .innerJoin(tags, eq(postTags.tagId, tags.id))
     .where(eq(postTags.postId, postId))
 
-  const tagNames = postTagRows.map(r => r.tag.name)
-  const tagInfo = postTagRows.map(r =>
-    `${r.tag.name} (${r.tag.category}${r.tag.translation ? `, ${r.tag.translation}` : ''})`
-  )
+  // ponytail: weight tags by signal strength. A tag like "nude" or "panties"
+  // is a much stronger rating signal than "long_hair" or "blue_eyes". Without
+  // weighting, the AI treats all tags equally and may be misled by neutral
+  // tags outnumbering suggestive ones.
+  const STRONG_SIGNALS = new Set([
+    'nude', 'naked', 'topless', 'bottomless', 'panties', 'bra', 'underwear',
+    'nipples', 'areola', 'cleavage', 'cameltoe', 'ass', 'butt', 'breasts',
+    'penis', 'vagina', 'cum', 'sex', 'masturbation', 'oral', 'penetration',
+    'nude_filter', 'nudity', 'explicit',
+    'bikini', 'swimsuit', 'lingerie', 'pantyhose', 'thighhighs',
+    'panty_shot', 'underboob', 'sideboob', 'cleavage',
+    'ecchi', 'hentai', 'roulai', '18+',
+  ])
+  const tagInfo = postTagRows.map(r => {
+    const isStrong = STRONG_SIGNALS.has(r.tag.name.toLowerCase()) ||
+      STRONG_SIGNALS.has((r.tag.danbooruName || '').toLowerCase())
+    const signal = isStrong ? '[STRONG]' : ''
+    return `${r.tag.name}${signal} (${r.tag.category}${r.tag.translation ? `, ${r.tag.translation}` : ''})`
+  })
+
+  // ponytail: include image dimensions - a very tall narrow image is likely
+  // a manga/doujin page (higher explicit probability), while a wide landscape
+  // image is more likely a safe illustration. This is a weak signal but
+  // better than nothing when we can't see the actual image.
+  const aspectRatio = post.width && post.height ? (post.width / post.height).toFixed(2) : 'unknown'
+  const orientation = aspectRatio === 'unknown' ? 'unknown' : (Number(aspectRatio) > 1.2 ? 'landscape' : Number(aspectRatio) < 0.8 ? 'portrait' : 'square')
 
   const raw = await callAi([
     {
       role: 'system',
-      content: `You are an anime image content rater. Given a post's metadata and tags, suggest a content rating.
+      content: `You are an anime image content rater for a booru-style gallery. You rate posts based on metadata and tags ONLY (you cannot see the image).
 
-Ratings:
-- safe: General-audience content, no suggestive elements
-- questionable: Suggestive or mildly mature content (ecchi, swimsuits, suggestive poses)
-- explicit: Clearly adult/NSFW content
+Ratings (booru convention):
+- safe: General-audience content. Fully clothed characters, no suggestive elements, no revealing clothing. Even mild fanservice like panty shots disqualify from safe.
+- questionable: Suggestive or mildly mature content. Includes: ecchi, swimsuits, lingerie, suggestive poses, panty shots, visible underwear, provocative clothing, non-explicit fanservice.
+- explicit: Clearly adult/NSFW content. Includes: nudity, sexual acts, visible genitals, hentai.
 
-Return JSON: { "rating": "safe|questionable|explicit", "confidence": 0.0_to_1.0, "reason": "brief explanation" }`,
+Tags marked [STRONG] are strong rating signals - weight them heavily in your assessment.
+
+If most [STRONG] tags suggest mature content but you're not certain it's explicit, lean questionable rather than explicit.
+If there are no [STRONG] tags, the post is very likely safe - only rate higher if the title/description clearly indicates mature content.
+
+Return JSON: { "rating": "safe|questionable|explicit", "confidence": 0.0_to_1.0, "reason": "brief explanation referencing specific tags" }`,
     },
     {
       role: 'user',
-      content: `Title: ${post.title || '(none)'}\nDescription: ${(post.description || '').slice(0, 300)}\nSource: ${post.sourceSite}\nTags: ${tagInfo.join(', ')}`,
+      content: `Title: ${post.title || '(none)'}\nDescription: ${(post.description || '').slice(0, 300)}\nSource: ${post.sourceSite}\nImage: ${post.width}x${post.height} (${orientation}, ratio ${aspectRatio})\nTags: ${tagInfo.join(', ')}`,
     },
   ], { json: true })
 
@@ -437,7 +507,11 @@ Return JSON: { "rating": "safe|questionable|explicit", "confidence": 0.0_to_1.0,
   }
 }
 
-export async function suggestRatings(scope: 'unrated' | 'all' | { rating: Rating }, limit = 50): Promise<(RatingSuggestion & { post_id: string; current_rating: Rating })[]> {
+export async function suggestRatings(
+  scope: 'unrated' | 'all' | { rating: Rating },
+  limit = 50,
+  onProgress?: (examined: number, total: number) => void,
+): Promise<(RatingSuggestion & { post_id: string; current_rating: Rating })[]> {
   const conditions = []
   if (scope === 'unrated') {
     conditions.push(eq(posts.rating, 'safe'))
@@ -449,8 +523,9 @@ export async function suggestRatings(scope: 'unrated' | 'all' | { rating: Rating
   const postRows = await db.select().from(posts).where(where).orderBy(desc(posts.createdAt)).limit(limit)
 
   const results: (RatingSuggestion & { post_id: string; current_rating: Rating })[] = []
+  let examined = 0
 
-  // ponytail: avoid concurrent bursts on the AI API — process sequentially in
+  // ponytail: avoid concurrent bursts on the AI API - process sequentially in
   // small batches with a 200ms inter-request delay. Previous Promise.all fired
   // 10 requests simultaneously; that triggered 429s and was hostile to shared endpoints.
   for (const batch of chunk(postRows, 5)) {
@@ -465,6 +540,11 @@ export async function suggestRatings(scope: 'unrated' | 'all' | { rating: Rating
           })
         }
       } catch { /* skip */ }
+      // ponytail: report progress per-post examined, not per-suggestion-found.
+      // Counting only changed-rating posts made progress stall at 0 until the
+      // very end, giving the admin no feedback during a long scan.
+      examined++
+      if (onProgress) onProgress(examined, postRows.length)
       await new Promise(r => setTimeout(r, 200))
     }
   }
@@ -477,14 +557,21 @@ export async function suggestRatings(scope: 'unrated' | 'all' | { rating: Rating
 export async function generatePostSummary(post: any): Promise<string> {
   const tagNames = (post.tags || []).map((t: any) => t.name).join(', ')
   const translations = (post.tags || []).map((t: any) => t.translation).filter(Boolean).join(', ')
+
+  // ponytail: twitter posts often have no title/description. Without this
+  // guard, the AI gets "标题: (无)\n描述: \n标签: " and hallucinates nonsense.
+  if (!tagNames && !post.title && !post.description) {
+    return '无标题、描述及标签的图片'
+  }
+
   const raw = await callAi([
     {
       role: 'system',
-      content: '你是一个动漫图片摘要生成器。根据标题、描述、标签生成一句话中文摘要（不超过80字）。只返回摘要文本，不要加引号或前缀。',
+      content: '你是一个动漫图片摘要生成器。根据标题、描述、标签生成一句话中文摘要（不超过80字）。只返回摘要文本，不要加引号或前缀。如果信息不足，返回"信息不足，无法生成摘要"。',
     },
     {
       role: 'user',
-      content: `标题: ${post.title || '(无)'}\n描述: ${(post.description || '').slice(0, 200)}\n标签: ${tagNames}\n中文翻译: ${translations}`,
+      content: `标题: ${post.title || '(无)'}\n描述: ${(post.description || '').slice(0, 200)}\n标签: ${tagNames || '(无)'}\n中文翻译: ${translations || '(无)'}`,
     },
   ], { temperature: 0.5 })
   return raw.trim()
@@ -492,23 +579,29 @@ export async function generatePostSummary(post: any): Promise<string> {
 
 // ── Admin assistant chat (capability ④ + ⑧) ──
 
-const ASSISTANT_SYSTEM_PROMPT = `You are an AI assistant for a booru-style anime image gallery management system. You help the admin manage tags, posts, and ratings.
+const ASSISTANT_SYSTEM_PROMPT = `You are an AI assistant for a booru-style anime image gallery management system (Kura Booru). You help the admin manage tags, posts, and ratings.
 
-Available actions you can suggest:
-- classify: Classify unprocessed tags into categories (artist/character/copyright/general/meta) with Chinese translations
-- suggest_merges: Find tags that should be merged
-- suggest_ratings: Review post ratings
-- query_tags: Query tag information
-- query_posts: Query post information
+You have access to the following real-time database statistics, which are provided in the context section of each user message:
+- Total posts, total tags, unprocessed tags, tags missing translation, posts pending AI processing, safe-rated posts percentage
+
+Available actions you can suggest (as clickable buttons):
+- "分类未处理标签" — Classify unprocessed tags into categories with Chinese translations
+- "扫描合并建议" — Find tags that should be merged
+- "扫描评级建议" — Review post ratings for accuracy
 
 When the admin asks a question:
-1. Parse their intent
-2. If it's a query, answer directly with the information
-3. If it's an action request, suggest the action with a brief explanation
+1. Answer in Chinese (the admin interface is in Chinese)
+2. Use the database statistics in the context to answer factual questions about the gallery state
+3. If the admin asks about something the context doesn't cover (e.g. "how many explicit posts?"), be honest that you only have aggregate counts and suggest they check the admin panel
+4. If the admin's question implies an action, suggest the relevant action button
+5. Keep responses concise and practical
 
-Return JSON: { "text": "your natural language response", "suggestions": [{ "label": "button text", "callback_data": "action_key", "action": { "type": "classify|suggest_merges|suggest_ratings", "payload": {} } }] }
+Return JSON: { "text": "your Chinese response", "suggestions": [{ "label": "按钮文字", "callback_data": "natural language query to send back" }] }
 
-Keep responses concise. suggestions is optional — only include when the admin might want to take an action.`
+Important:
+- callback_data should be a short natural-language query that, when sent back to you, will trigger the action (e.g. "分类未处理的标签" or "扫描合并建议")
+- suggestions is optional - only include when the admin might want to take an action
+- Do NOT claim you can query individual tags or posts - you only have aggregate statistics`
 
 export async function adminAssistantChat(
   query: string,
@@ -548,28 +641,38 @@ async function gatherAssistantContext(query: string): Promise<string> {
   const parts: string[] = []
 
   try {
-    const [postCount, tagCount, unprocessedCount, missingTranslationCount, pendingPostCount, safeCount] = await Promise.all([
+    const [postCount, tagCount, unprocessedCount, missingTranslationCount, pendingPostCount, safeCount, qCount, eCount, charCount, artistCount, copyrightCount] = await Promise.all([
       db.select({ count: sql<number>`count(*)` }).from(posts),
       db.select({ count: sql<number>`count(*)` }).from(tags),
       db.select({ count: sql<number>`count(*)` }).from(tags).where(isNull(tags.aiProcessedAt)),
       db.select({ count: sql<number>`count(*)` }).from(tags).where(sql`${tags.translation} IS NULL OR ${tags.translation} = ''`),
       db.select({ count: sql<number>`count(*)` }).from(posts).where(isNull(posts.aiTagStatus)),
       db.select({ count: sql<number>`count(*)` }).from(posts).where(eq(posts.rating, 'safe')),
+      db.select({ count: sql<number>`count(*)` }).from(posts).where(eq(posts.rating, 'questionable')),
+      db.select({ count: sql<number>`count(*)` }).from(posts).where(eq(posts.rating, 'explicit')),
+      db.select({ count: sql<number>`count(*)` }).from(tags).where(eq(tags.category, 'character')),
+      db.select({ count: sql<number>`count(*)` }).from(tags).where(eq(tags.category, 'artist')),
+      db.select({ count: sql<number>`count(*)` }).from(tags).where(eq(tags.category, 'copyright')),
     ])
 
     const totalPosts = Number(postCount[0]?.count || 0)
     const safeNum = Number(safeCount[0]?.count || 0)
     const safePct = totalPosts ? Math.round((safeNum / totalPosts) * 100) : 0
 
-    parts.push(`Total posts: ${totalPosts}`)
-    parts.push(`Total tags: ${Number(tagCount[0]?.count || 0)}`)
-    parts.push(`Unprocessed tags: ${Number(unprocessedCount[0]?.count || 0)}`)
-    parts.push(`Tags missing translation: ${Number(missingTranslationCount[0]?.count || 0)}`)
-    parts.push(`Posts pending AI tag processing: ${Number(pendingPostCount[0]?.count || 0)}`)
-    parts.push(`Safe-rated posts: ${safeNum} (${safePct}% of total)`)
+    // ponytail: query-aware context. The previous version always returned the
+    // same 6 counts regardless of what the admin asked - if they asked "how
+    // many explicit posts?", the context didn't include that number, so the
+    // AI had to guess or deflect. Now we always provide the full breakdown so
+    // the AI can answer any stats question from context.
+    parts.push(`Database statistics:`)
+    parts.push(`- Total posts: ${totalPosts} (safe: ${safeNum} (${safePct}%), questionable: ${Number(qCount[0]?.count || 0)}, explicit: ${Number(eCount[0]?.count || 0)})`)
+    parts.push(`- Total tags: ${Number(tagCount[0]?.count || 0)} (artist: ${Number(artistCount[0]?.count || 0)}, character: ${Number(charCount[0]?.count || 0)}, copyright: ${Number(copyrightCount[0]?.count || 0)})`)
+    parts.push(`- Unprocessed tags (no AI classification): ${Number(unprocessedCount[0]?.count || 0)}`)
+    parts.push(`- Tags missing Chinese translation: ${Number(missingTranslationCount[0]?.count || 0)}`)
+    parts.push(`- Posts pending AI tag processing: ${Number(pendingPostCount[0]?.count || 0)}`)
   } catch { /* ignore */ }
 
-  return parts.join('. ')
+  return parts.join('\n')
 }
 
 // ── Utility ──

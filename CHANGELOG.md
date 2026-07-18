@@ -2,6 +2,22 @@
 
 本文件记录项目的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.8.1] - 2026-07-17
+
+### 修复
+- **suggestMerges 采样方向错误** - 原来按 `post_count DESC` 取前 200，恰好是最不需要合并的高频标签。改为混合采样：top 50 高频（作为 canonical 候选）+ bottom 150 低频升序（最可能是重复/变体）。排除 0 计数孤儿标签。
+- **suggestRatings 进度追踪停滞** - `updateAiJobProgress` 用 `results.length`（仅计数评级变更的 post）做 `done`，导致进度始终停在 0 直到最后一次跳变。改为按"已检查 post 数"上报增量进度（新增 `onProgress` 回调参数，每 post 调用一次）。
+- **adminAssistantChat 承诺不存在的 action** - system prompt 列出 `query_tags` / `query_posts` 但无实现。AI 会说"可以查询标签"但实际做不到。移除这两个虚假 action，明确告知 AI 只有聚合统计可用，禁止声称可查询个体标签/作品。
+- **gatherAssistantContext 忽略 query 参数** - 函数签名接收 `query` 但完全不用，始终返回相同的 6 个计数。admin 问"有多少 explicit?"时 AI 无法从 context 回答。扩展为 11 个并行 count 查询，覆盖 safe/questionable/explicit 分项 + artist/character/copyright 分项，让 AI 从 context 直接回答任何统计问题。
+- **classifyTags 批次过大** - 单次 API 调用发送 50 个标签，长输出导致质量下降（跳标签、幻觉条目）+ JSON 解析失败。批次上限降为 25，并过滤掉 AI 返回的、不在输入列表中的幻觉条目。
+- **classifyTags prompt 缺少源上下文 + few-shot** - 标签可能来自 Pixiv（日文）/Twitter（日文/英文）/Danbooru（romanized snake_case），但 prompt 未说明。补充多源背景说明 + 5 条 few-shot 示例覆盖 5 个分类 + 置信度校准指引（0.9+=确定 / 0.7-0.9=较有把握 / 0.5-0.7=推测 / <0.5=不确定）。
+- **suggestRatingForPost 评级信号不足** - 原来所有标签同等权重，"long_hair" 和 "nude" 信号强度相同。新增 `STRONG_SIGNALS` 集合（nude/panties/bikini/ecchi 等 30+ 词），强信号标签在传给 AI 时标记 `[STRONG]`；prompt 指示强信号标签权重更高。同时传入图片尺寸 + 朝向（portrait/landscape/square）作为弱信号补充。补充 booru 文化中 safe/questionable/explicit 的具体边界定义（如 panty_shot 即 disqualify from safe）。
+- **adminAssistantChat callback_data 语义不匹配** - system prompt 示例 `callback_data: "action_key"`，但前端 `AiChatPanel` 把 callback_data 当新查询字符串发回。改为明确指示 callback_data 应为自然语言查询（如"分类未处理标签"），前端点击即自动发送。
+- **adminAssistantChat 语言不匹配** - system prompt 英文，admin 界面中文。补充"用中文回答"指令。
+- **suggestMerges 跨分类合并无防护** - AI 可能建议把 character 标签合并到 artist 标签。prompt 补充"只建议同分类内合并"规则。
+- **generatePostSummary 空输入无保护** - twitter 帖子常无标题/描述/标签，AI 收到"标题: (无)\n描述: \n标签: "会幻觉胡说。新增空输入短路返回 + prompt 补充"信息不足时返回提示"。
+- **classifyTags 低置信度无提示** - 应用分类时不管置信度多少都 toast "已应用"。低于 0.5 的改为 info toast 提示"置信度低，建议人工复核"。
+
 ## [0.8.0] - 2026-07-17
 
 ### 新增
