@@ -43,7 +43,12 @@ const deleting = ref<Record<number, boolean>>({})
 
 async function deletePage(pageId: string, pageIndex: number) {
   if (deleting.value[pageIndex]) return
-  if (!confirm(`删除第 ${pageIndex} 张？该系列剩余图将重新编号为 1..N-1。`)) return
+  if (!await useConfirm().ask({
+    message: `删除第 ${pageIndex} 张？该系列剩余图将重新编号为 1..N-1。`,
+    title: '删除系列页',
+    danger: true,
+    confirmLabel: '删除',
+  })) return
   deleting.value = { ...deleting.value, [pageIndex]: true }
   try {
     await deletePost(pageId)
@@ -56,7 +61,7 @@ async function deletePage(pageId: string, pageIndex: number) {
     window.location.reload()
   } catch (e) {
     console.error('series delete failed:', e)
-    alert('删除失败')
+    useToast().error('删除失败')
     deleting.value = { ...deleting.value, [pageIndex]: false }
   }
 }

@@ -14,7 +14,22 @@ export default defineEventHandler(async (event) => {
     normalizedScope = (scope as 'unrated' | 'all') || 'unrated'
   }
 
-  const results = await suggestRatings(normalizedScope, limit)
+  // Rating suggestions are inherently slow (one AI call per post, sequential
+  // with 200ms delay). Run as a background job; client polls GET /jobs/:id.
+  const jobId = await createAiJob('ratings', limit)
+  event.waitUntil((async () => {
+    const errors: string[] = []
+    let results: Awaited<ReturnType<typeof suggestRatings>> = []
+    try {
+      results = await suggestRatings(normalizedScope, limit)
+      await updateAiJobProgress(jobId, { done: results.length, total: limit })
+    } catch (e: any) {
+      errors.push(e?.message || String(e))
+      await updateAiJobProgress(jobId, { errors })
+    }
+    await completeAiJob(jobId, { suggestions: results }, errors.length > 0)
+  })())
 
-  return { suggestions: results }
+  setResponseStatus(event, 202)
+  return { job_id: jobId, suggestions: [] as any[] }
 })

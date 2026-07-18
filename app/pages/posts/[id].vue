@@ -52,7 +52,7 @@ async function saveRating() {
     setTimeout(() => { ratingMessage.value = '' }, 2000)
   } catch {
     ratingMessage.value = '保存失败'
-    alert('保存失败')
+    useToast().error('保存失败')
   } finally {
     saving.value = false
   }
@@ -68,18 +68,18 @@ async function addTag() {
     post.value = { ...post.value, ...updated }
     newTagName.value = ''
   } catch {
-    alert('添加标签失败')
+    useToast().error('添加标签失败')
   }
 }
 
 async function removeTag(tagId: string) {
   if (!post.value) return
-  if (!confirm('确定要移除此标签吗？')) return
+  if (!await useConfirm().ask({ message: '确定要移除此标签吗？', danger: true, confirmLabel: '移除' })) return
   try {
     const updated = await updatePostTags(post.value.id, { remove_tag_ids: [tagId] })
     post.value = { ...post.value, ...updated }
   } catch {
-    alert('移除标签失败')
+    useToast().error('移除标签失败')
   }
 }
 
@@ -92,13 +92,18 @@ function openModal() { showModal.value = true }
 const deleting = ref(false)
 
 async function deletePostAction() {
-  if (!confirm('确定要删除这张插画吗？此操作不可恢复，将同时删除存储文件。')) return
+  if (!await useConfirm().ask({
+    message: '确定要删除这张插画吗？此操作不可恢复，将同时删除存储文件。',
+    title: '删除插画',
+    danger: true,
+    confirmLabel: '删除',
+  })) return
   deleting.value = true
   try {
     await deletePost(post.value!.id)
     navigateTo('/')
   } catch {
-    alert('删除失败')
+    useToast().error('删除失败')
     deleting.value = false
   }
 }

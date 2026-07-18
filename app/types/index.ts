@@ -112,6 +112,17 @@ export interface TagClassificationSuggestion {
   confidence: number
 }
 
+export interface AiJobStatus {
+  id: string
+  type: 'classify' | 'merges' | 'ratings'
+  status: 'running' | 'done' | 'error' | 'gone'
+  total: number
+  done: number
+  errors: string[]
+  started_at: number
+  result?: { suggestions: any[] }
+}
+
 export interface MergeSuggestion {
   canonical_name: string
   aliases: string[]

@@ -214,6 +214,10 @@ useHead(headInjectEntries)
 
     <!-- Keyboard shortcuts cheatsheet (? to toggle) -->
     <KbdCheatSheet v-model="cheatsheetOpen" />
+
+    <!-- Global toast + confirm dialog (admin + user-facing) -->
+    <ToastContainer />
+    <ConfirmDialog />
   </div>
 </template>
 

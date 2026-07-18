@@ -2,6 +2,8 @@
 import type { ExtensionKey } from '~/composables/api'
 
 const { ssrCookie } = useSsrContext()
+const toast = useToast()
+const confirm = useConfirm()
 
 const { data: keys, refresh } = await useAsyncData('extension-keys', async () => {
   try { return await fetchExtensionKeys(ssrCookie.value) }
@@ -21,18 +23,25 @@ async function createKey() {
     newName.value = ''
     newCanForceRating.value = false
     await refresh()
+    toast.success('Key 已生成')
   } catch (e: any) {
-    alert(`创建失败: ${e.message || e}`)
+    toast.error(`创建失败: ${e.message || e}`)
   }
 }
 
 async function revokeKey(id: string, name: string) {
-  if (!confirm(`确定吊销 "${name}"？该 key 立即失效。`)) return
+  if (!await confirm.ask({
+    message: `确定吊销 "${name}"？该 key 立即失效。`,
+    title: '吊销 Key',
+    danger: true,
+    confirmLabel: '吊销',
+  })) return
   try {
     await revokeExtensionKey(id)
     await refresh()
+    toast.success('Key 已吊销')
   } catch (e: any) {
-    alert(`吊销失败: ${e.message || e}`)
+    toast.error(`吊销失败: ${e.message || e}`)
   }
 }
 
@@ -43,7 +52,7 @@ async function copyRawKey() {
     copied.value = true
     setTimeout(() => { copied.value = false }, 2000)
   } catch {
-    alert('复制失败,请手动选择文本')
+    toast.error('复制失败，请手动选择文本')
   }
 }
 
@@ -60,7 +69,7 @@ function formatDate(s: string | null | undefined): string {
     <div class="dash-card !p-5">
       <h2 class="text-sm font-semibold mb-3" style="font-family: var(--font-display);">生成新 Key</h2>
       <p class="text-xs text-[var(--text-muted)] mb-3">
-        为浏览器扩展生成专用 API Key。每个 Key 独立可吊销,与 <code>BACKEND_API_KEY</code> 完全隔离。
+        为浏览器扩展生成专用 API Key。每个 Key 独立可吊销，与 <code>BACKEND_API_KEY</code> 完全隔离。
       </p>
       <div class="flex items-center gap-2">
         <input
@@ -88,7 +97,7 @@ function formatDate(s: string | null | undefined): string {
     <div v-if="justCreatedKey" class="dash-card !p-5 border-2 border-[var(--accent-color)]">
       <h2 class="text-sm font-semibold mb-2 text-[var(--accent-color)]">⚠️ 复制此 Key — 只显示一次</h2>
       <p class="text-xs text-[var(--text-muted)] mb-3">
-        Key 明文只在此页面显示一次。关闭后无法再查看,如丢失请吊销旧 Key 并生成新的。
+        Key 明文只在此页面显示一次。关闭后无法再查看，如丢失请吊销旧 Key 并生成新的。
       </p>
       <div class="flex items-center gap-2">
         <code class="flex-1 px-3 py-2 rounded-[var(--radius-sm)] bg-[var(--bg-primary)] border border-[var(--border-color)] text-sm font-mono break-all select-all">{{ justCreatedKey.raw_key }}</code>
@@ -106,9 +115,12 @@ function formatDate(s: string | null | undefined): string {
     <!-- Existing keys list -->
     <div class="dash-card !p-5">
       <h2 class="text-sm font-semibold mb-3" style="font-family: var(--font-display);">已有 Key ({{ keys?.length || 0 }})</h2>
-      <div v-if="!keys || keys.length === 0" class="text-xs text-[var(--text-muted)] py-8 text-center">
-        还没有任何 Key
-      </div>
+      <EmptyState
+        v-if="!keys || keys.length === 0"
+        title="还没有任何 Key"
+        description="生成一个新 Key 开始使用扩展"
+        icon="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.995-6.995c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z"
+      />
       <div v-else class="space-y-2">
         <div
           v-for="key in keys"

@@ -38,10 +38,24 @@ export async function fetchApi<T>(
     ...((options?.headers as Record<string, string>) || {}),
   }
 
+  // SSR-side fetches need the browser cookie forwarded manually — node fetch
+  // doesn't send credentials and the internal API call would otherwise look
+  // anonymous, breaking admin endpoints (dashboard returns 401 → "无法加载
+  // 仪表盘" after a full reload).
+  const ssrCookie = options?.ssrCookie
+  if (ssrCookie) {
+    headers['Cookie'] = ssrCookie
+  }
+
   const isBrowser = typeof window !== 'undefined'
 
+  // Strip ssrCookie before spreading options into fetch — it's not a real
+  // RequestInit field and would be silently ignored, but keeping it out is
+  // cleaner. signal is forwarded explicitly below.
+  const { ssrCookie: _sc, ...fetchOptions } = options || {}
+
   const response = await fetch(url, {
-    ...options,
+    ...fetchOptions,
     headers,
     ...(options?.signal ? { signal: options.signal } : {}),
     ...(isBrowser ? { credentials: 'include' as RequestCredentials } : {}),

@@ -26,15 +26,20 @@ export default defineEventHandler(async (event) => {
   // ponytail: counts read from mv_dashboard_stats (refreshed every 5 min by
   // server/plugins/06-dashboard-refresh.ts). Grouped breakdowns stay live
   // because they're bounded (TOP 10 tags, by rating/source, last 6 posts).
-  const [mvRow, sourceBreakdown, ratingBreakdown, topTags, recentPosts] = await Promise.all([
-    db.select().from(sql`mv_dashboard_stats`).limit(1),
+  //
+  // db.select().from(sql`mv_dashboard_stats`) returned rows but Drizzle
+  // couldn't map column names from a raw SQL table fragment — every column
+  // access came back undefined, so the dashboard showed all zeros. Use
+  // db.execute() which returns rows as plain key→value objects.
+  const [mvResult, sourceBreakdown, ratingBreakdown, topTags, recentPosts] = await Promise.all([
+    db.execute(sql`SELECT * FROM mv_dashboard_stats LIMIT 1`),
     db.select({ sourceSite: posts.sourceSite, count: sql<number>`count(*)` }).from(posts).groupBy(posts.sourceSite),
     db.select({ rating: posts.rating, count: sql<number>`count(*)` }).from(posts).groupBy(posts.rating),
     db.select({ id: tags.id, name: tags.name, category: tags.category, postCount: tags.postCount }).from(tags).orderBy(sql`post_count desc`).limit(10),
     db.select({ id: posts.id, thumbKey: posts.thumbKey, title: posts.title, rating: posts.rating, sourceSite: posts.sourceSite, createdAt: posts.createdAt }).from(posts).orderBy(sql`created_at desc`).limit(6),
   ])
 
-  const overview = mvRow[0] as any
+  const overview = (mvResult.rows?.[0] ?? mvResult[0]) as any
   return {
     overview: {
       total_posts: Number(overview?.total_posts || 0),

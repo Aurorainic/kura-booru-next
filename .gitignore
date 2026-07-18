@@ -27,6 +27,10 @@ logs
 # Mimocode (local only)
 .mimocode/
 
+# Local agent memory/state
+.remember/
+.mimo/
+
 # Local env files
 .env
 .env.*

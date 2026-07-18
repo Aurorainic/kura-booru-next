@@ -1,31 +1,11 @@
 <script setup lang="ts">
 const { ssrCookie } = useSsrContext()
-const { data: stats } = await useAsyncData('dashboard', async () => {
+const { data: stats, pending } = await useAsyncData('dashboard', async () => {
   try {
     return await fetchDashboardStats(ssrCookie.value)
   } catch {
     return null
   }
-})
-
-// System status polling (F-P0-3)
-const systemStatus = ref<{ queue_depth: number } | null>(null)
-let pollTimer: ReturnType<typeof setInterval> | null = null
-let alive = true
-
-onMounted(() => {
-  alive = true
-  fetchSystemStatus().then(s => { if (alive) systemStatus.value = s }).catch(() => {})
-  pollTimer = setInterval(async () => {
-    if (alive && document.visibilityState === 'visible') {
-      try { systemStatus.value = await fetchSystemStatus() } catch { /* ignore */ }
-    }
-  }, 5000)
-})
-
-onUnmounted(() => {
-  alive = false
-  if (pollTimer) clearInterval(pollTimer)
 })
 
 const overviewCards = computed(() => {
@@ -48,7 +28,7 @@ const sourcePie = computed(() => {
   const items = stats.value.source_breakdown.map(i => ({ ...i, count: Number(i.count) }))
   const total = items.reduce((s, i) => s + i.count, 0)
   let cumulative = 0
-  return items.map((item, idx) => {
+  return items.map((item) => {
     const pct = total ? item.count / total : 0
     const start = cumulative
     cumulative += pct
@@ -56,9 +36,7 @@ const sourcePie = computed(() => {
   })
 })
 
-// SVG pie slice path
 function pieSlice(startPct: number, endPct: number, r: number): string {
-  // Handle full circle (100%) — draw as complete circle
   if (endPct - startPct >= 0.999) {
     return `M16,${16 - r} A${r},${r} 0 1,1 16,${16 + r} A${r},${r} 0 1,1 16,${16 - r} Z`
   }
@@ -83,17 +61,31 @@ const ratingPie = computed(() => {
   })
 })
 
-const RATING_COLORS: Record<string, string> = { safe: '#22c55e', questionable: '#eab308', explicit: '#ef4444' }
+// ponytail: rating colors now derived from the same .rating-* CSS classes —
+// we read the resolved CSS var so the segmented bar matches the badge palette
+// instead of a parallel hardcoded dictionary.
+const ratingBg = (rating: string) => {
+  const map: Record<string, string> = {
+    safe: 'var(--color-success)',
+    questionable: 'var(--color-warning)',
+    explicit: 'var(--color-danger)',
+  }
+  return map[rating] || 'var(--accent-color)'
+}
 </script>
 
 <template>
-  <div v-if="stats" class="space-y-5">
+  <div v-if="pending" class="space-y-5">
+    <LoadingCard message="加载仪表盘…" />
+  </div>
+
+  <div v-else-if="stats" class="space-y-5">
     <!-- Overview cards -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
       <div
         v-for="card in overviewCards"
         :key="card.label"
-        class="relative overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-5 transition-all duration-300 hover:border-[var(--accent-color)]/40 hover:shadow-lg hover:-translate-y-0.5"
+        class="dash-card relative overflow-hidden !p-5 transition-all duration-300 hover:border-[var(--accent-color)]/40 hover:shadow-lg hover:-translate-y-0.5"
         :style="{ animation: `fadeSlideIn 0.4s var(--ease-out) ${card.delay * 80}ms both` }"
       >
         <div class="flex items-center gap-3 mb-4">
@@ -103,7 +95,6 @@ const RATING_COLORS: Record<string, string> = { safe: '#22c55e', questionable: '
           <span class="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest">{{ card.label }}</span>
         </div>
         <p class="text-3xl font-bold tabular-nums text-[var(--text-primary)] tracking-tight" style="font-feature-settings: 'tnum';">{{ card.value }}</p>
-        <!-- Subtle gradient bar at bottom -->
         <div class="absolute bottom-0 left-0 right-0 h-0.5" style="background: var(--accent-gradient); opacity: 0.6;" />
       </div>
     </div>
@@ -111,15 +102,13 @@ const RATING_COLORS: Record<string, string> = { safe: '#22c55e', questionable: '
     <!-- Source + Rating row — Pie + Segmented Bar -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
       <!-- Source breakdown — Donut chart -->
-      <div class="rounded-2xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-5">
+      <div class="dash-card !p-5">
         <h3 class="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest mb-4">来源分布</h3>
         <div class="flex items-center gap-6">
           <svg v-if="sourcePie.length" viewBox="0 0 32 32" class="w-28 h-28 flex-shrink-0">
-            <!-- Background ring -->
             <circle cx="16" cy="16" r="13" fill="none" stroke-width="5" style="stroke: var(--bg-alt);" />
-            <!-- Pie slices -->
             <path
-              v-for="(slice, i) in sourcePie"
+              v-for="slice in sourcePie"
               :key="slice.source_site"
               :d="pieSlice(slice.start, slice.start + slice.pct, 13)"
               :fill="slice.color"
@@ -128,7 +117,6 @@ const RATING_COLORS: Record<string, string> = { safe: '#22c55e', questionable: '
               class="transition-all duration-500"
               style="opacity: 0.85;"
             />
-            <!-- Donut hole -->
             <circle cx="16" cy="16" r="7" style="fill: var(--bg-surface);" />
           </svg>
           <div v-else class="w-28 h-28 flex-shrink-0 flex items-center justify-center text-[var(--text-muted)] text-xs">无数据</div>
@@ -144,23 +132,21 @@ const RATING_COLORS: Record<string, string> = { safe: '#22c55e', questionable: '
       </div>
 
       <!-- Rating breakdown — Segmented bar -->
-      <div class="rounded-2xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-5">
+      <div class="dash-card !p-5">
         <h3 class="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest mb-4">评级分布</h3>
         <div class="space-y-3">
-          <!-- Segmented bar -->
           <div v-if="ratingPie.length" class="flex h-5 rounded-full overflow-hidden">
             <div
               v-for="item in ratingPie"
               :key="item.rating"
-              :style="{ width: `${item.pct * 100}%`, background: RATING_COLORS[item.rating] || '#6366f1' }"
+              :style="{ width: `${item.pct * 100}%`, background: ratingBg(item.rating) }"
               class="transition-all duration-700 ease-out first:rounded-l-full last:rounded-r-full"
               :title="`${getRatingLabel(item.rating)}: ${item.count}`"
             />
           </div>
-          <!-- Legend -->
           <div class="flex items-center gap-5 text-xs">
             <div v-for="item in ratingPie" :key="item.rating" class="flex items-center gap-1.5">
-              <span class="w-2.5 h-2.5 rounded-sm flex-shrink-0" :style="{ background: RATING_COLORS[item.rating] || '#6366f1' }" />
+              <span class="w-2.5 h-2.5 rounded-sm flex-shrink-0" :style="{ background: ratingBg(item.rating) }" />
               <span class="text-[var(--text-primary)]">{{ getRatingLabel(item.rating) }}</span>
               <span class="font-mono tabular-nums text-[var(--text-muted)]">{{ item.count }}</span>
             </div>
@@ -170,7 +156,7 @@ const RATING_COLORS: Record<string, string> = { safe: '#22c55e', questionable: '
     </div>
 
     <!-- Top tags -->
-    <div class="rounded-2xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-5">
+    <div class="dash-card !p-5">
       <h3 class="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest mb-4">热门标签</h3>
       <div class="flex flex-wrap gap-1.5">
         <NuxtLink
@@ -189,20 +175,17 @@ const RATING_COLORS: Record<string, string> = { safe: '#22c55e', questionable: '
       </div>
     </div>
 
-    <!-- System status -->
-    <div class="rounded-2xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-5">
+    <!-- System status — queue depth now lives in AdminStatusBar (top of page).
+         This panel only renders the per-card stats; polling moved to the bar. -->
+    <div class="dash-card !p-5">
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest">系统状态</h3>
         <span class="inline-flex items-center gap-1.5 text-[0.625rem] text-[var(--text-muted)]">
-          <span class="w-1.5 h-1.5 rounded-full animate-pulse" :style="{ background: systemStatus?.queue_depth !== undefined ? 'var(--color-success)' : 'var(--color-warning)' }" />
-          实时
+          <span class="w-1.5 h-1.5 rounded-full" style="background: var(--color-success);" />
+          系统正常
         </span>
       </div>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div class="text-center p-4 rounded-xl" style="background: var(--accent-subtle);">
-          <p class="text-2xl font-bold tabular-nums" style="font-feature-settings: 'tnum';">{{ systemStatus?.queue_depth ?? '…' }}</p>
-          <p class="text-[0.6875rem] font-medium text-[var(--text-muted)] mt-1">队列深度</p>
-        </div>
         <div class="text-center p-4 rounded-xl" style="background: var(--accent-subtle);">
           <p class="text-2xl font-bold tabular-nums" style="font-feature-settings: 'tnum';">{{ stats.overview.total_posts }}</p>
           <p class="text-[0.6875rem] font-medium text-[var(--text-muted)] mt-1">作品总数</p>
@@ -212,6 +195,10 @@ const RATING_COLORS: Record<string, string> = { safe: '#22c55e', questionable: '
           <p class="text-[0.6875rem] font-medium text-[var(--text-muted)] mt-1">标签总数</p>
         </div>
         <div class="text-center p-4 rounded-xl" style="background: var(--accent-subtle);">
+          <p class="text-2xl font-bold tabular-nums" style="font-feature-settings: 'tnum';">{{ stats.overview.total_post_tags }}</p>
+          <p class="text-[0.6875rem] font-medium text-[var(--text-muted)] mt-1">关联总数</p>
+        </div>
+        <div class="text-center p-4 rounded-xl" style="background: var(--accent-subtle);">
           <p class="text-sm font-medium text-[var(--text-muted)]">存储</p>
           <p class="text-xs text-[var(--text-muted)] mt-1">{{ formatFileSize(stats.overview.total_file_size_bytes) }}</p>
         </div>
@@ -219,14 +206,10 @@ const RATING_COLORS: Record<string, string> = { safe: '#22c55e', questionable: '
     </div>
   </div>
 
-  <!-- Empty/error state -->
-  <div v-else class="flex flex-col items-center justify-center py-20 text-[var(--text-muted)]">
-    <div class="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style="background: var(--accent-subtle);">
-      <svg class="w-8 h-8" style="color: var(--accent-color);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-      </svg>
-    </div>
-    <p class="text-sm font-semibold mb-1">无法加载仪表盘</p>
-    <p class="text-xs">检查后端服务和数据库连接</p>
-  </div>
+  <EmptyState
+    v-else
+    title="无法加载仪表盘"
+    description="检查后端服务和数据库连接"
+    icon="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
+  />
 </template>

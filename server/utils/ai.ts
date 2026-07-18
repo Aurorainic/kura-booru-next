@@ -19,6 +19,18 @@ export interface TagClassification {
   category: TagCategory
   translation: string
   danbooru_name: string
+  confidence: number
+}
+
+export interface AiJobStatus {
+  id: string
+  type: 'classify' | 'merges' | 'ratings'
+  status: 'running' | 'done' | 'error'
+  total: number
+  done: number
+  errors: string[]
+  started_at: number
+  result?: any
 }
 
 export interface MergeSuggestion {
@@ -71,7 +83,14 @@ export function getAiStatus() {
 
 // ── Core API call ──
 
-async function callAi(messages: AiMessage[], opts?: { json?: boolean; temperature?: number }): Promise<string> {
+const AI_TIMEOUT_MS = 30_000
+const AI_MAX_RETRIES = 2
+
+function isRetriableStatus(status: number): boolean {
+  return status === 429 || status >= 500
+}
+
+async function callAiOnce(messages: AiMessage[], opts?: { json?: boolean; temperature?: number }, signal?: AbortSignal): Promise<string> {
   const cfg = getAiConfig()
   if (!cfg.enabled || !cfg.configured) {
     throw Object.assign(new Error('AI not configured'), { statusCode: 503 })
@@ -96,17 +115,42 @@ async function callAi(messages: AiMessage[], opts?: { json?: boolean; temperatur
       'Authorization': `Bearer ${cfg.apiKey}`,
     },
     body: JSON.stringify(body),
+    signal,
   })
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '')
-    throw new Error(`AI API ${resp.status}: ${text.slice(0, 200)}`)
+    const err = new Error(`AI API ${resp.status}: ${text.slice(0, 200)}`)
+    Object.assign(err, { statusCode: resp.status, retriable: isRetriableStatus(resp.status) })
+    throw err
   }
 
   const data = await resp.json()
   const content = data?.choices?.[0]?.message?.content
   if (!content) throw new Error('AI API returned empty response')
   return content
+}
+
+async function callAi(messages: AiMessage[], opts?: { json?: boolean; temperature?: number }): Promise<string> {
+  let lastErr: any
+  for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT_MS)
+    try {
+      return await callAiOnce(messages, opts, controller.signal)
+    } catch (e: any) {
+      lastErr = e
+      const retriable = e?.retriable || e?.name === 'AbortError' || (e?.code && !e.statusCode)
+      if (!retriable || attempt === AI_MAX_RETRIES) throw e
+      // Exponential backoff: base 1s * 2^attempt, ±20% jitter
+      const base = 1000 * Math.pow(2, attempt)
+      const jitter = base * (0.8 + Math.random() * 0.4)
+      await new Promise(r => setTimeout(r, jitter))
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+  throw lastErr
 }
 
 // ── Tag classification (capability ①) ──
@@ -120,13 +164,14 @@ Categories:
 - general: General descriptive tags (e.g. long_hair, blue_eyes, school_uniform)
 - meta: Meta information tags (e.g. highres, transparent_background, scan)
 
-Return JSON: { "tags": [{ "name": "original_tag_name", "category": "artist|character|copyright|general|meta", "translation": "中文翻译", "danbooru_name": "canonical_english_name" }] }
+Return JSON: { "tags": [{ "name": "original_tag_name", "category": "artist|character|copyright|general|meta", "translation": "中文翻译", "danbooru_name": "canonical_english_name", "confidence": 0.0_to_1.0 }] }
 
 Rules:
 - Preserve the original tag name exactly as given
 - For danbooru_name, use the standard Danbooru tag name if known, otherwise leave empty string
 - For translation, provide a concise Chinese translation, empty string if uncertain
-- Category must be exactly one of: artist, character, copyright, general, meta`
+- Category must be exactly one of: artist, character, copyright, general, meta
+- confidence reflects how certain the classification is (0.0 = pure guess, 1.0 = certain)`
 
 export async function classifyTags(tagNames: string[]): Promise<TagClassification[]> {
   if (!tagNames.length) return []
@@ -144,11 +189,18 @@ export async function classifyTags(tagNames: string[]): Promise<TagClassificatio
       category: validateCategory(t.category),
       translation: String(t.translation || ''),
       danbooru_name: String(t.danbooru_name || ''),
+      confidence: clampConfidence(t.confidence, 0.7),
     }))
   } catch {
     console.error('[ai] classifyTags: failed to parse AI response')
     return []
   }
+}
+
+function clampConfidence(v: any, dflt: number): number {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return dflt
+  return Math.min(1, Math.max(0, n))
 }
 
 function validateCategory(c: string): TagCategory {
@@ -213,6 +265,7 @@ export async function aiProcessTagsForPost(postId: string, tagIds: string[]): Pr
       category: validateCategory(c.type),
       translation: c.translation || '',
       danbooru_name: c.danbooruName || '',
+      confidence: 0.7,
     })
   }
   for (const c of newClassifications) {
@@ -397,9 +450,11 @@ export async function suggestRatings(scope: 'unrated' | 'all' | { rating: Rating
 
   const results: (RatingSuggestion & { post_id: string; current_rating: Rating })[] = []
 
-  // Batch by 10 to avoid hammering the API
-  for (const batch of chunk(postRows, 10)) {
-    await Promise.all(batch.map(async (post) => {
+  // ponytail: avoid concurrent bursts on the AI API — process sequentially in
+  // small batches with a 200ms inter-request delay. Previous Promise.all fired
+  // 10 requests simultaneously; that triggered 429s and was hostile to shared endpoints.
+  for (const batch of chunk(postRows, 5)) {
+    for (const post of batch) {
       try {
         const suggestion = await suggestRatingForPost(post.id)
         if (suggestion && suggestion.rating !== post.rating) {
@@ -410,7 +465,8 @@ export async function suggestRatings(scope: 'unrated' | 'all' | { rating: Rating
           })
         }
       } catch { /* skip */ }
-    }))
+      await new Promise(r => setTimeout(r, 200))
+    }
   }
 
   return results
@@ -492,15 +548,25 @@ async function gatherAssistantContext(query: string): Promise<string> {
   const parts: string[] = []
 
   try {
-    const [postCount, tagCount, unprocessedCount] = await Promise.all([
+    const [postCount, tagCount, unprocessedCount, missingTranslationCount, pendingPostCount, safeCount] = await Promise.all([
       db.select({ count: sql<number>`count(*)` }).from(posts),
       db.select({ count: sql<number>`count(*)` }).from(tags),
       db.select({ count: sql<number>`count(*)` }).from(tags).where(isNull(tags.aiProcessedAt)),
+      db.select({ count: sql<number>`count(*)` }).from(tags).where(sql`${tags.translation} IS NULL OR ${tags.translation} = ''`),
+      db.select({ count: sql<number>`count(*)` }).from(posts).where(isNull(posts.aiTagStatus)),
+      db.select({ count: sql<number>`count(*)` }).from(posts).where(eq(posts.rating, 'safe')),
     ])
 
-    parts.push(`Total posts: ${Number(postCount[0]?.count || 0)}`)
+    const totalPosts = Number(postCount[0]?.count || 0)
+    const safeNum = Number(safeCount[0]?.count || 0)
+    const safePct = totalPosts ? Math.round((safeNum / totalPosts) * 100) : 0
+
+    parts.push(`Total posts: ${totalPosts}`)
     parts.push(`Total tags: ${Number(tagCount[0]?.count || 0)}`)
     parts.push(`Unprocessed tags: ${Number(unprocessedCount[0]?.count || 0)}`)
+    parts.push(`Tags missing translation: ${Number(missingTranslationCount[0]?.count || 0)}`)
+    parts.push(`Posts pending AI tag processing: ${Number(pendingPostCount[0]?.count || 0)}`)
+    parts.push(`Safe-rated posts: ${safeNum} (${safePct}% of total)`)
   } catch { /* ignore */ }
 
   return parts.join('. ')
@@ -514,4 +580,53 @@ function chunk<T>(arr: T[], size: number): T[][] {
     result.push(arr.slice(i, i + size))
   }
   return result
+}
+
+// ── AI job progress (Redis-backed, short TTL) ──
+// ponytail: avoid new PG tables for transient progress state; Redis SETEX with
+// 1800s TTL auto-cleans. On completion, set status=done and shrink TTL to 60s.
+
+const AI_JOB_TTL_RUNNING = 1800  // 30 min while running
+const AI_JOB_TTL_DONE = 60       // 1 min after completion (lets polls settle)
+const AI_JOB_KEY = (id: string) => `kura:ai_job:${id}`
+
+export async function createAiJob(type: AiJobStatus['type'], total: number): Promise<string> {
+  const id = `${type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+  const status: AiJobStatus = {
+    id, type, status: 'running', total, done: 0, errors: [], started_at: Date.now(),
+  }
+  await redis.set(AI_JOB_KEY(id), JSON.stringify(status), { EX: AI_JOB_TTL_RUNNING })
+  return id
+}
+
+export async function updateAiJobProgress(id: string, patch: Partial<Pick<AiJobStatus, 'done' | 'errors' | 'total'>>): Promise<void> {
+  try {
+    const raw = await redis.get(AI_JOB_KEY(id))
+    if (!raw) return  // expired or missing — silent
+    const s = JSON.parse(raw) as AiJobStatus
+    if (patch.done !== undefined) s.done = patch.done
+    if (patch.total !== undefined) s.total = patch.total
+    if (patch.errors) s.errors = [...s.errors, ...patch.errors].slice(-50)
+    await redis.set(AI_JOB_KEY(id), JSON.stringify(s), { EX: AI_JOB_TTL_RUNNING })
+  } catch (e) { console.error('[ai] updateAiJobProgress failed:', e) }
+}
+
+export async function completeAiJob(id: string, result: any, hadErrors: boolean): Promise<void> {
+  try {
+    const raw = await redis.get(AI_JOB_KEY(id))
+    const s: AiJobStatus = raw ? JSON.parse(raw) : {
+      id, type: 'classify', status: 'done', total: 0, done: 0, errors: [], started_at: Date.now(),
+    }
+    s.status = hadErrors ? 'error' : 'done'
+    s.result = result
+    await redis.set(AI_JOB_KEY(id), JSON.stringify(s), { EX: AI_JOB_TTL_DONE })
+  } catch (e) { console.error('[ai] completeAiJob failed:', e) }
+}
+
+export async function getAiJobStatus(id: string): Promise<AiJobStatus | null> {
+  try {
+    const raw = await redis.get(AI_JOB_KEY(id))
+    if (!raw) return null
+    return JSON.parse(raw) as AiJobStatus
+  } catch { return null }
 }

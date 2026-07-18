@@ -2,6 +2,34 @@
 
 本文件记录项目的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.8.0] - 2026-07-17
+
+### 新增
+- **管理后台全量 UI/UX 重构** — 8 个 admin panel + tab 导航 + 共享 UI 基础设施统一升级。
+  - **共享 UI 基础设施**：新增 `app/components/ui/{ToastContainer,ConfirmDialog,EmptyState,LoadingCard,PageHeader}.vue`，统一空状态 / 加载态 / 页头 / 反馈机制；挂在 `default.vue` 全局可用。
+  - **Toast + Confirm 系统**：新增 `app/composables/{useToast,useConfirm}.ts`；全代码库 35 处 `alert()` / `confirm()` 一次性替换为 toast / 异步 confirm dialog。Confirm 改为 `Promise<boolean>` 非阻塞。
+  - **AdminStatusBar** — 顶部常驻状态条，合并 DashboardPanel 的系统队列轮询 + AiAssistantPanel 的 AI 状态显示，单一轮询源。
+  - **Tab 导航升级** — 每个 tab 加 icon；移动端横向滚动加 `scroll-snap-type: x` + 隐藏滚动条；`<KeepAlive>` 包裹所有 panel，切 tab 保留子状态（TagsPanel 搜索 / 编辑态、PostsPanel 分页等）。
+  - **AiAssistantPanel 拆分** — 391 行单文件拆为壳 + 5 子组件（`AiStatusBar` / `AiClassifyPanel` / `AiMergesPanel` / `AiRatingsPanel` / `AiChatPanel`）；`activeSection` 持久化到 URL `?section=`；`<KeepAlive>` 包裹 4 个 section。
+  - **Chat 子组件修复** — suggestion 按钮原本无 `@click` 是死 UI，现在点击填入 `callback_data` 并自动发送；chat 历史持久化到 `localStorage`（上限 50 条，跨会话保留）。
+- **AI 后端算法修复**：
+  - `callAi` 加 30s 超时（`AbortController`）+ 指数退避重试（429 / 5xx / 网络错误，最多 2 次，1s × 2^n ±20% 抖动）；4xx 立即抛出不重试。
+  - `suggestRatings` 去并发突发 — `Promise.all` 10× 并发改为顺序 + 200ms 间隔，batch size 10→5。
+  - `classifyTags` 返回真实 `confidence` — prompt 输出 confidence 字段，clamp 到 [0,1]，缺失默认 0.7；删除 `classify-tags.post.ts` 硬编码 `confidence: 0.8`。
+  - `gatherAssistantContext` 增强 — 补充缺翻译 tag 数、pending post 数、safe 占比（6 个并行 count 查询）。
+- **AI 任务进度系统** — Redis 短 TTL key（运行中 30min，完成后 1min）跟踪 classify / merges / ratings 三个长任务的 `{status, total, done, errors[]}`。3 个 POST 端点改为返回 `{ job_id }`（HTTP 202）+ `event.waitUntil` 后台执行；新增只读 `GET /api/admin/ai/jobs/:id` 供前端轮询。chat.post.ts 不变（短任务）。
+- **前端 AI 子组件进度轮询 UI** — `AiClassifyPanel` / `AiMergesPanel` / `AiRatingsPanel` 接入 job API，显示 `done / total` 实时进度。
+
+### 变更（破坏性）
+- **AI POST 端点返回格式** — `/api/admin/ai/{classify-tags,suggest-merges,suggest-ratings}` 从同步返回 `{ suggestions: [] }` 改为异步返回 `{ job_id, suggestions: [] }`（HTTP 202）。specific 模式（按 tag_ids）仍同步返回 suggestions。前端 `composables/ai.ts` 的 3 个对应函数签名加 `job_id?: string | null`。
+- **Tab 子路由** — AI 助手 tab 新增 `?section=classify|merges|ratings|chat` 子参数（默认 classify）；其他 7 个 tab 的 `?tab=` 契约不变。
+
+### 修复
+- **PostsPanel 重复 helper** — 删除本地重写的 `getRatingColorClass` / `getRatingLabel`（67-81 行），改用 `composables/utils.ts` 标准实现。
+- **rating 颜色硬编码** — DashboardPanel 的 `RATING_COLORS` 字典 + PostsPanel 的 `#22c55e` / `#eab308` / `#ef4444` 全部删除，改用 `var(--color-success)` / `var(--color-warning)` / `var(--color-danger)` + `.rating-*` class。
+- **样式两套并存** — 7 个 panel 的裸 `rounded-2xl border bg-[var(--bg-surface)] p-X` 内联统一改用 `.dash-card` class；主按钮统一 `.btn-primary`，危险按钮 `.btn-danger`，次要按钮 `.btn-ghost`；删除 `:style="background: var(--accent-color)..."` 内联。
+- **AiAssistantPanel chat 死按钮** — suggestion 按钮原本无 `@click`，点击无反应；现在填入 `callback_data` 并自动发送。
+
 ## [0.7.8] - 2026-07-XX
 
 ### 新增

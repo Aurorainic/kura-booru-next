@@ -9,7 +9,22 @@ export default defineEventHandler(async (event) => {
     ? { category: scope.category as any }
     : 'all' as const
 
-  const groups = await suggestMerges(normalizedScope)
+  // Merge scanning involves fetching up to 200 tags + one AI call. It's not
+  // deterministic in duration, so we run it as a background job.
+  const jobId = await createAiJob('merges', 1)
+  event.waitUntil((async () => {
+    const errors: string[] = []
+    let groups: Awaited<ReturnType<typeof suggestMerges>> = []
+    try {
+      groups = await suggestMerges(normalizedScope)
+      await updateAiJobProgress(jobId, { done: 1 })
+    } catch (e: any) {
+      errors.push(e?.message || String(e))
+      await updateAiJobProgress(jobId, { errors })
+    }
+    await completeAiJob(jobId, { suggestions: groups }, errors.length > 0)
+  })())
 
-  return { suggestions: groups }
+  setResponseStatus(event, 202)
+  return { job_id: jobId, suggestions: [] as any[] }
 })

@@ -11,9 +11,14 @@ export default defineEventHandler(async (event) => {
   const id = event.context.params?.id
 
   // Check job status
+  // ponytail: sidecar sets kura:job_status='processing' while downloading.
+  // Extension content.js polls for 'in_progress' — return that string so the
+  // polling loop keeps showing "处理中..." instead of falling through to
+  // "任务丢失". Without this normalization the status mismatch causes the
+  // extension to give up mid-download even though the job is still running.
   const jobStatus = await redis.get(`kura:job_status:${id}`)
   if (!jobStatus) return { task_id: id, status: 'queued' }
-  if (jobStatus === 'processing') return { task_id: id, status: 'processing' }
+  if (jobStatus === 'processing') return { task_id: id, status: 'in_progress' }
 
   // Job is done — read result
   const raw = await redis.get(`kura:results:${id}`)

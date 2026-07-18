@@ -4,9 +4,9 @@ import type { TagCategory } from '~/types'
 const { ssrCookie } = useSsrContext()
 const route = useRoute()
 const page = Math.max(1, parseInt(route.query.page as string || '1'))
-// ponytail: filters live in the URL so refresh / deep-link / browser back
-// survives, and the backend does the work — `ai_status` was previously filtered
-// client-side which silently truncated `total` to whatever fit on page 1.
+const toast = useToast()
+const confirm = useConfirm()
+
 const searchQuery = ref((route.query.q as string) || '')
 const categoryFilter = ref<TagCategory | ''>((route.query.category as TagCategory | '') || '')
 const aiStatusFilter = ref<'all' | 'unprocessed' | 'processed'>(((route.query.ai_status as any) || 'all'))
@@ -31,7 +31,6 @@ const { data, refresh } = await useAsyncData('admin-tags', refetch)
 
 const tags = computed(() => data.value?.items || [])
 
-// Push filter state into the URL so reload/back works
 watch([searchQuery, categoryFilter, aiStatusFilter, sortKey], () => {
   const next: Record<string, string> = {}
   if (searchQuery.value) next.q = searchQuery.value
@@ -42,7 +41,6 @@ watch([searchQuery, categoryFilter, aiStatusFilter, sortKey], () => {
   navigateTo({ path: route.path, query: next }, { replace: true })
 })
 
-// Inline editing state
 const editingTag = ref<string | null>(null)
 const editForm = ref({ category: '', danbooru_name: '', translation: '' })
 
@@ -60,8 +58,9 @@ async function saveTag(tag: any) {
     await updateAdminTag(tag.id, editForm.value, ssrCookie.value)
     editingTag.value = null
     await refresh()
+    toast.success('标签已保存')
   } catch (e: any) {
-    alert(`保存失败: ${e.message || '未知错误'}`)
+    toast.error(`保存失败: ${e.message || '未知错误'}`)
   }
 }
 
@@ -69,40 +68,41 @@ function cancelEdit() {
   editingTag.value = null
 }
 
-// AI reprocess
 const reprocessing = ref(false)
 async function reprocessTags(mode: 'unprocessed' | 'all') {
   if (reprocessing.value) return
   reprocessing.value = true
   try {
     const result = await reprocessTagsAPI(mode, ssrCookie.value)
-    alert(`处理完成: ${result.processed} 成功, ${result.failed} 失败`)
+    toast.success(`处理完成: ${result.processed} 成功, ${result.failed} 失败`)
     await refresh()
   } catch (e: any) {
-    alert(`重处理失败: ${e.message || '未知错误'}`)
+    toast.error(`重处理失败: ${e.message || '未知错误'}`)
   } finally {
     reprocessing.value = false
   }
 }
 
-// Fix artist categories (one-shot, for historical mis-categorized tags)
 const fixingArtists = ref(false)
 async function fixArtistCategories() {
   if (fixingArtists.value) return
-  if (!confirm('将根据 tag_knowledge 和 artist: 前缀修复历史画师标签分类。继续？')) return
+  if (!await confirm.ask({
+    message: '将根据 tag_knowledge 和 artist: 前缀修复历史画师标签分类。继续？',
+    title: '修复画师分类',
+    confirmLabel: '继续',
+  })) return
   fixingArtists.value = true
   try {
     const result = await fixArtistCategoriesAPI(ssrCookie.value)
-    alert(`修复完成: ${result.total_fixed} 个标签已更正为画师分类\n(知识库: ${result.fixed_from_knowledge}, 合并重复: ${result.merged_into_clean}, 原地改名: ${result.renamed_in_place}, 迁移关联: ${result.posts_moved})`)
+    toast.success(`修复完成: ${result.total_fixed} 个标签已更正为画师分类\n(知识库: ${result.fixed_from_knowledge}, 合并重复: ${result.merged_into_clean}, 原地改名: ${result.renamed_in_place}, 迁移关联: ${result.posts_moved})`)
     await refresh()
   } catch (e: any) {
-    alert(`修复失败: ${e.message || '未知错误'}`)
+    toast.error(`修复失败: ${e.message || '未知错误'}`)
   } finally {
     fixingArtists.value = false
   }
 }
 
-// Merge dialog
 const showMergeDialog = ref(false)
 const mergeSourceId = ref('')
 const mergeTargetId = ref('')
@@ -111,7 +111,7 @@ const mergeResult = ref<Record<string, any> | null>(null)
 async function doMerge() {
   if (!mergeSourceId.value || !mergeTargetId.value) return
   if (mergeSourceId.value === mergeTargetId.value) {
-    alert('不能合并到自身')
+    toast.error('不能合并到自身')
     return
   }
   try {
@@ -119,9 +119,10 @@ async function doMerge() {
     showMergeDialog.value = false
     mergeSourceId.value = ''
     mergeTargetId.value = ''
+    toast.success('合并完成')
     await refresh()
   } catch (e: any) {
-    alert(`合并失败: ${e.message}`)
+    toast.error(`合并失败: ${e.message}`)
   }
 }
 
@@ -145,22 +146,20 @@ const categoryOptions = [
 
 <template>
   <div class="space-y-4">
-    <!-- Header -->
-    <div class="flex items-center justify-between flex-wrap gap-3">
-      <h2 class="text-lg font-bold tracking-tight" style="font-family: var(--font-display);">标签管理</h2>
-      <div class="flex items-center gap-1.5">
-        <button type="button" class="px-3 py-1.5 text-xs font-medium rounded-lg transition-all active:scale-95" :class="reprocessing ? 'opacity-60' : ''" :disabled="reprocessing" style="background: var(--accent-color); color: var(--bg-primary);" @click="reprocessTags('unprocessed')">
+    <PageHeader title="标签管理">
+      <template #actions>
+        <button type="button" class="btn-primary !text-xs !px-3 !py-1.5" :disabled="reprocessing" @click="reprocessTags('unprocessed')">
           {{ reprocessing ? '处理中…' : 'AI 处理未处理' }}
         </button>
-        <button type="button" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--text-primary)]/30 transition-all" :disabled="reprocessing" @click="reprocessTags('all')">
+        <button type="button" class="btn-ghost !text-xs !px-3 !py-1.5" :disabled="reprocessing" @click="reprocessTags('all')">
           全部重处理
         </button>
-        <button type="button" class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-all" :class="fixingArtists ? 'opacity-60' : ''" :disabled="fixingArtists" style="border-color: var(--accent-color)/40; color: var(--accent-color);" @click="fixArtistCategories">
+        <button type="button" class="btn-ghost !text-xs !px-3 !py-1.5" :disabled="fixingArtists" @click="fixArtistCategories">
           {{ fixingArtists ? '修复中…' : '修复画师分类' }}
         </button>
-        <button type="button" class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-all" style="border-color: var(--accent-color)/40; color: var(--accent-color);" @click="showMergeDialog = true">合并标签</button>
-      </div>
-    </div>
+        <button type="button" class="btn-ghost !text-xs !px-3 !py-1.5" @click="showMergeDialog = true">合并标签</button>
+      </template>
+    </PageHeader>
 
     <!-- Filters bar -->
     <div class="flex flex-wrap items-center gap-2">
@@ -198,14 +197,12 @@ const categoryOptions = [
         </thead>
         <tbody>
           <tr v-for="tag in tags" :key="tag.id" class="border-b border-[var(--border-color)]/40 transition-colors hover:bg-[var(--accent-subtle)]/50 group">
-            <!-- Name -->
             <td class="px-4 py-2.5">
               <div class="flex items-center gap-2">
                 <span class="font-medium text-sm text-[var(--text-primary)]">{{ tag.name }}</span>
                 <TagIdTooltip :tag-id="tag.id" />
               </div>
             </td>
-            <!-- Category (inline editable) -->
             <td class="px-4 py-2.5">
               <template v-if="editingTag === tag.id">
                 <select v-model="editForm.category" class="px-2 py-1 text-xs rounded-lg border border-[var(--accent-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none">
@@ -216,7 +213,6 @@ const categoryOptions = [
                 <span class="text-[0.625rem] px-2 py-1 rounded-md font-medium" :style="{ color: getTagCategoryVar(tag.category), background: `${getTagCategoryVar(tag.category)}15` }">{{ getTagCategoryLabel(tag.category) }}</span>
               </template>
             </td>
-            <!-- Danbooru name -->
             <td class="px-4 py-2.5 hidden md:table-cell">
               <template v-if="editingTag === tag.id">
                 <input v-model="editForm.danbooru_name" type="text" class="w-full px-2 py-1 text-xs rounded-lg border border-[var(--accent-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none" placeholder="danbooru_name" />
@@ -225,7 +221,6 @@ const categoryOptions = [
                 <span class="text-xs text-[var(--text-muted)]">{{ tag.danbooru_name || '—' }}</span>
               </template>
             </td>
-            <!-- Translation -->
             <td class="px-4 py-2.5 hidden md:table-cell">
               <template v-if="editingTag === tag.id">
                 <input v-model="editForm.translation" type="text" class="w-full px-2 py-1 text-xs rounded-lg border border-[var(--accent-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none" placeholder="翻译" />
@@ -234,18 +229,16 @@ const categoryOptions = [
                 <span class="text-xs text-[var(--text-muted)]">{{ tag.translation || '—' }}</span>
               </template>
             </td>
-            <!-- Post count -->
             <td class="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-[var(--text-muted)]">{{ tag.post_count }}</td>
-            <!-- Actions -->
             <td class="px-4 py-2.5 text-right">
               <template v-if="editingTag === tag.id">
                 <div class="flex items-center justify-end gap-1">
-                  <button type="button" class="px-2.5 py-1 text-[0.625rem] font-semibold rounded-lg transition-all active:scale-95" style="background: var(--accent-color); color: var(--bg-primary);" @click="saveTag(tag)">保存</button>
-                  <button type="button" class="px-2.5 py-1 text-[0.625rem] rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors" @click="cancelEdit">取消</button>
+                  <button type="button" class="btn-primary !text-[0.625rem] !px-2.5 !py-1" @click="saveTag(tag)">保存</button>
+                  <button type="button" class="btn-ghost !text-[0.625rem] !px-2.5 !py-1" @click="cancelEdit">取消</button>
                 </div>
               </template>
               <template v-else>
-                <button type="button" class="px-2.5 py-1 text-[0.625rem] rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-subtle)] transition-all" @click="startEditing(tag)">编辑</button>
+                <button type="button" class="btn-ghost !text-[0.625rem] !px-2.5 !py-1" @click="startEditing(tag)">编辑</button>
               </template>
             </td>
           </tr>
@@ -253,13 +246,11 @@ const categoryOptions = [
       </table>
     </div>
 
-    <!-- Empty state -->
-    <div v-else class="flex flex-col items-center justify-center py-16 text-[var(--text-muted)]">
-      <div class="w-12 h-12 rounded-xl flex items-center justify-center mb-3" style="background: var(--accent-subtle);">
-        <svg class="w-6 h-6" style="color: var(--accent-color);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3z" /></svg>
-      </div>
-      <p class="text-sm font-medium">暂无标签</p>
-    </div>
+    <EmptyState
+      v-else
+      title="暂无标签"
+      description="调整搜索或筛选条件"
+    />
 
     <!-- Merge dialog -->
     <Teleport to="body">
@@ -279,10 +270,9 @@ const categoryOptions = [
               </div>
             </div>
             <div class="flex justify-end gap-2 mt-5">
-              <button type="button" class="px-4 py-2 text-sm rounded-xl border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors" @click="showMergeDialog = false">取消</button>
-              <button type="button" class="px-5 py-2 text-sm font-semibold rounded-xl transition-all active:scale-95" style="background: var(--accent-color); color: var(--bg-primary);" @click="doMerge">合并标签</button>
+              <button type="button" class="btn-ghost !px-4 !py-2 !text-sm" @click="showMergeDialog = false">取消</button>
+              <button type="button" class="btn-primary !px-5 !py-2 !text-sm" @click="doMerge">合并标签</button>
             </div>
-            <!-- Merge detail feedback -->
             <div v-if="mergeResult" class="mt-4 p-3 rounded-xl text-xs space-y-1" style="background: var(--accent-subtle);">
               <p class="font-semibold text-[var(--text-primary)]">{{ mergeResult.source_tag_name }} → {{ mergeResult.target_tag_name }}</p>
               <p class="text-[var(--text-muted)]">已移动: {{ mergeResult.posts_moved }} · 跳过: {{ mergeResult.posts_skipped }} · 新数量: {{ mergeResult.target_new_post_count }}</p>
