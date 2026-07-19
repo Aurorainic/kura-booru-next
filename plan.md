@@ -154,7 +154,10 @@ server/
 
 ## 执行阶段
 
-### 阶段 0：spike 与 ADR（约 2–3 天）
+> **战术执行层已拆出**：逐步骤机械指令（含验证门禁、提交点、代码模板、进度看板）见
+> `docs/v0.9.0-runbook.md`。本文件只保留阶段框架；执行时以 runbook 为准，每步完成更新其看板。
+
+### 阶段 0：spike 与 ADR（约 2–3 天）✅ 已完成（2026-07-19，commit 3924300）
 
 - spike 1：pg-boss 最小 demo（B4 范围）
 - spike 2：imgproxy docker 跑通 + 防 SSRF 配置（`IMGPROXY_ALLOW_LOOPBACK_SOURCE_ADDRESSES=false` 等）+ 与现有 S3/反代链路验证
