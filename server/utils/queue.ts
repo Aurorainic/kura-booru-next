@@ -100,15 +100,3 @@ export async function pollJobResult(jobId: string, timeoutMs = 300_000): Promise
   await redis.del(`kura:job_status:${jobId}`)
   return null
 }
-
-const MAX_RETRIES = 3
-
-export async function handleJobWithRetry(job: Omit<SidecarJob, 'id'>, retryCount = 0): Promise<PipelineResult | null> {
-  const jobId = await enqueueJob(job)
-  const result = await pollJobResult(jobId)
-  if (result?.status === 'failed' && retryCount < MAX_RETRIES) {
-    await new Promise(r => setTimeout(r, 1000 * Math.pow(2, retryCount)))
-    return handleJobWithRetry(job, retryCount + 1)
-  }
-  return result
-}

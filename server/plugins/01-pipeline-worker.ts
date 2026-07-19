@@ -4,7 +4,12 @@
  * Listens on kura:pending_results queue (fed by sidecar), processes each result
  * through the pipeline (dedup → thumbnails → S3 → DB), and updates Redis with
  * the final status for bot polling.
+ *
+ * v0.9.0 R2.4: retry + DLQ (ADR-0001). Pipeline failures retry up to
+ * MAX_RETRIES=3 with exponential backoff; exhausted retries push to kura:dlq.
  */
+
+import { MAX_RETRIES, DLQ_KEY } from '../platform/queue'
 
 export default defineNitroPlugin(() => {
   // Don't await — run in background
@@ -54,8 +59,8 @@ async function startPipelineWorker() {
         }
       } catch { /* malformed meta is non-fatal */ }
 
-      // Process through pipeline
-      const pipeResult = await processResult(sidecarResult, forceRating)
+      // Process through pipeline with retry/DLQ (ADR-0001 §1)
+      let pipeResult = await processResultWithRetry(jobId, sidecarResult, forceRating)
 
       // Overwrite raw sidecar result with safe pipeline result (5 min TTL)
       await (redis as any).set(
@@ -74,4 +79,39 @@ async function startPipelineWorker() {
       await new Promise(r => setTimeout(r, 1000))
     }
   }
+}
+
+/**
+ * Wrap processResult with MAX_RETRIES exponential backoff + DLQ.
+ * On exhaustion, returns a failed result (so job_status=done + caller unblocks).
+ */
+async function processResultWithRetry(
+  jobId: string,
+  sidecarResult: any,
+  forceRating?: 'safe' | 'questionable' | 'explicit',
+) {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const result = await processResult(sidecarResult, forceRating)
+      if (result.status !== 'failed' || attempt === MAX_RETRIES) {
+        return result
+      }
+      // Pipeline returned failed — retry with backoff
+      console.warn(`[pipeline-worker] job ${jobId} attempt ${attempt + 1}/${MAX_RETRIES + 1} failed: ${result.error}`)
+    } catch (err: any) {
+      if (attempt === MAX_RETRIES) {
+        // Exhausted — DLQ + return failed
+        await (redis as any).lpush(DLQ_KEY, JSON.stringify({
+          jobId, error: err.message, failedAt: new Date().toISOString(), retryCount: attempt,
+        }))
+        console.error(`[pipeline-worker] job ${jobId} exhausted ${MAX_RETRIES + 1} attempts → DLQ`)
+        return { status: 'failed' as const, error: err.message || 'Pipeline error after retries' }
+      }
+      console.warn(`[pipeline-worker] job ${jobId} attempt ${attempt + 1}/${MAX_RETRIES + 1} threw: ${err.message}`)
+    }
+    // Exponential backoff: 1s, 2s, 4s
+    await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)))
+  }
+  // Unreachable, but TS needs it
+  return { status: 'failed' as const, error: 'Unreachable' }
 }
