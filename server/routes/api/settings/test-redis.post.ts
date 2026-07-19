@@ -1,41 +1,43 @@
-export default defineEventHandler(async (event) => {
-  const cookie = getHeader(event, 'cookie') || ''
-  const isAdmin = await getIsAdmin(cookie)
-  if (!isAdmin) throw createError({ statusCode: 401, statusMessage: 'Admin required' })
+import { defineAdminHandler } from '../../../platform/http/auth'
+import { AppError } from '../../../platform/errors'
 
-  const body = await readBody(event)
-  const { url } = body
+export default defineAdminHandler({
+  doc: { method: 'post', path: '/api/settings/test-redis', summary: 'Test Redis connection' },
+  handler: async ({ event }) => {
+    const body = await readBody(event)
+    const { url } = body
 
-  if (!url || typeof url !== 'string') {
-    throw createError({ statusCode: 400, statusMessage: 'URL required' })
-  }
-
-  // SSRF prevention: validate scheme and resolve hostname
-  try {
-    const parsed = new URL(url)
-    if (!['redis:', 'rediss:'].includes(parsed.protocol)) {
-      return { ok: false, error: 'Only redis:// URLs are allowed' }
+    if (!url || typeof url !== 'string') {
+      throw new AppError('VALIDATION_FAILED', 400, 'URL required')
     }
-    if (await isPrivateHost(parsed.hostname)) {
-      return { ok: false, error: 'Internal/private IP not allowed' }
-    }
-  } catch (e: any) {
-    return { ok: false, error: `Invalid URL: ${e.message}` }
-  }
 
-  try {
-    // ponytail: pin DNS to resolved IP to prevent rebinding SSRF.
-    const parsed = new URL(url)
-    const resolved = await dnsLookup(parsed.hostname)
-    const pinnedUrl = new URL(url)
-    pinnedUrl.hostname = resolved
-    const { createClient } = await import('redis')
-    const testClient = createClient({ url: pinnedUrl.toString(), socket: { connectTimeout: 5000 } })
-    await testClient.connect()
-    await testClient.ping()
-    await testClient.quit()
-    return { ok: true }
-  } catch (err: any) {
-    return { ok: false, error: err.message }
-  }
+    // SSRF prevention: validate scheme and resolve hostname
+    try {
+      const parsed = new URL(url)
+      if (!['redis:', 'rediss:'].includes(parsed.protocol)) {
+        return { ok: false, error: 'Only redis:// URLs are allowed' }
+      }
+      if (await isPrivateHost(parsed.hostname)) {
+        return { ok: false, error: 'Internal/private IP not allowed' }
+      }
+    } catch (e: any) {
+      return { ok: false, error: `Invalid URL: ${e.message}` }
+    }
+
+    try {
+      // ponytail: pin DNS to resolved IP to prevent rebinding SSRF.
+      const parsed = new URL(url)
+      const resolved = await dnsLookup(parsed.hostname)
+      const pinnedUrl = new URL(url)
+      pinnedUrl.hostname = resolved
+      const { createClient } = await import('redis')
+      const testClient = createClient({ url: pinnedUrl.toString(), socket: { connectTimeout: 5000 } })
+      await testClient.connect()
+      await testClient.ping()
+      await testClient.quit()
+      return { ok: true }
+    } catch (err: any) {
+      return { ok: false, error: err.message }
+    }
+  },
 })

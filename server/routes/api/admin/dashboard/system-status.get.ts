@@ -1,13 +1,14 @@
-export default defineEventHandler(async (event) => {
-  const cookie = getHeader(event, 'cookie') || ''
-  const isAdmin = await getIsAdmin(cookie)
-  if (!isAdmin) throw createError({ statusCode: 401, statusMessage: 'Admin required' })
+import { defineAdminHandler } from '../../../../platform/http/auth'
 
-  // Simple queue depth from Redis
-  try {
-    const depth = await (redis as any).llen('kura:jobs')
-    return { queue_depth: depth }
-  } catch {
-    return { queue_depth: 0 }
-  }
+export default defineAdminHandler({
+  doc: { method: 'get', path: '/api/admin/dashboard/system-status', summary: 'Queue depth' },
+  handler: async () => {
+    // Simple queue depth from Redis
+    try {
+      const depth = await (redis as any).llen('kura:jobs')
+      return { queue_depth: depth }
+    } catch {
+      return { queue_depth: 0 }
+    }
+  },
 })

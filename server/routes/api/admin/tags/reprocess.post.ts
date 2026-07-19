@@ -1,16 +1,17 @@
-export default defineEventHandler(async (event) => {
-  const cookie = getHeader(event, 'cookie') || ''
-  const isAdmin = await getIsAdmin(cookie)
-  if (!isAdmin) throw createError({ statusCode: 401, statusMessage: 'Admin required' })
+import { defineAdminHandler } from '../../../../platform/http/auth'
+import { AppError } from '../../../../platform/errors'
 
-  const body = await readBody<{ mode: 'unprocessed' | 'all' }>(event)
-  const mode = body?.mode || 'unprocessed'
+export default defineAdminHandler({
+  doc: { method: 'post', path: '/api/admin/tags/reprocess', summary: 'Reprocess tags via AI' },
+  handler: async ({ event }) => {
+    const body = await readBody<{ mode: 'unprocessed' | 'all' }>(event)
+    const mode = body?.mode || 'unprocessed'
 
-  if (mode !== 'unprocessed' && mode !== 'all') {
-    throw createError({ statusCode: 400, statusMessage: 'mode must be "unprocessed" or "all"' })
-  }
+    if (mode !== 'unprocessed' && mode !== 'all') {
+      throw new AppError('VALIDATION_FAILED', 400, 'mode must be "unprocessed" or "all"')
+    }
 
-  const result = await reprocessTags(mode)
-  return result
+    const result = await reprocessTags(mode)
+    return result
+  },
 })
-
