@@ -1,4 +1,5 @@
 import { Bot, type Context } from 'grammy'
+import { sql } from 'drizzle-orm'
 import type { PipelineResult } from './queue'
 
 // Custom context flavor: per-request bot config set by auth middleware.

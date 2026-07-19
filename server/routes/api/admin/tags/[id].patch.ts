@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { upsertTagIndex } from '../../../../utils/search/suggest'
+import { serializeTag } from '../../../../modules/posts/serialize'
 
 export default defineEventHandler(async (event) => {
   const cookie = getHeader(event, 'cookie') || ''
@@ -52,10 +52,6 @@ export default defineEventHandler(async (event) => {
       updatedAt: new Date(),
     },
   })
-
-  // Mirror to the redis-search index (fire-and-forget — never blocks the
-  // admin response). Failures log inside upsertTagIndex / write paths.
-  void upsertTagIndex(updated.id, updated.name, updated.category, Number(updated.postCount ?? 0))
 
   return serializeTag(updated)
 })

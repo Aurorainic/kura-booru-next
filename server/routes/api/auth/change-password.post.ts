@@ -1,3 +1,5 @@
+import { eq } from 'drizzle-orm'
+
 export default defineEventHandler(async (event) => {
   const body = await readBody<{ current_password: string; new_password: string }>(event)
   if (!body?.current_password || !body?.new_password) {

@@ -5,7 +5,7 @@
  */
 
 import type { Rating, TagCategory } from '~/types'
-import { isNull, asc } from 'drizzle-orm'
+import { eq, and, sql, desc, asc, inArray, isNull } from 'drizzle-orm'
 
 // ── Types ──
 

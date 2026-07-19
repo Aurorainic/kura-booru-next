@@ -1,4 +1,4 @@
-import { eq, sql, inArray } from 'drizzle-orm'
+import { eq, sql, inArray, and } from 'drizzle-orm'
 
 export default defineEventHandler(async (event) => {
   const cookie = getHeader(event, 'cookie') || ''

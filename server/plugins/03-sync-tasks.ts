@@ -1,3 +1,5 @@
+import { sql } from 'drizzle-orm'
+
 /**
  * Background sync tasks: tag post_count reconciliation.
  * ponytail: setInterval in Nitro plugin — no ARQ/cron needed for personal site.
