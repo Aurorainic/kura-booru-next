@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, v0.9.0]
   pull_request:
-    branches: [main]
+    branches: [main, v0.9.0]
 
 # Cancel superseded runs on the same ref so a fast push doesn't queue stale jobs.
 concurrency:
@@ -63,3 +63,14 @@ jobs:
           # exit 5 = "no tests collected"; treat that as a failure here so the
           # absence of tests is visible instead of masquerading as a pass.
           python -m pytest tests/ -v --tb=short
+
+  contract-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      # check.mjs is zero-dependency and imports .ts directly — Node 24's
+      # type-stripping runs it without npm ci.
+      - run: node server/platform/contract/check.mjs
