@@ -1,4 +1,5 @@
 import { defineAdminHandler } from '../../../../platform/http/auth'
+import { getBoss } from '../../../../platform/jobs'
 
 export default defineAdminHandler({
   doc: { method: 'post', path: '/api/admin/ai/suggest-merges', summary: 'AI merge suggestions' },
@@ -10,20 +11,10 @@ export default defineAdminHandler({
       : 'all' as const
 
     // Merge scanning involves fetching up to 200 tags + one AI call. It's not
-    // deterministic in duration, so we run it as a background job.
+    // deterministic in duration, so we run it as a pg-boss background job.
     const jobId = await createAiJob('merges', 1)
-    event.waitUntil((async () => {
-      const errors: string[] = []
-      let groups: Awaited<ReturnType<typeof suggestMerges>> = []
-      try {
-        groups = await suggestMerges(normalizedScope)
-        await updateAiJobProgress(jobId, { done: 1 })
-      } catch (e: any) {
-        errors.push(e?.message || String(e))
-        await updateAiJobProgress(jobId, { errors })
-      }
-      await completeAiJob(jobId, { suggestions: groups }, errors.length > 0)
-    })())
+    const boss = await getBoss()
+    await boss.send('ai-merges', { jobId, scope: normalizedScope })
 
     setResponseStatus(event, 202)
     return { job_id: jobId, suggestions: [] as any[] }

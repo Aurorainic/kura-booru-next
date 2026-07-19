@@ -1,4 +1,5 @@
 import { defineAdminHandler } from '../../../../platform/http/auth'
+import { getBoss } from '../../../../platform/jobs'
 
 export default defineAdminHandler({
   doc: { method: 'post', path: '/api/admin/ai/suggest-ratings', summary: 'AI rating suggestions' },
@@ -15,23 +16,10 @@ export default defineAdminHandler({
     }
 
     // Rating suggestions are inherently slow (one AI call per post, sequential
-    // with 200ms delay). Run as a background job; client polls GET /jobs/:id.
+    // with 200ms delay). Run as a pg-boss job; client polls GET /jobs/:id.
     const jobId = await createAiJob('ratings', limit)
-    event.waitUntil((async () => {
-      const errors: string[] = []
-      let results: Awaited<ReturnType<typeof suggestRatings>> = []
-      try {
-        results = await suggestRatings(normalizedScope, limit, (examined, total) => {
-          // Per-post incremental progress — the old code only updated once at
-          // the end with results.length, so progress sat at 0 until completion.
-          updateAiJobProgress(jobId, { done: examined, total })
-        })
-      } catch (e: any) {
-        errors.push(e?.message || String(e))
-        await updateAiJobProgress(jobId, { errors })
-      }
-      await completeAiJob(jobId, { suggestions: results }, errors.length > 0)
-    })())
+    const boss = await getBoss()
+    await boss.send('ai-ratings', { jobId, scope: normalizedScope, limit })
 
     setResponseStatus(event, 202)
     return { job_id: jobId, suggestions: [] as any[] }
