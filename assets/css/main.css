@@ -258,16 +258,6 @@ body::before {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Tag Category Colors
-   ═══════════════════════════════════════════════════════════════ */
-
-.tag-artist { color: var(--color-tag-artist); background-color: #fef3c7; border-color: #f59e0b; }
-.tag-character { color: var(--color-tag-character); background-color: #dbeafe; border-color: #3b82f6; }
-.tag-copyright { color: var(--color-tag-copyright); background-color: #fce7f3; border-color: #ec4899; }
-.tag-general { color: var(--color-tag-general); background-color: #e5e7eb; border-color: #6b7280; }
-.tag-meta { color: var(--color-tag-meta); background-color: #e0e7ff; border-color: #6366f1; }
-
-/* ═══════════════════════════════════════════════════════════════
    Rating Badge Colors
    ═══════════════════════════════════════════════════════════════ */
 

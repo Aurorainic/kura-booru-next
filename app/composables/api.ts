@@ -1,4 +1,4 @@
-import type { Post, PostsResponse, Tag, PaginatedResponse, AuthStatus, Rating, TagCategory, AutoRatingRule, SiteSettings, DashboardStats } from '~/types'
+import type { Post, PostsResponse, Tag, PaginatedResponse, Rating, TagCategory, AutoRatingRule, SiteSettings, DashboardStats } from '~/types'
 
 function getBaseUrl(): string {
   if (import.meta.server) {
@@ -133,20 +133,12 @@ export async function fetchSearch(
 
 // ── Auth APIs ──
 
-export async function fetchAuthStatus(ssrCookie?: string): Promise<AuthStatus> {
-  return fetchApi<AuthStatus>('/auth/status', undefined, { ssrCookie })
-}
-
 export async function login(username: string, password: string): Promise<{ ok: boolean; is_admin: boolean }> {
   return fetchApi('/auth/login', undefined, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
   })
-}
-
-export async function logout(): Promise<{ ok: boolean }> {
-  return fetchApi('/auth/logout', undefined, { method: 'POST' })
 }
 
 export async function changePassword(currentPassword: string, newPassword: string): Promise<{ ok: boolean }> {
@@ -235,14 +227,6 @@ export async function fetchAdminPosts(opts: {
   } as Record<string, string | number | undefined>, { ssrCookie })
 }
 
-export async function removeTagFromPost(postId: string, tagName: string): Promise<Post> {
-  return fetchApi<Post>(`/posts/${postId}/tags`, undefined, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ remove_tag_names: [tagName] }),
-  })
-}
-
 // ── Admin Tag Management ──
 
 export async function updateAdminTag(id: string, data: {
@@ -270,10 +254,6 @@ export async function fixArtistCategoriesAPI(ssrCookie?: string): Promise<{ fixe
     method: 'POST',
     ssrCookie,
   })
-}
-
-export async function fetchTagKnowledge(page = 1, perPage = 50): Promise<PaginatedResponse<any>> {
-  return fetchApi<PaginatedResponse<any>>('/admin/tags/knowledge', { page, per_page: perPage })
 }
 
 // ── Admin Extension Keys (v0.7.8) ──
@@ -340,14 +320,4 @@ export async function testRedisConnection(url: string): Promise<{ ok: boolean; e
 
 export async function fetchSystemStatus(): Promise<{ queue_depth: number }> {
   return fetchApi('/admin/dashboard/system-status')
-}
-
-// ── Import ──
-
-export async function webImport(urls: string[]): Promise<{ results: { task_id: string; status: string }[] }> {
-  return fetchApi('/tasks/web-import', undefined, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ urls }),
-  })
 }

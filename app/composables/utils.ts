@@ -60,29 +60,11 @@ export function getRatingColorClass(rating: Rating): string {
   return classes[rating] || 'rating-safe'
 }
 
-export function getTagCategoryColor(category: TagCategory): string {
-  const colors: Record<TagCategory, string> = {
-    artist: 'tag-artist', character: 'tag-character', copyright: 'tag-copyright', general: 'tag-general', meta: 'tag-meta',
-  }
-  return colors[category] || 'tag-general'
-}
-
 export function getTagCategoryLabel(category: TagCategory): string {
   const labels: Record<TagCategory, string> = {
     artist: '画师', character: '角色', copyright: '作品', general: '通用', meta: '元信息',
   }
   return labels[category] || category
-}
-
-export function getTagCategoryBg(category: TagCategory): string {
-  const bgVars: Record<TagCategory, string> = {
-    artist: '#fef3c7',
-    character: '#dbeafe',
-    copyright: '#fce7f3',
-    general: '#e5e7eb',
-    meta: '#e0e7ff',
-  }
-  return bgVars[category] || '#e5e7eb'
 }
 
 export function getTagCategoryVar(category: TagCategory): string {
