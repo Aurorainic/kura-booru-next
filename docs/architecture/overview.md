@@ -2,7 +2,7 @@
 
 Kura Booru Next is a personal anime illustration collection and showcase platform. Core workflow: send a link via Telegram Bot → auto-download original image → store in S3 → browse on web. Inspired by safebooru (tag system, pagination, fast loading) but with modern UI (Pixiv/Pinterest-like masonry, dark/light/auto theme, cyan gradient accent).
 
-**v0.9.0** (current): Full TypeScript stack — Nuxt 4 + Nitro for SSR, REST API, and Bot webhook in a single Node process. Python sidecar handles gallery-dl downloads and phash computation via a Redis queue. v0.9.0 refactored the server into `modules/` (domain logic) + `platform/` (cross-cutting: handler wrappers, zod schemas, JobQueue, pg-boss) — see `docs/architecture/decisions.md` for the refactor decisions.
+**v0.9.0** (current): Full TypeScript stack — Nuxt 4 + Nitro for SSR, REST API, and Bot webhook in a single Node process. Python sidecar handles gallery-dl downloads and phash computation via a Redis queue. v0.9.0 refactored the server into `lib/` (domain logic) + `platform/` (cross-cutting: handler wrappers, zod schemas, JobQueue, pg-boss) — see `docs/architecture/decisions.md` for the refactor decisions.
 
 ---
 
@@ -82,7 +82,7 @@ Internet
 │   └── layouts/               # Layouts (default.vue)
 ├── server/                    # Nitro server
 │   ├── routes/api/            # REST API routes (define*Handler wrappers)
-│   ├── modules/               # Domain logic (v0.9.0 refactor)
+│   ├── lib/                   # Domain logic (v0.9.0 refactor; named lib/ — Nitro reserves server/modules/)
 │   │   ├── posts/             # serialize, repo (listPosts/getPost/searchPosts...)
 │   │   ├── tags/              # repo (listTags/autocomplete/getTagByName)
 │   │   ├── search/            # parser, suggest (PG trgm, ADR-0002)
@@ -146,14 +146,14 @@ Internet
 
 | Dimension | v0.8.1 (prior) | v0.9.0 (current) |
 |---|---|---|
-| Server structure | flat `server/utils/` (queries.ts 525行, ai.ts 735行, bot.ts 677行, pipeline.ts 609行) | `modules/` (domain) + `platform/` (cross-cutting) + re-export shims |
+| Server structure | flat `server/utils/` (queries.ts 525行, ai.ts 735行, bot.ts 677行, pipeline.ts 609行) | `lib/` (domain) + `platform/` (cross-cutting) + re-export shims |
 | Route handlers | `defineEventHandler` + 3-line session boilerplate ×40 | `defineAdminHandler` / `defineApiKeyHandler` / `defineExtHandler` / `definePublicHandler` wrappers |
 | Validation | manual `if (!body.x) throw createError(...)` | zod schemas (`zRating`/`zTagCategory`/`zSourceSite` from enums) |
 | Errors | `throw createError({ statusCode, statusMessage })` | `throw new AppError('CODE', status, message)` → `{ code, message, details? }` |
 | Autocomplete | RediSearch (MEILI_ENABLED, triple misnomer) + SQL fallback | PG trgm/ILIKE only (ADR-0002, RediSearch deleted) |
 | AI jobs | `event.waitUntil` fire-and-forget (lost on restart) | pg-boss persistent queue (ADR-0001) |
 | Timers | setInterval (06-dashboard-refresh, 03-sync-tasks) | `boss.schedule()` cron (unified in platform/jobs.ts) |
-| Pipeline | 609行 monolith, 5 duplicated step blocks | modules/import/pipeline.ts + steps/{dedup,thumbnails,upload,rating,tags}.ts |
+| Pipeline | 609行 monolith, 5 duplicated step blocks | lib/import/pipeline.ts + steps/{dedup,thumbnails,upload,rating,tags}.ts |
 | Thumbnails | 3-piece (thumb/preview/LQIP) | 4-width srcset (300w/640w/1280w/2000w) + LQIP (ADR-0003) |
 | Queue reliability | handleJobWithRetry dead code (0 callers) | JobQueue interface + MAX_RETRIES=3 + kura:dlq (ADR-0001) |
 | Contract | none | 53 endpoint freeze (platform/contract/check.mjs, CI gate) |

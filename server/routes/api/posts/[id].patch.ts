@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { defineApiKeyHandler } from '../../../platform/http/auth'
 import { AppError } from '../../../platform/errors'
 import { zRating } from '../../../platform/schemas/enums'
-import { serializePost } from '../../../modules/posts/serialize'
+import { serializePost } from '../../../lib/posts/serialize'
 
 // SECURITY: API-key path is rate-limited to bound blast radius of a leaked key.
 // A leaked key can still flip ratings, but capped at 30/min/IP — and we audit

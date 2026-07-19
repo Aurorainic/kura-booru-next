@@ -4,7 +4,7 @@ import { definePublicHandler } from '../../../platform/http/auth'
 import { AppError } from '../../../platform/errors'
 import { zRating } from '../../../platform/schemas/enums'
 import { getIsAdmin } from '../../../utils/auth'
-import { listPosts } from '../../../modules/posts/repo'
+import { listPosts } from '../../../lib/posts/repo'
 
 const querySchema = z.object({
   page: z.coerce.number().default(1),

@@ -3,17 +3,17 @@ import { db } from './db'
 import { autoRatingRules } from '../schema'
 import type { Rating } from '~/types'
 
-// v0.9.0 R2.2: queries.ts split into modules/. This file is now a re-export
+// v0.9.0 R2.2: queries.ts split into lib/. This file is now a re-export
 // point (backward compat for Nitro auto-import consumers) + the auto-rating
 // query, which stays here until R2.5 migrates the admin domain.
 //
 // Drizzle operators re-export deleted (was L7): consumers import from
-// 'drizzle-orm' directly. clampPerPage moved to modules/pagination.ts.
+// 'drizzle-orm' directly. clampPerPage moved to lib/pagination.ts.
 
-export { serializePost, serializeTag, serializeAutoRatingRule } from '../modules/posts/serialize'
-export { parseSearchQuery, type ParsedQuery } from '../modules/search/parser'
-export { listPosts, getPost, getRandomPost, getPostBySource, searchPosts, resolveTag } from '../modules/posts/repo'
-export { listTags, autocompleteTags, getTagByName } from '../modules/tags/repo'
+export { serializePost, serializeTag, serializeAutoRatingRule } from '../lib/posts/serialize'
+export { parseSearchQuery, type ParsedQuery } from '../lib/search/parser'
+export { listPosts, getPost, getRandomPost, getPostBySource, searchPosts, resolveTag } from '../lib/posts/repo'
+export { listTags, autocompleteTags, getTagByName } from '../lib/tags/repo'
 
 // ── Auto-rating ──
 

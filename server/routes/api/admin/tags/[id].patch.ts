@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { serializeTag } from '../../../../modules/posts/serialize'
+import { serializeTag } from '../../../../lib/posts/serialize'
 import { defineAdminHandler } from '../../../../platform/http/auth'
 import { AppError } from '../../../../platform/errors'
 

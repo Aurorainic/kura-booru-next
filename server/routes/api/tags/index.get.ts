@@ -4,7 +4,7 @@ import { definePublicHandler } from '../../../platform/http/auth'
 import { AppError } from '../../../platform/errors'
 import { zTagCategory } from '../../../platform/schemas/enums'
 import { getIsAdmin } from '../../../utils/auth'
-import { listTags, getTagByName } from '../../../modules/tags/repo'
+import { listTags, getTagByName } from '../../../lib/tags/repo'
 
 const querySchema = z.object({
   category: zTagCategory.optional(),

@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { getHeader } from 'h3'
 import { definePublicHandler } from '../../../platform/http/auth'
 import { getIsAdmin } from '../../../utils/auth'
-import { suggestTags } from '../../../modules/search/suggest'
+import { suggestTags } from '../../../lib/search/suggest'
 
 const querySchema = z.object({
   q: z.string().min(1),

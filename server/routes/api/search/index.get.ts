@@ -3,7 +3,7 @@ import { getHeader } from 'h3'
 import { definePublicHandler } from '../../../platform/http/auth'
 import { AppError } from '../../../platform/errors'
 import { getIsAdmin } from '../../../utils/auth'
-import { searchPosts } from '../../../modules/posts/repo'
+import { searchPosts } from '../../../lib/posts/repo'
 
 const querySchema = z.object({
   q: z.string().min(1),

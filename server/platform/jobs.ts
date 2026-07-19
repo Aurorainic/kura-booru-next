@@ -13,10 +13,10 @@
 import { PgBoss } from 'pg-boss'
 import { sql } from 'drizzle-orm'
 import { db } from '../utils/db'
-import { classifyTags } from '../modules/ai/classify'
-import { suggestMerges } from '../modules/ai/merges'
-import { suggestRatings } from '../modules/ai/ratings'
-import { updateAiJobProgress, completeAiJob } from '../modules/ai/jobs'
+import { classifyTags } from '../lib/ai/classify'
+import { suggestMerges } from '../lib/ai/merges'
+import { suggestRatings } from '../lib/ai/ratings'
+import { updateAiJobProgress, completeAiJob } from '../lib/ai/jobs'
 
 let _boss: PgBoss | null = null
 

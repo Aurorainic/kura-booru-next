@@ -91,7 +91,7 @@ Full ADRs in `docs/adr/`. Summary:
 
 - `MEILI_ENABLED` was a triple misnomer (not Meilisearch, only served autocomplete, index freshness half-broken and unnoticed).
 - Deleted: `suggest.ts` RediSearch impl, `07-redis-index-sync` plugin, `MEILI_ENABLED` env var.
-- Autocomplete now uses PG trgm/ILIKE (`modules/search/suggest.ts`), post_count read live from PG (no drift).
+- Autocomplete now uses PG trgm/ILIKE (`lib/search/suggest.ts`), post_count read live from PG (no drift).
 
 ### ADR-0003: Thumbnails — sharp + multi-width srcset (imgproxy archived)
 

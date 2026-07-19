@@ -3,7 +3,7 @@ import { getHeader } from 'h3'
 import { definePublicHandler } from '../../../platform/http/auth'
 import { AppError } from '../../../platform/errors'
 import { getIsAdmin } from '../../../utils/auth'
-import { getPost } from '../../../modules/posts/repo'
+import { getPost } from '../../../lib/posts/repo'
 
 const paramsSchema = z.object({
   id: z.string().min(1),
