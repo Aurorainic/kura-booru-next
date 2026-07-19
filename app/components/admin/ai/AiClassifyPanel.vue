@@ -12,31 +12,13 @@ const classifyLoading = ref(false)
 const classifyResults = ref<TagClassificationSuggestion[]>([])
 
 // AI job polling (A5) — when POST returns a job_id, poll GET /jobs/:id until done.
-const activeJobId = ref<string | null>(null)
-const jobProgress = ref<{ done: number; total: number } | null>(null)
-let pollTimer: ReturnType<typeof setInterval> | null = null
-
-function stopPolling() {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
-  activeJobId.value = null
-  jobProgress.value = null
-}
-
-async function pollJob(jobId: string) {
-  try {
-    const status = await getAiJobStatus(jobId, props.ssrCookie)
-    jobProgress.value = { done: status.done, total: status.total }
-    if (status.status === 'done' || status.status === 'error' || status.status === 'gone') {
-      stopPolling()
-      if (status.status === 'done' && status.result?.suggestions) {
-        classifyResults.value = status.result.suggestions as TagClassificationSuggestion[]
-      } else if (status.status === 'error') {
-        toast.error(`分类失败: ${status.errors.join('; ') || '未知错误'}`)
-      }
-      classifyLoading.value = false
-    }
-  } catch { /* keep polling */ }
-}
+const { jobProgress, start } = useAiJobPolling({
+  intervalMs: 1000,
+  ssrCookie: props.ssrCookie,
+  onDone: (suggestions) => { classifyResults.value = suggestions as TagClassificationSuggestion[] },
+  onError: (errors) => toast.error(`分类失败: ${errors.join('; ') || '未知错误'}`),
+  onTerminal: () => { classifyLoading.value = false },
+})
 
 async function runClassify() {
   classifyLoading.value = true
@@ -50,11 +32,7 @@ async function runClassify() {
       return
     }
     if (res.job_id) {
-      activeJobId.value = res.job_id
-      jobProgress.value = { done: 0, total: 0 }
-      pollTimer = setInterval(() => {
-        if (activeJobId.value) pollJob(activeJobId.value)
-      }, 1000)
+      start(res.job_id)
     } else {
       classifyLoading.value = false
     }
@@ -90,8 +68,6 @@ async function applyClassification(s: TagClassificationSuggestion) {
     applyingTags.value.delete(s.tag_name)
   }
 }
-
-onUnmounted(stopPolling)
 </script>
 
 <template>

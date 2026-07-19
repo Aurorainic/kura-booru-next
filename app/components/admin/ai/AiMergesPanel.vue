@@ -11,28 +11,13 @@ const mergeScope = ref<'all' | TagCategory>('all')
 const mergeLoading = ref(false)
 const mergeResults = ref<MergeSuggestion[]>([])
 
-const activeJobId = ref<string | null>(null)
-let pollTimer: ReturnType<typeof setInterval> | null = null
-
-function stopPolling() {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
-  activeJobId.value = null
-}
-
-async function pollJob(jobId: string) {
-  try {
-    const status = await getAiJobStatus(jobId, props.ssrCookie)
-    if (status.status === 'done' || status.status === 'error' || status.status === 'gone') {
-      stopPolling()
-      if (status.status === 'done' && status.result?.suggestions) {
-        mergeResults.value = status.result.suggestions as MergeSuggestion[]
-      } else if (status.status === 'error') {
-        toast.error(`扫描失败: ${status.errors.join('; ') || '未知错误'}`)
-      }
-      mergeLoading.value = false
-    }
-  } catch { /* keep polling */ }
-}
+const { start } = useAiJobPolling({
+  intervalMs: 1000,
+  ssrCookie: props.ssrCookie,
+  onDone: (suggestions) => { mergeResults.value = suggestions as MergeSuggestion[] },
+  onError: (errors) => toast.error(`扫描失败: ${errors.join('; ') || '未知错误'}`),
+  onTerminal: () => { mergeLoading.value = false },
+})
 
 async function runMergeSuggest() {
   mergeLoading.value = true
@@ -46,10 +31,7 @@ async function runMergeSuggest() {
       return
     }
     if (res.job_id) {
-      activeJobId.value = res.job_id
-      pollTimer = setInterval(() => {
-        if (activeJobId.value) pollJob(activeJobId.value)
-      }, 1000)
+      start(res.job_id)
     } else {
       mergeLoading.value = false
     }
@@ -92,8 +74,6 @@ const categoryOptions = [
   { value: 'general', label: '通用' },
   { value: 'meta', label: '元信息' },
 ]
-
-onUnmounted(stopPolling)
 </script>
 
 <template>
