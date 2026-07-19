@@ -95,6 +95,8 @@ export async function registerJobs(boss: PgBoss) {
   })
 
   // ── Scheduled jobs (setInterval → boss.schedule) ──
+  // createQueue 必须先于 schedule：schedule 有 FK 约束，队列不存在会抛 Queue X not found
+  await boss.createQueue('dashboard-refresh')
   await boss.schedule('dashboard-refresh', '*/5 * * * *')
   await boss.work('dashboard-refresh', async () => {
     try {
@@ -104,6 +106,7 @@ export async function registerJobs(boss: PgBoss) {
     }
   })
 
+  await boss.createQueue('sync-tasks')
   await boss.schedule('sync-tasks', '0 * * * *')
   await boss.work('sync-tasks', async () => {
     try {
