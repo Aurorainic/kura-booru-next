@@ -1,0 +1,17 @@
+# pg-boss spike: disposable Postgres, no volume — throwaway data only.
+# Usage: docker compose up -d && npm install && node demo.mjs
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kura-spike-pgboss-pg
+    environment:
+      POSTGRES_DB: pgboss_spike
+      POSTGRES_USER: spike
+      POSTGRES_PASSWORD: spike
+    ports:
+      - "127.0.0.1:54329:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spike -d pgboss_spike"]
+      interval: 2s
+      timeout: 3s
+      retries: 20

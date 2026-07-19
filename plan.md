@@ -34,9 +34,9 @@ v0.9.0 = **以 v0.8.1 功能为基准的全量重构**，三条主线：
 | 前端框架 | Nuxt 4 + Vue 3 + Tailwind v4 保留；SvelteKit/SPA 化否决 | ✅ 已定 |
 | 画廊风格 | 档案馆风为底 + 较小图片间距（非零 gutter 折中）+ 响应式列数 | ✅ 已定 |
 | 后端框架 | Nitro 保留，方案 A 分层重架构；Hono 存档 | ✅ 已定 |
-| 队列 | 统一 job 模型（接口先行）；pg-boss spike 后 ADR 定是否替换 Redis 队列 | 🔶 spike |
-| 搜索 | RediSearch 三选一（改名小修 / 删了用 PG trgm / 真接 Meili）→ ADR | 🔶 ADR |
-| 缩略图 | imgproxy spike（须配防 CVE-2025-24354）vs sharp 内嵌 → ADR；与前端 srcset 联动 | 🔶 spike |
+| 队列 | 接口先行 + pg-boss 收编 Node 侧 job（AI job / 定时器）；sidecar 桥保持 Redis —— adr-0001 | ✅ 已定 |
+| 搜索 | 删 RediSearch，autocomplete 走 PG trgm —— adr-0002 | ✅ 已定 |
+| 缩略图 | 维持 sharp 内嵌 + 导入期预生成多档 srcset；imgproxy 存档为已验证备选 —— adr-0003 | ✅ 已定 |
 | sidecar | 原样保留（Python + gallery-dl + imagehash），队列桥不变 | ✅ 已定 |
 | bot | grammy 逻辑保留在 Nitro 内，模块化拆分 | ✅ 已定 |
 
