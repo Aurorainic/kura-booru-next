@@ -30,6 +30,7 @@ const groupedTags = computed(() => {
 const previewUrl = computed(() => post.value ? getPreviewUrl(post.value) : '')
 const originalUrl = computed(() => post.value ? getOriginalUrl(post.value) : '')
 const thumbUrl = computed(() => post.value ? getThumbUrl(post.value) : '')
+const srcset = computed(() => post.value ? getSrcset(post.value) : null)
 
 // Admin: reactive rating editor
 const selectedRating = ref(post.value?.rating || 'safe')
@@ -231,6 +232,8 @@ useHead({
             />
             <img
               :src="previewUrl"
+              :srcset="srcset || undefined"
+              :sizes="srcset ? '(max-width: 700px) 100vw, (max-width: 1400px) 80vw, 1280px' : undefined"
               :alt="post.title || '插画'"
               class="relative w-full h-auto transition-opacity duration-300"
               :class="{ 'opacity-100': previewLoaded, 'opacity-0': !previewLoaded }"
