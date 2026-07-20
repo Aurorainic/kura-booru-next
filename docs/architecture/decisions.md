@@ -98,8 +98,8 @@ Full ADRs in `docs/adr/`. Summary:
 - Extended from 3-piece (thumb/preview/LQIP) to 4-width srcset: 300w/640w/1280w/2000w + LQIP 20².
 - Key naming: `<base>-{300w|640w|1280w|2000w}.webp`. Frontend `getSrcset()` derives from thumb/preview keys.
 - `/i/` reverse proxy contract unchanged (Range passthrough + `max-age=31536000` without immutable).
-- Backfill script: `scripts/backfill-srcset.ts` (dry-run first).
-- imgproxy spike validated (10/10 PASS) but not adopted (container count constraint).
+- Backfill of existing posts ran as a one-off operation (dry-run first); the script was removed from the repo after use.
+- imgproxy technically validated (10/10 PASS) but not adopted (container count constraint).
 
 ### ADR-0004: API contract — 53 endpoint freeze + handler wrappers
 

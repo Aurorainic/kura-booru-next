@@ -1,8 +1,8 @@
 # ADR-0002: 搜索索引选型 —— 删除 RediSearch，autocomplete 走 PG trgm
 
 - 状态：已接受（2026-07-19）
-- 关联：plan.md §B7（三选一，倾向项 = 本决策）
-- 决策输入：`docs/backend-audit-v0.9.0.md` §5（完整证据链）、§3.5-3（Redis 用途）、§4.1（trgm 索引）
+- 关联：v0.9.0 规划文档 §B7（三选一，倾向项 = 本决策；规划文档已随仓库清理移除，见 git 历史）
+- 决策输入：backend-audit §5（完整证据链）、§3.5-3（Redis 用途）、§4.1（trgm 索引）（审计文档已随仓库清理移除，见 git 历史；结论见本文）
 
 ## 背景
 
@@ -22,7 +22,7 @@
 |---|---|---|
 | a. 改名小修 | `MEILI_ENABLED` → `REDISEARCH_ENABLED`，补写穿透 + 删除同步 | 为一个"唯一职责都没干好且无人察觉"的索引继续付维护成本；补同步要动 pipeline、merge、fix-artist 三条写路径，工作量不小于删掉它 |
 | **b. 删掉走 PG trgm** | 删 `suggest.ts` 的 RediSearch 实现 + `07-redis-index-sync` 插件 + `MEILI_ENABLED`；autocomplete 走 PG trgm/ILIKE | 主搜索零影响（本来就不碰它）；少一类 Redis 用途（§3.5-3）；少一个 Nitro 插件；已有 GIN 索引与 SQL 兜底可直接承接 |
-| c. 真接 Meilisearch | 按当前数据量无收益证据（§5）；且超 feature parity，plan.md「明确不做」已排除，另立版本再议 | 否决（本期） |
+| c. 真接 Meilisearch | 按当前数据量无收益证据（§5）；且超 feature parity，v0.9.0 规划「明确不做」已排除，另立版本再议 | 否决（本期） |
 
 ## 决策
 

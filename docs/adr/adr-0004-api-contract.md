@@ -1,8 +1,8 @@
 # ADR-0004: API 契约约定 —— zod 全量校验 + 统一错误形状 + handler 包装 + 轻量 OpenAPI 生成
 
 - 状态：已接受（2026-07-19）
-- 关联：plan.md §B2 / §B5 / §F4
-- 决策输入：`docs/backend-audit-v0.9.0.md` §6（不可变契约面）、§7.1（错误处理）、§7.2（输入校验）、§7.3（auth 样板）；`docs/frontend-audit-v0.9.0.md` §5.1（api.ts 手写端点层）
+- 关联：v0.9.0 规划文档 §B2 / §B5 / §F4（已随仓库清理移除，见 git 历史）
+- 决策输入：backend-audit §6（不可变契约面）、§7.1（错误处理）、§7.2（输入校验）、§7.3（auth 样板）；frontend-audit §5.1（api.ts 手写端点层）（审计文档已随仓库清理移除，见 git 历史；结论见本文）
 
 ## 背景
 

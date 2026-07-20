@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 契约漂移守护（plan.md §阶段 1：API 契约测试基线）。
+ * 契约漂移守护（v0.9.0 规划 阶段 1：API 契约测试基线）。
  *
  * 双向比对 server/routes/ 路由文件与 platform/contract/endpoints.ts 冻结清单：
  *   A. 每个路由文件必须出现在契约清单中（新增端点 = 更新清单，强制显式决策）

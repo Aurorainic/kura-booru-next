@@ -4,7 +4,7 @@
  * 全部命名任务在此注册：AI job worker + 定时任务。
  * pg-boss 初始化在 08-pg-boss.ts Nitro 插件中调用 registerJobs()。
  *
- * 实施注意（spike/pg-boss/README.md）：
+ * 实施注意（源自 pg-boss 技术验证结论，验证代码已随仓库清理移除）：
  * - v12 worker 回调是批量签名 async ([job]) => {}
  * - DLQ 必须先建：createQueue(name, { deadLetter }) 要求死信队列已存在
  * - cron 有 60s singleton 下限（5min/1h 产线节奏无影响）

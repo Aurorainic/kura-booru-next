@@ -105,7 +105,6 @@ Internet
 ├── infra/                     # Docker Compose + Caddy/Nginx config
 ├── docs/                      # Architecture docs, dev guide, ADRs
 ├── drizzle/                   # Database migrations
-├── scripts/                   # backfill-srcset.ts, api-diff.mjs
 ├── nuxt.config.ts             # Nuxt config (Tailwind v4, runtimeConfig)
 ├── package.json               # Dependencies (drizzle, grammy, @aws-sdk, redis, pg-boss, zod)
 ```

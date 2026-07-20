@@ -8,7 +8,8 @@
  *
  * Frontend derives mid/large keys from thumb/preview by suffix replacement;
  * existing posts (pre-v0.9.0, old key format) fall back to single-image until
- * the backfill script (scripts/backfill-srcset.ts) updates them.
+ * a one-off backfill updates them (already executed; the script was removed
+ * from the repo after use).
  *
  * Sidecar keeps gallery-dl download + phash + raw dims/mime: phash needs
  * imagehash's exact DCT, and migrating it to sharp breaks cross-era dedup

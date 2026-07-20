@@ -15,7 +15,7 @@ export interface RegisteredRoute {
   path: string
   auth: AuthKind
   summary?: string
-  /** 不可变契约标注：extension / bot / image（ADR-0004，backend-audit §6） */
+  /** 不可变契约标注：extension / bot / image（ADR-0004，源自后端审计 §6 结论） */
   frozen?: 'extension' | 'bot' | 'image'
   schemas?: HandlerSchemas
 }
