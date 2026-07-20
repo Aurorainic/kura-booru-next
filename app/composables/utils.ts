@@ -29,6 +29,31 @@ export function getPreviewUrl(post: Post): string {
   return getImageUrl(post.preview_key)
 }
 
+/**
+ * Derive srcset from the ADR-0003 multi-width key naming convention:
+ *   <base>-300w.webp, <base>-640w.webp, <base>-1280w.webp, <base>-2000w.webp
+ * Returns null for old-format keys (no width suffix) — caller falls back to single image.
+ * Mid/large keys are derived from thumb/preview by suffix replacement.
+ */
+export function getSrcset(post: Post): string | null {
+  const thumb = post.thumb_key
+  const preview = post.preview_key
+  if (!thumb.includes('-300w.') || !preview.includes('-1280w.')) return null
+
+  const mid = thumb.replace('-300w.', '-640w.')
+  const large = preview.replace('-1280w.', '-2000w.')
+
+  return [
+    `/i/${thumb} 300w`,
+    `/i/${mid} 640w`,
+    `/i/${preview} 1280w`,
+    `/i/${large} 2000w`,
+  ].join(', ')
+}
+
+/** Responsive sizes for gallery grid images (≈6/8/10/12 columns by viewport). */
+export const GALLERY_SIZES = '(max-width: 700px) 50vw, (max-width: 900px) 33vw, (max-width: 1400px) 20vw, 16vw'
+
 export function getOriginalUrl(post: Post): string {
   return getImageUrl(post.s3_key)
 }
@@ -60,29 +85,11 @@ export function getRatingColorClass(rating: Rating): string {
   return classes[rating] || 'rating-safe'
 }
 
-export function getTagCategoryColor(category: TagCategory): string {
-  const colors: Record<TagCategory, string> = {
-    artist: 'tag-artist', character: 'tag-character', copyright: 'tag-copyright', general: 'tag-general', meta: 'tag-meta',
-  }
-  return colors[category] || 'tag-general'
-}
-
 export function getTagCategoryLabel(category: TagCategory): string {
   const labels: Record<TagCategory, string> = {
     artist: '画师', character: '角色', copyright: '作品', general: '通用', meta: '元信息',
   }
   return labels[category] || category
-}
-
-export function getTagCategoryBg(category: TagCategory): string {
-  const bgVars: Record<TagCategory, string> = {
-    artist: '#fef3c7',
-    character: '#dbeafe',
-    copyright: '#fce7f3',
-    general: '#e5e7eb',
-    meta: '#e0e7ff',
-  }
-  return bgVars[category] || '#e5e7eb'
 }
 
 export function getTagCategoryVar(category: TagCategory): string {

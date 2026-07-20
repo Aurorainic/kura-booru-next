@@ -1,8 +1,14 @@
 <script setup lang="ts">
+import type { AiStatus } from '~/types'
+
 const props = defineProps<{
   aiStatus: AiStatus | null
   aiEnabled: boolean
 }>()
+
+function endpointHost(ep: string | undefined | null): string {
+  try { return ep ? new URL(ep).hostname : '' } catch { return '' }
+}
 </script>
 
 <template>
@@ -15,7 +21,7 @@ const props = defineProps<{
       {{ props.aiEnabled ? `${props.aiStatus?.model}` : 'AI 未启用' }}
     </span>
     <span v-if="props.aiEnabled && props.aiStatus?.endpoint" class="text-[var(--text-muted)]/60">
-      {{ (() => { try { return new URL(props.aiStatus.endpoint).hostname } catch { return '' } })() }}
+      {{ endpointHost(props.aiStatus.endpoint) }}
     </span>
   </div>
 </template>

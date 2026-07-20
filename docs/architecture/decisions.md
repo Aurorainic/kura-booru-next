@@ -76,6 +76,41 @@ Like safebooru — traditional pagination with per-page count selector (20/40/10
 
 ---
 
+## v0.9.0 Architecture Decisions
+
+Full ADRs in `docs/adr/`. Summary:
+
+### ADR-0001: Queue — JobQueue interface + pg-boss for Node-side jobs
+
+- `server/platform/queue.ts` defines `JobQueue` interface (enqueue/getStatus/consume/retry); Redis impl wraps existing `kura:jobs`/`kura:results:` semantics.
+- pg-boss (v12.26+)收编 AI jobs (was `event.waitUntil`, lost on restart) + 2 scheduled tasks (was setInterval).
+- **Not changed**: `kura:jobs`→sidecar Redis bridge, `kura:results:`/`kura:job_status:` result-retrieval protocol (bot/extension/SSE contracts).
+- Containers unchanged (4) — pg-boss lives in existing PG.
+
+### ADR-0002: Search — delete RediSearch, autocomplete via PG trgm
+
+- `MEILI_ENABLED` was a triple misnomer (not Meilisearch, only served autocomplete, index freshness half-broken and unnoticed).
+- Deleted: `suggest.ts` RediSearch impl, `07-redis-index-sync` plugin, `MEILI_ENABLED` env var.
+- Autocomplete now uses PG trgm/ILIKE (`lib/search/suggest.ts`), post_count read live from PG (no drift).
+
+### ADR-0003: Thumbnails — sharp + multi-width srcset (imgproxy archived)
+
+- Extended from 3-piece (thumb/preview/LQIP) to 4-width srcset: 300w/640w/1280w/2000w + LQIP 20².
+- Key naming: `<base>-{300w|640w|1280w|2000w}.webp`. Frontend `getSrcset()` derives from thumb/preview keys.
+- `/i/` reverse proxy contract unchanged (Range passthrough + `max-age=31536000` without immutable).
+- Backfill of existing posts ran as a one-off operation (dry-run first); the script was removed from the repo after use.
+- imgproxy technically validated (10/10 PASS) but not adopted (container count constraint).
+
+### ADR-0004: API contract — 53 endpoint freeze + handler wrappers
+
+- `server/platform/contract/endpoints.ts` is the static source of truth; `check.mjs` does bidirectional drift guard.
+- 4 handler wrappers (`defineAdminHandler`/`defineApiKeyHandler`/`defineExtHandler`/`definePublicHandler`) eliminate ~40 × 3-line session boilerplate.
+- Errors unified to `AppError` → `{ code, message, details? }`.
+- zod enums (`zRating`/`zSourceSite`/`zTagCategory`) derived from PG enums (single source of truth).
+- Frozen endpoints (web-import/tasks/[id]/bot webhook/i/) — literals and protocol preserved byte-for-byte.
+
+---
+
 ## v0.6.x Lessons Applied
 
 - S3 key normalization + post-upload URL verification

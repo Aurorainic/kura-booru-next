@@ -39,6 +39,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        # Fetch full history + main ref so we can verify the tagged commit is
+        # reachable from main. A shallow checkout can't answer "is this tag on
+        # main?" — `git branch --contains $TAG` needs the full commit graph.
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag is on main
+        # 镜像只允许从 main 分支历史中的 commit 打 tag 触发构建。
+        # 这阻挡了在 fork/分支上打 v* tag 误触发 release 构建的情况。
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          TAG_COMMIT=$(git rev-list -n 1 "$TAG")
+          echo "Tag $TAG -> commit $TAG_COMMIT"
+          # Check if the tag's commit is reachable from origin/main
+          if ! git merge-base --is-ancestor "$TAG_COMMIT" origin/main; then
+            echo "::error::Tag $TAG ($TAG_COMMIT) is not reachable from main. Image builds are only allowed for tags on main commits."
+            echo "::error::Re-tag the commit after merging it into main, or push the tag onto a main commit directly."
+            exit 1
+          fi
+          echo "OK: tag $TAG is on main"
 
       - name: Extract version from tag
         id: meta

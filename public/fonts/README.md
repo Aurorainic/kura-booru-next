@@ -3,7 +3,8 @@
 Drop self-hosted woff2 subsets here to activate the `KuraDisplay` family
 referenced by `--font-display` (H1 / page titles / tag names).
 
-Recommended subsets (per `docs/theme-design.md` §6):
+Recommended subsets (originally from the v0.9.0 theme design doc, since removed
+from the repo — this list stands alone):
 - `display-latin.woff2` — Latin glyphs (~20 KB)
 - `display-cjk.woff2`   — CJK glyphs, subsetted to the site's actual characters (~60 KB)
 

@@ -1,8 +1,7 @@
-export default defineEventHandler(async (event) => {
-  const cookie = getHeader(event, 'cookie') || ''
-  const isAdmin = await getIsAdmin(cookie)
-  if (!isAdmin) throw createError({ statusCode: 401, statusMessage: 'Admin required' })
+import { defineAdminHandler } from '../../../../platform/http/auth'
+import { getSettings } from '../../../../utils/settings'
 
-  const all = await getSettings()
-  return all
+export default defineAdminHandler({
+  doc: { method: 'get', path: '/api/admin/settings', summary: 'List all settings (admin)' },
+  handler: async () => getSettings(),
 })

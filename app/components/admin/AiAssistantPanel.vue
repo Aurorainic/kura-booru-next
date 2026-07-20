@@ -57,7 +57,7 @@ function switchSection(s: string) {
     <EmptyState
       v-else-if="!aiEnabled"
       title="AI 功能未启用"
-      description="请设置 ENABLE_AI_TAG_PROCESSING=true 及相关 AI_PROVIDER_* 环境变量"
+      description="请在「AI 设置」标签页中添加并启用一个 Provider，然后打开 AI 标签处理开关"
       icon="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"
     />
 

@@ -15,6 +15,7 @@ const props = withDefaults(defineProps<{
 })
 
 const previewUrl = getPreviewUrl(props.post)
+const srcset = getSrcset(props.post)
 const lqip = props.post.lqip
 const imgLoaded = ref(false)
 const modalOpen = ref(false)
@@ -52,6 +53,8 @@ function onCardClick(e: MouseEvent) {
       <!-- Real image -->
       <img
         :src="previewUrl"
+        :srcset="srcset || undefined"
+        :sizes="srcset ? GALLERY_SIZES : undefined"
         :alt="post.title || `作品 ${post.id.slice(0, 8)}`"
         :width="post.width"
         :height="post.height"

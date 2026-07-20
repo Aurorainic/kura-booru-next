@@ -5,20 +5,24 @@
 async function assertSafeUrl(url: string) {
   let host: string
   try { host = new URL(url).hostname }
-  catch { throw createError({ statusCode: 400, statusMessage: 'source_url is not a valid URL' }) }
+  catch { throw new AppError('VALIDATION_FAILED', 400, 'source_url is not a valid URL') }
   if (await isPrivateHost(host)) {
-    throw createError({ statusCode: 400, statusMessage: 'source_url points to a private or reserved address' })
+    throw new AppError('VALIDATION_FAILED', 400, 'source_url points to a private or reserved address')
   }
 }
 
-export default defineEventHandler(async (event) => {
-  const apiKey = getHeader(event, 'x-api-key')
-  if (!await checkApiKey(apiKey)) throw createError({ statusCode: 401, statusMessage: 'API key required' })
+import { defineApiKeyHandler } from '../../../platform/http/auth'
+import { AppError } from '../../../platform/errors'
 
-  const body = await readBody<{ source_url: string; source_site?: string; source_id?: string }>(event)
-  if (!body?.source_url) throw createError({ statusCode: 400, statusMessage: 'source_url required' })
+export default defineApiKeyHandler({
+  auditAction: 'task create',
+  doc: { method: 'post', path: '/api/tasks', summary: 'Create import task (session or apikey)' },
+  handler: async ({ event }) => {
+    const body = await readBody<{ source_url: string; source_site?: string; source_id?: string }>(event)
+    if (!body?.source_url) throw new AppError('VALIDATION_FAILED', 400, 'source_url required')
 
-  await assertSafeUrl(body.source_url)
-  const jobId = await enqueueJob({ url: body.source_url, source_site: body.source_site, source_id: body.source_id })
-  return { task_id: jobId, status: 'queued' }
+    await assertSafeUrl(body.source_url)
+    const jobId = await enqueueJob({ url: body.source_url, source_site: body.source_site, source_id: body.source_id })
+    return { task_id: jobId, status: 'queued' }
+  },
 })

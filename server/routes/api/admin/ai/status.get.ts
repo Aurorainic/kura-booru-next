@@ -1,7 +1,6 @@
-export default defineEventHandler(async (event) => {
-  const cookie = getHeader(event, 'cookie') || ''
-  const isAdmin = await getIsAdmin(cookie)
-  if (!isAdmin) throw createError({ statusCode: 401, statusMessage: 'Admin required' })
+import { defineAdminHandler } from '../../../../platform/http/auth'
 
-  return getAiStatus()
+export default defineAdminHandler({
+  doc: { method: 'get', path: '/api/admin/ai/status', summary: 'AI service status' },
+  handler: async () => getAiStatus(),
 })

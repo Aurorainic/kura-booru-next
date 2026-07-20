@@ -32,7 +32,11 @@
 - **Pixiv auth**: Requires both `PIXIV_REFRESH_TOKEN` AND `PIXIV_PHPSESSID` cookie.
 - **Reverse proxy**: Runs on the HOST machine (optional since v0.7.0), not in Docker Compose. Containers expose ports to localhost. Any reverse proxy works (Caddy/nginx/Traefik).
 - **Password epoch**: `getIsAdmin` checks Redis-cached `password_epoch` on every request. If Redis is down, it fail-opens (allows session). Never bypass this check in new auth code.
-- **Nitro auto-imports**: Everything under `server/utils/` is auto-imported by Nitro. Do NOT add explicit `import` statements for `db`, `redis`, `getIsAdmin`, `enqueueJob`, etc. Schema tables are auto-imported via `server/utils/schema.ts` re-export.
+- **Nitro auto-imports**: Everything under `server/utils/` is auto-imported by Nitro. `server/lib/` and `server/platform/` are NOT auto-imported — they need explicit imports. New code should use explicit imports even in `server/utils/` (v0.9.0 convention: avoid auto-import for new files). Schema tables are auto-imported via `server/utils/schema.ts` re-export.
+- **v0.9.0 server structure**: `server/lib/` holds domain logic (posts/tags/search/import/ai/bot); `server/platform/` holds cross-cutting (http handlers, zod schemas, contract, queue, jobs, errors). `server/utils/` files are re-export shims for backward compat — new code should import from `lib/` or `platform/` directly. **Never rename `server/lib/` to `server/modules/`** — Nitro reserves `modules/`: it auto-registers every file there as a Nitro module and executes it via jiti at build time (this broke the v0.9.0 image build with grammy's "Empty token!").
+- **Handler wrappers (v0.9.0)**: All routes use `defineAdminHandler` / `defineApiKeyHandler` / `defineExtHandler` / `definePublicHandler` from `server/platform/http/auth.ts`. Never write raw `defineEventHandler` + manual `getIsAdmin` check in new routes. Errors use `AppError` from `server/platform/errors.ts`, not `createError`.
+- **Contract freeze**: 53 endpoints are frozen in `server/platform/contract/endpoints.ts`. Run `npm run test:contract` (or `node server/platform/contract/check.mjs`) after any route file change. CI gates this.
+- **pg-boss (v0.9.0)**: AI jobs + scheduled tasks run via pg-boss (ADR-0001). Named jobs registered in `server/platform/jobs.ts`. Redis queue (`kura:jobs`→sidecar, `kura:results:`/`kura:job_status:`) is unchanged — only Node-side jobs moved to pg-boss.
 - **Extension content scripts**: Must be plain ES5 JavaScript — no TypeScript, no arrow functions, no template literals, no `const`/`let`.
 - **Settings public endpoint**: `GET /api/settings/public` must never expose `database_url` or `redis_url`. Only `site_title`, `site_description`, `announcement`, `head_inject`, `maintenance_mode` are safe for public.
 - **Head inject**: Rendered with `v-html` equivalent — admin is trusted, but be cautious if extending to user-controlled input.
@@ -47,7 +51,8 @@
 
 ## Common Pitfalls
 
-- **Nitro import paths**: Never use `import { ... } from '~/server/utils/...'` — Nitro auto-imports `server/utils/*`. Schema tables use `server/utils/schema.ts` re-export (auto-imported as `posts`, `tags`, etc).
+- **Nitro import paths**: Never use `import { ... } from '~/server/utils/...'` — Nitro auto-imports `server/utils/*`. Schema tables use `server/utils/schema.ts` re-export (auto-imported as `posts`, `tags`, etc). For `server/lib/` and `server/platform/`, use explicit imports with correct depth (3/4/5 layers depending on route nesting).
+- **v0.9.0 explicit imports**: New code in `server/lib/` and `server/platform/` must use explicit imports (`import { db } from '../../utils/db'`, `import { eq, sql } from 'drizzle-orm'`, etc.). Do not rely on auto-import for new files. Re-export shims in `server/utils/` preserve backward compat for existing consumers.
 - **Redis top-level await**: Not available in Nitro's es2019 target. Use lazy singleton via `getRedis()` or the proxy pattern in `server/utils/redis.ts`.
 - **Cookie deletion**: Must match all attributes (`Secure`, `HttpOnly`, `SameSite`, `Path`) used when setting the cookie.
 - **Logout race condition**: Use server-side redirect (SSR endpoint `POST /logout`) instead of client-side `fetch()` + `window.location.href`.

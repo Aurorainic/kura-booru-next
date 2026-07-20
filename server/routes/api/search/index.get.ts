@@ -1,16 +1,28 @@
+import { z } from 'zod'
+import { getHeader } from 'h3'
+import { definePublicHandler } from '../../../platform/http/auth'
+import { AppError } from '../../../platform/errors'
+import { getIsAdmin } from '../../../utils/auth'
+import { searchPosts } from '../../../lib/posts/repo'
 
-export default defineEventHandler(async (event) => {
-  const query = getQuery(event)
-  const q = query.q as string
-  if (!q) throw createError({ statusCode: 400, statusMessage: 'q parameter required' })
+const querySchema = z.object({
+  q: z.string().min(1),
+  page: z.coerce.number().default(1),
+  per_page: z.coerce.number().default(40),
+  source: z.string().optional(),
+})
 
-  const cookie = getHeader(event, 'cookie') || ''
-  const isAdmin = await getIsAdmin(cookie)
-
-  return searchPosts(q, {
-    page: Number(query.page) || 1,
-    perPage: Number(query.per_page) || 40,
-    source: query.source as string,
-    isAdmin,
-  })
+export default definePublicHandler({
+  schemas: { query: querySchema },
+  doc: { method: 'get', path: '/api/search', summary: 'Search posts by tag query' },
+  handler: async ({ event, query }) => {
+    const cookie = getHeader(event, 'cookie') || ''
+    const isAdmin = await getIsAdmin(cookie)
+    return searchPosts(query.q, {
+      page: query.page,
+      perPage: query.per_page,
+      source: query.source,
+      isAdmin,
+    })
+  },
 })

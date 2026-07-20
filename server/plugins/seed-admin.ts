@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import bcryptjs from 'bcryptjs'
+import { eq } from 'drizzle-orm'
 
 // Seed default admin on startup if none exists.
 // B-P3-12: Generate random password if ADMIN_PASSWORD not set, print to logs.

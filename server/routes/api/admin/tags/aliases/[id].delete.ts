@@ -1,17 +1,18 @@
 import { eq } from 'drizzle-orm'
+import { defineAdminHandler } from '../../../../../platform/http/auth'
+import { AppError } from '../../../../../platform/errors'
 
-export default defineEventHandler(async (event) => {
-  const cookie = getHeader(event, 'cookie') || ''
-  const isAdmin = await getIsAdmin(cookie)
-  if (!isAdmin) throw createError({ statusCode: 401, statusMessage: 'Admin required' })
+export default defineAdminHandler({
+  doc: { method: 'delete', path: '/api/admin/tags/aliases/:id', summary: 'Delete tag alias' },
+  handler: async ({ event }) => {
+    const id = event.context.params?.id as string
+    if (!id) throw new AppError('VALIDATION_FAILED', 400, 'Alias ID required')
 
-  const id = event.context.params?.id as string
-  if (!id) throw createError({ statusCode: 400, statusMessage: 'Alias ID required' })
+    const existing = await db.select().from(tagAliases).where(eq(tagAliases.id, id)).limit(1)
+    if (!existing[0]) throw new AppError('NOT_FOUND', 404, 'Alias not found')
 
-  const existing = await db.select().from(tagAliases).where(eq(tagAliases.id, id)).limit(1)
-  if (!existing[0]) throw createError({ statusCode: 404, statusMessage: 'Alias not found' })
+    await db.delete(tagAliases).where(eq(tagAliases.id, id))
 
-  await db.delete(tagAliases).where(eq(tagAliases.id, id))
-
-  return { deleted: true }
+    return { deleted: true }
+  },
 })

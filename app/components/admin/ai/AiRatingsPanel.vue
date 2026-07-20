@@ -11,31 +11,13 @@ const ratingScope = ref<'unrated' | 'all'>('unrated')
 const ratingLoading = ref(false)
 const ratingResults = ref<RatingSuggestionItem[]>([])
 
-const activeJobId = ref<string | null>(null)
-const jobProgress = ref<{ done: number; total: number } | null>(null)
-let pollTimer: ReturnType<typeof setInterval> | null = null
-
-function stopPolling() {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
-  activeJobId.value = null
-  jobProgress.value = null
-}
-
-async function pollJob(jobId: string) {
-  try {
-    const status = await getAiJobStatus(jobId, props.ssrCookie)
-    jobProgress.value = { done: status.done, total: status.total }
-    if (status.status === 'done' || status.status === 'error' || status.status === 'gone') {
-      stopPolling()
-      if (status.status === 'done' && status.result?.suggestions) {
-        ratingResults.value = status.result.suggestions as RatingSuggestionItem[]
-      } else if (status.status === 'error') {
-        toast.error(`扫描失败: ${status.errors.join('; ') || '未知错误'}`)
-      }
-      ratingLoading.value = false
-    }
-  } catch { /* keep polling */ }
-}
+const { jobProgress, start } = useAiJobPolling({
+  intervalMs: 1500,  // rating jobs are slow (200ms/post); poll less aggressively
+  ssrCookie: props.ssrCookie,
+  onDone: (suggestions) => { ratingResults.value = suggestions as RatingSuggestionItem[] },
+  onError: (errors) => toast.error(`扫描失败: ${errors.join('; ') || '未知错误'}`),
+  onTerminal: () => { ratingLoading.value = false },
+})
 
 async function runRatingSuggest() {
   ratingLoading.value = true
@@ -48,11 +30,7 @@ async function runRatingSuggest() {
       return
     }
     if (res.job_id) {
-      activeJobId.value = res.job_id
-      jobProgress.value = { done: 0, total: 0 }
-      pollTimer = setInterval(() => {
-        if (activeJobId.value) pollJob(activeJobId.value)
-      }, 1500)  // rating jobs are slow (200ms/post); poll less aggressively
+      start(res.job_id)
     } else {
       ratingLoading.value = false
     }
@@ -75,8 +53,6 @@ async function applyRatingSuggestion(s: RatingSuggestionItem) {
     applyingRating.value.delete(s.post_id)
   }
 }
-
-onUnmounted(stopPolling)
 </script>
 
 <template>
