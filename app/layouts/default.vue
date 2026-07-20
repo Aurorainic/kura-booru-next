@@ -51,7 +51,10 @@ onUnmounted(() => {
 const { public: publicConfig } = useRuntimeConfig()
 const gitTag = publicConfig.gitTag
 const repoUrl = publicConfig.repoUrl || 'https://gitea.lainns.xyz/lainsaka/kura-booru-next'
-const enableAi = publicConfig.enableAiTagProcessing === 'true'
+// v0.9.0: AI toggle lives in the DB now — runtimeConfig.public.enableAiTagProcessing
+// is a build-time snapshot that can't see admin changes. Read the flag from the
+// public settings payload (SSR context) instead.
+const enableAi = computed(() => settings.value?.ai_enabled === 'true')
 
 // Accent hue from cookie (SSR anti-flash)
 const accentCookie = useCookie('kura-accent-hue')

@@ -2,6 +2,17 @@
 
 本文件记录项目的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] (v0.9.0)
+
+### 新增
+- **AI Provider 配置迁移至管理后台** — 新增 `ai_providers` 表（迁移 `0007_ai_providers.sql`）与新管理标签页「AI 设置」：Provider 可增删改、启停（同时最多一个生效）、测试连接（显示延迟/错误），并提供全局「AI 标签处理」开关（settings KV `ai_tag_processing_enabled`）。变更即时生效，无需重启。首次启动时若表为空且 `AI_PROVIDER_*` 环境变量已设置，会自动导入为一条 Provider 记录；环境变量降级为可选的 seed/fallback。
+- **管理 API**：`GET/POST /api/admin/ai/providers`、`PUT/DELETE /api/admin/ai/providers/:id`、`POST /api/admin/ai/providers/test`、`PUT /api/admin/ai/toggle`。API Key 在任何 GET 响应中只返回掩码（前 4 + 后 4），编辑时留空表示保持不变。
+
+### 变更
+- `getAiConfig()` 改为读取 DB 快照（启动时 + 每次管理端写入后刷新），保持同步签名，所有既有调用方不变；迁移未应用时自动回退到环境变量行为。
+- pipeline / bot 中 8 处 `ENABLE_AI_TAG_PROCESSING` 直接环境变量检查统一改为 `isAiEnabled()`。
+- 页脚 AI 徽章改由公开设置接口的 `ai_enabled` 字段驱动（仅布尔标志，不含任何密钥/端点信息），不再依赖构建期 env 快照。
+
 ## [0.8.1] - 2026-07-17
 
 ### 修复

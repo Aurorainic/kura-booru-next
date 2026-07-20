@@ -1,4 +1,4 @@
-import type { AiStatus, AiJobStatus, TagClassificationSuggestion, MergeSuggestion, RatingSuggestionItem, AssistantReply } from '~/types'
+import type { AiStatus, AiJobStatus, TagClassificationSuggestion, MergeSuggestion, RatingSuggestionItem, AssistantReply, AiProvidersResponse, AiProvider, AiConnectionTestResult } from '~/types'
 import { fetchApi } from './api'
 
 // 显式 import 规避 auto-import 在异步 chunk 的失效（frontend-audit §8.3-3）
@@ -68,5 +68,55 @@ export async function adminChat(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...params, source: 'web' }),
     ssrCookie,
+  })
+}
+
+// ── AI Provider Management (v0.9.0) ──
+
+export interface AiProviderPayload {
+  name?: string
+  endpoint?: string
+  model?: string
+  apiKey?: string
+  enabled?: boolean
+}
+
+export async function fetchAiProviders(ssrCookie?: string): Promise<AiProvidersResponse> {
+  return fetchApi<AiProvidersResponse>('/admin/ai/providers/', undefined, { ssrCookie })
+}
+
+export async function createAiProvider(payload: Required<Pick<AiProviderPayload, 'name' | 'endpoint' | 'model' | 'apiKey'>> & { enabled?: boolean }): Promise<AiProvider> {
+  return fetchApi<AiProvider>('/admin/ai/providers/', undefined, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateAiProvider(id: string, payload: AiProviderPayload): Promise<AiProvider> {
+  return fetchApi<AiProvider>(`/admin/ai/providers/${id}`, undefined, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteAiProvider(id: string): Promise<{ ok: boolean }> {
+  return fetchApi(`/admin/ai/providers/${id}`, undefined, { method: 'DELETE' })
+}
+
+export async function testAiProviderConnection(params: { id?: string; endpoint?: string; model?: string; apiKey?: string }): Promise<AiConnectionTestResult> {
+  return fetchApi<AiConnectionTestResult>('/admin/ai/providers/test', undefined, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+}
+
+export async function setAiTagProcessing(enabled: boolean): Promise<{ ok: boolean; tag_processing: boolean; status: AiStatus }> {
+  return fetchApi('/admin/ai/toggle', undefined, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
   })
 }

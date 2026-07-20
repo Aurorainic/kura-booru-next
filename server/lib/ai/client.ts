@@ -53,6 +53,60 @@ async function callAiOnce(messages: AiMessage[], opts?: { json?: boolean; temper
   return content
 }
 
+export interface AiConnectionTestResult {
+  ok: boolean
+  latencyMs: number
+  error?: string
+}
+
+const TEST_TIMEOUT_MS = 15_000
+
+/**
+ * Test an explicit provider config with a minimal chat completion.
+ * Used by the admin "测试连接" button — does NOT touch the global snapshot,
+ * so unsaved form payloads can be tested too. Single attempt, no retries.
+ */
+export async function testAiConnection(cfg: { endpoint: string; model: string; apiKey: string }): Promise<AiConnectionTestResult> {
+  const baseEndpoint = cfg.endpoint.replace(/\/$/, '')
+  const url = `${baseEndpoint}/chat/completions`
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS)
+  const started = Date.now()
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${cfg.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: cfg.model,
+        messages: [{ role: 'user', content: 'Reply with: OK' }],
+        max_tokens: 4,
+        temperature: 0,
+      }),
+      signal: controller.signal,
+    })
+    const latencyMs = Date.now() - started
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '')
+      return { ok: false, latencyMs, error: `HTTP ${resp.status}: ${text.slice(0, 200)}` }
+    }
+    const data = await resp.json()
+    const content = data?.choices?.[0]?.message?.content
+    if (content === undefined || content === null) {
+      return { ok: false, latencyMs, error: 'API 返回了空响应' }
+    }
+    return { ok: true, latencyMs }
+  } catch (e: any) {
+    const latencyMs = Date.now() - started
+    const msg = e?.name === 'AbortError' ? `连接超时（>${TEST_TIMEOUT_MS / 1000}s）` : (e?.message || String(e))
+    return { ok: false, latencyMs, error: msg }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 export async function callAi(messages: AiMessage[], opts?: { json?: boolean; temperature?: number }): Promise<string> {
   let lastErr: any
   for (let attempt = 0; attempt <= AI_MAX_RETRIES; attempt++) {

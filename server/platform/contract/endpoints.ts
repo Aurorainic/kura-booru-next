@@ -1,5 +1,5 @@
 /**
- * 53 端点契约冻结清单（plan.md §阶段 1；backend-audit 附录 A）。
+ * 59 端点契约冻结清单（plan.md §阶段 1；backend-audit 附录 A）。
  *
  * 这是契约的静态真源：路由文件增减/改名必须与这里同步，check.mjs 负责双向漂移守护。
  * frozen 标注三类不可变契约（backend-audit §6）：
@@ -51,6 +51,13 @@ export const ENDPOINT_CONTRACTS: EndpointContract[] = [
   { method: 'POST', path: '/api/admin/ai/suggest-ratings', file: 'api/admin/ai/suggest-ratings.post.ts', auth: 'session' },
   { method: 'GET', path: '/api/admin/ai/jobs/:id', file: 'api/admin/ai/jobs/[id].get.ts', auth: 'session' },
   { method: 'GET', path: '/api/admin/ai/status', file: 'api/admin/ai/status.get.ts', auth: 'session' },
+  { method: 'PUT', path: '/api/admin/ai/toggle', file: 'api/admin/ai/toggle.put.ts', auth: 'session' },
+  // admin/ai/providers (5)
+  { method: 'GET', path: '/api/admin/ai/providers', file: 'api/admin/ai/providers/index.get.ts', auth: 'session' },
+  { method: 'POST', path: '/api/admin/ai/providers', file: 'api/admin/ai/providers/index.post.ts', auth: 'session' },
+  { method: 'PUT', path: '/api/admin/ai/providers/:id', file: 'api/admin/ai/providers/[id].put.ts', auth: 'session' },
+  { method: 'DELETE', path: '/api/admin/ai/providers/:id', file: 'api/admin/ai/providers/[id].delete.ts', auth: 'session' },
+  { method: 'POST', path: '/api/admin/ai/providers/test', file: 'api/admin/ai/providers/test.post.ts', auth: 'session' },
   // admin/tags (8)
   { method: 'GET', path: '/api/admin/tags', file: 'api/admin/tags/index.get.ts', auth: 'session' },
   { method: 'PATCH', path: '/api/admin/tags/:id', file: 'api/admin/tags/[id].patch.ts', auth: 'session' },

@@ -19,12 +19,18 @@ export async function getSettings(): Promise<Record<string, string>> {
 
 export async function getPublicSettings() {
   const all = await getSettings()
+  // Lazy import: lib/ai/config imports getSettings from this module — a static
+  // import here would create a circular dependency at module-eval time.
+  const { isAiEnabled } = await import('../lib/ai/config')
   return {
     site_title: all.site_title || 'Kura Booru',
     site_description: all.site_description || '',
     announcement: all.announcement || '',
     head_inject: all.head_inject || '',
     maintenance_mode: all.maintenance_mode || 'false',
+    // v0.9.0: feature flag only (never keys/endpoints) — drives the footer AI
+    // badge now that the toggle lives in the DB instead of build-time env.
+    ai_enabled: String(isAiEnabled()),
   }
 }
 

@@ -321,7 +321,7 @@ bot.command('info', async (ctx) => {
       `🏷 Tags: ${(post.tags || []).map((t: any) => t.name).join(', ')}`
 
     // AI summary (non-blocking)
-    if (process.env.ENABLE_AI_TAG_PROCESSING === 'true') {
+    if (isAiEnabled()) {
       try {
         const summary = await generatePostSummary(post)
         if (summary) baseInfo += `\n\n✨ AI: ${summary}`
@@ -392,7 +392,7 @@ bot.hears(/^!info\b/, async (ctx) => {
     if (!post) { await ctx.reply(t('notFound', ctx.config.lang)).catch(() => {}); return }
     const ratingEmoji: Record<string, string> = { safe: '🟢', questionable: '🟡', explicit: '🔴' }
     let reply = `${post.title || t('untitled', ctx.config.lang)}\n${SITE_URL}/posts/${post.id}\n${ratingEmoji[post.rating] || ''} ${post.rating}`
-    if (process.env.ENABLE_AI_TAG_PROCESSING === 'true') {
+    if (isAiEnabled()) {
       try { const summary = await generatePostSummary(post); if (summary) reply += `\n✨ ${summary}` } catch { /* non-blocking */ }
     }
     await ctx.reply(reply.slice(0, 4096)).catch(() => {})
@@ -405,7 +405,7 @@ bot.command('aitags', async (ctx) => {
     const modeArg = ctx.message?.text?.split(' ')[1]
     const mode = (modeArg === 'all' ? 'all' : 'unprocessed') as 'unprocessed' | 'all'
     const lang = ctx.config.lang
-    if (process.env.ENABLE_AI_TAG_PROCESSING !== 'true') {
+    if (!isAiEnabled()) {
       await ctx.reply(lang === 'zh' ? 'AI 处理未启用' : 'AI processing not enabled').catch(() => {})
       return
     }
@@ -430,7 +430,7 @@ bot.command('ai', async (ctx) => {
       await ctx.reply(ctx.config.lang === 'zh' ? '用法: /ai <问题>' : 'Usage: /ai <question>').catch(() => {})
       return
     }
-    if (process.env.ENABLE_AI_TAG_PROCESSING !== 'true') {
+    if (!isAiEnabled()) {
       await ctx.reply(ctx.config.lang === 'zh' ? 'AI 未启用' : 'AI not enabled').catch(() => {})
       return
     }
@@ -451,7 +451,7 @@ bot.hears(/^!ai\b/, async (ctx) => {
   try {
     const query = ctx.message?.text?.replace(/^!ai\s*/, '').trim()
     if (!query) return
-    if (process.env.ENABLE_AI_TAG_PROCESSING !== 'true') return
+    if (!isAiEnabled()) return
     const thinkingMsg = await ctx.reply('🤔…').catch(() => {})
     const reply = await adminAssistantChat(query, { source: 'bot', lang: ctx.config.lang })
     if (thinkingMsg) {
@@ -621,7 +621,7 @@ async function pollAndNotify(
       const autopass = await redis.get(`kura:bot:autopass:${chatId}`)
       // AI rating suggestion (non-blocking)
       let aiSuggestion: { rating: string; confidence: number } | null = null
-      if (process.env.ENABLE_AI_TAG_PROCESSING === 'true') {
+      if (isAiEnabled()) {
         try { const s = await suggestRatingForPost(postId); if (s) aiSuggestion = { rating: s.rating, confidence: s.confidence } }
         catch { /* non-blocking */ }
       }

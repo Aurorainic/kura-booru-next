@@ -106,7 +106,7 @@ export async function processResult(result: SidecarResult, forceRating?: 'safe' 
     })
 
     // ── 7. AI tag processing (non-blocking) ──
-    if (process.env.ENABLE_AI_TAG_PROCESSING === 'true') {
+    if (isAiEnabled()) {
       try { await aiProcessTagsForPost(postId!, []) }
       catch (e) { console.warn('[pipeline] AI tag processing failed (non-blocking):', e) }
     }
@@ -397,7 +397,7 @@ async function insertOnePage(args: {
     await associateTags(tx, postId, tagIds)
   })
 
-  if (process.env.ENABLE_AI_TAG_PROCESSING === 'true') {
+  if (isAiEnabled()) {
     try { await aiProcessTagsForPost(postId!, []) }
     catch (e) { console.warn('[pipeline] AI tag processing failed (non-blocking):', e) }
   }

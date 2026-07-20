@@ -79,6 +79,7 @@ export interface SiteSettings {
   announcement: string
   head_inject: string
   maintenance_mode: string
+  ai_enabled?: string
 }
 
 export interface DashboardOverview {
@@ -102,6 +103,28 @@ export interface AiStatus {
   enabled: boolean
   endpoint: string | null
   model: string | null
+}
+
+export interface AiProvider {
+  id: string
+  name: string
+  endpoint: string
+  model: string
+  api_key_masked: string
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AiProvidersResponse {
+  tag_processing: boolean
+  providers: AiProvider[]
+}
+
+export interface AiConnectionTestResult {
+  ok: boolean
+  latencyMs: number
+  error?: string
 }
 
 export interface TagClassificationSuggestion {
