@@ -24,7 +24,8 @@ export default defineApiKeyHandler({
       db.select({ id: posts.id, thumbKey: posts.thumbKey, title: posts.title, rating: posts.rating, sourceSite: posts.sourceSite, createdAt: posts.createdAt }).from(posts).orderBy(sql`created_at desc`).limit(6),
     ])
 
-    const overview = (mvResult.rows?.[0] ?? mvResult[0]) as any
+    const result = mvResult as any
+    const overview = (result.rows?.[0] ?? result[0]) ?? undefined
     return {
       overview: {
         total_posts: Number(overview?.total_posts || 0),

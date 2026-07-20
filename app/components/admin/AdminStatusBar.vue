@@ -2,6 +2,7 @@
 // AdminStatusBar: consolidated top-of-page status bar.
 // Replaces the duplicate system-status polling in DashboardPanel and the AI
 // status line in AiAssistantPanel. One poller, two indicators.
+import type { AiStatus } from '~/types'
 
 const { ssrCookie } = useSsrContext()
 
