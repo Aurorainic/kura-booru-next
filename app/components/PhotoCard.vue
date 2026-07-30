@@ -110,3 +110,23 @@ function onCardClick(e: MouseEvent) {
   <!-- Gallery zoom modal (open on click; "详情" button navigates to detail page) -->
   <ImageModal v-model="modalOpen" :src="previewUrl" :alt="post.title || `作品 ${post.id.slice(0, 8)}`" :detail-href="`/posts/${post.id}`" />
 </template>
+
+<style scoped>
+/* Only show the tag overlay on devices that support hover (desktop with mouse).
+   On touch devices, hovering is not meaningful and the overlay intercepts taps,
+   causing conflicts with the gallery zoom modal (M3 fix). */
+@media (hover: hover) {
+  .masonry-item .tag-overlay {
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--ease-out);
+  }
+  .masonry-item:hover .tag-overlay {
+    opacity: 1;
+  }
+}
+@media (hover: none) {
+  .masonry-item .tag-overlay {
+    display: none;
+  }
+}
+</style>

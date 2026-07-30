@@ -13,14 +13,15 @@
 import crypto from 'crypto'
 import { eq, sql } from 'drizzle-orm'
 import { db } from '../../utils/db'
-import { posts } from '../../schema/posts'
-import { postTags } from '../../schema/post_tags'
+import { posts, postTags } from '../../schema'
 import type { SidecarResult, PipelineResult } from '../../utils/queue'
 import { checkDuplicate } from './steps/dedup'
 import { generateThumbnails } from './steps/thumbnails'
 import { uploadImages } from './steps/upload'
 import { computeRating } from './steps/rating'
 import { upsertTags, associateTags } from './steps/tags'
+import { isAiEnabled } from '../ai/config'
+import { aiProcessTagsForPost } from '../ai/reprocess'
 
 export async function processResult(result: SidecarResult, forceRating?: 'safe' | 'questionable' | 'explicit'): Promise<PipelineResult> {
   if (result.status === 'error') {
@@ -266,7 +267,7 @@ async function processMultiImageResult(
     await db.update(posts)
       .set({ pageCount: successCount })
       .where(eq(posts.seriesId, seriesId))
-      .catch(err => console.error('[pipeline] page_count reconcile failed:', err))
+      .catch(err => console.error('[pipeline] page_count reconcile failed for seriesId=%s: %s', seriesId, err instanceof Error ? err.message : err))
   }
 
   const anchorPage = pageResults.find(r => r.page_index === 1)

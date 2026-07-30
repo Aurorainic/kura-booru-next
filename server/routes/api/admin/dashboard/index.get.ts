@@ -26,6 +26,9 @@ export default defineApiKeyHandler({
 
     const result = mvResult as any
     const overview = (result.rows?.[0] ?? result[0]) ?? undefined
+    if (!overview) {
+      console.warn('[dashboard] mv_dashboard_stats returned no rows — materialized view may not be populated yet')
+    }
     return {
       overview: {
         total_posts: Number(overview?.total_posts || 0),

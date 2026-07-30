@@ -17,7 +17,10 @@ async function submit() {
       // the stale isAdmin=false from the initial SSR.
       window.location.href = '/'
     } else {
-      error.value = '登录成功但无管理员权限'
+      // Uniform error message — do not reveal whether the password was correct
+      // (prevents login information disclosure: attacker cannot distinguish
+      // between "password correct but not admin" and "wrong credentials").
+      error.value = '登录失败'
     }
   } catch (e: any) {
     error.value = '用户名或密码错误'

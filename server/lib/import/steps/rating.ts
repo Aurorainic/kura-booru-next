@@ -8,6 +8,8 @@ import { inArray } from 'drizzle-orm'
 import { db } from '../../../utils/db'
 import { autoRatingRules } from '../../../schema/auto_rating_rules'
 
+// RATING_RANK 与 server/schema/enums.ts 的 ratingEnum 枚举值绑定。
+// 枚举顺序：safe < questionable < explicit。若将来枚举增删值，此处需同步更新。
 const RATING_RANK: Record<string, number> = { safe: 0, questionable: 1, explicit: 2 }
 
 export async function computeRating(

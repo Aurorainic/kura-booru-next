@@ -1,6 +1,19 @@
 import { Bot, type Context } from 'grammy'
 import { sql } from 'drizzle-orm'
 import type { PipelineResult } from '../../utils/queue'
+import { db } from '../../utils/db'
+import { redis } from '../../utils/redis'
+import { searchPosts, getRandomPost, getPostBySource } from '../posts/repo'
+import { isAiEnabled } from '../ai/config'
+import { generatePostSummary } from '../ai/summary'
+import { suggestRatingForPost } from '../ai/ratings'
+import { adminAssistantChat } from '../ai/assistant'
+import { reprocessTags } from '../ai/reprocess'
+import { enqueueJob, pollJobResult } from '../../utils/queue'
+import { identifySource, resolveSourceOrOther } from '../../utils/url-patterns'
+import { isPrivateHost } from '../../utils/settings'
+import { confirmRating, startCountdown, ratingCountdowns } from '../../utils/bot-rating'
+import { posts, tags, postTags } from '../../schema'
 
 // Custom context flavor: per-request bot config set by auth middleware.
 // grammy standard pattern — one flavor declaration eliminates all ctx.config errors.

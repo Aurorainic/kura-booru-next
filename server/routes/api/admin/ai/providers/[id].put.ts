@@ -55,15 +55,16 @@ export default defineAdminHandler({
       updates.enabled = body.enabled === true
     }
 
-    // Single active provider: enabling this row disables all others first.
-    if (updates.enabled === true) {
-      await db.update(aiProviders).set({ enabled: false })
-    }
-
-    const [row] = await db.update(aiProviders)
-      .set(updates)
-      .where(eq(aiProviders.id, id))
-      .returning()
+    // Single active provider: enabling this row disables all others first (atomic).
+    const [row] = await db.transaction(async (tx) => {
+      if (updates.enabled === true) {
+        await tx.update(aiProviders).set({ enabled: false })
+      }
+      return tx.update(aiProviders)
+        .set(updates)
+        .where(eq(aiProviders.id, id))
+        .returning()
+    })
 
     if (!row) throw new AppError('NOT_FOUND', 404, 'Provider not found')
 

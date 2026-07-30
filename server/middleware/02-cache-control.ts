@@ -29,8 +29,10 @@ export default defineEventHandler(async (event) => {
       return
     }
 
-    // Check admin status. On auth failure, fail-CLOSED for cache: skip CDN
-    // caching entirely (s-maxage=0) instead of treating the visitor as admin
+    // Check admin status. 01-ssr-context skips /api/ paths, so
+    // event.context.isAdmin is not set here — compute fresh.
+    // On auth failure, fail-CLOSED for cache: skip CDN caching entirely
+    // (s-maxage=0) instead of treating the visitor as admin
     // — over-private would silently bypass CDN and hammer the origin during
     // a Redis outage, but a wrong-content-cache leak is worse.
     const cookie = getRequestHeader(event, 'cookie') || ''
@@ -81,11 +83,17 @@ export default defineEventHandler(async (event) => {
       response.setHeader('Cache-Control', 'private, no-store')
       return
     }
-    const cookie = getRequestHeader(event, 'cookie') || ''
-    let isAdmin = false
+    // Reuse isAdmin from 01-ssr-context middleware which already computed it.
+    // Avoids duplicate getIsAdmin call (one Redis round-trip per SSR request).
+    // If isAdmin is false, fall back to getIsAdmin to detect fail-closed auth.
+    let isAdmin = (event.context as any)?.isAdmin === true
     let authOk = true
-    try { isAdmin = await getIsAdmin(cookie) } catch {
-      authOk = false
+    if (!isAdmin) {
+      try {
+        isAdmin = await getIsAdmin(getRequestHeader(event, 'cookie') || '')
+      } catch {
+        authOk = false
+      }
     }
     if (isAdmin || !authOk) {
       response.setHeader('Cache-Control', 'private, no-store')

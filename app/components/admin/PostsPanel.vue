@@ -30,6 +30,21 @@ const posts = computed(() => data.value?.items || [])
 const total = computed(() => data.value?.total || 0)
 const totalPages = computed(() => Math.ceil(total.value / perPage.value))
 
+// Ellipsis-based pagination (same pattern as Pagination.vue)
+const pages = computed(() => {
+  const total = totalPages.value
+  const current = page.value
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const result: (number | '...')[] = [1]
+  if (current > 3) result.push('...')
+  const start = Math.max(2, current - 1)
+  const end = Math.min(total - 1, current + 1)
+  for (let i = start; i <= end; i++) result.push(i)
+  if (current < total - 2) result.push('...')
+  result.push(total)
+  return result
+})
+
 // Rating update
 const saving = ref<Set<string>>(new Set())
 async function updateRating(post: Post, newRating: string) {
@@ -210,17 +225,20 @@ function goPage(p: number) {
         icon="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z"
       />
 
-      <!-- Pagination -->
+      <!-- Pagination with ellipsis pattern -->
       <div v-if="totalPages > 1" class="flex items-center justify-center gap-1 pt-2">
-        <button
-          v-for="p in Math.min(totalPages, 10)"
-          :key="p"
-          @click="goPage(p)"
-          class="w-8 h-8 text-xs rounded-lg transition-all font-medium"
-          :class="p === page ? 'text-white' : 'text-[var(--text-muted)] hover:bg-[var(--accent-subtle)]'"
-          :style="p === page ? { background: 'var(--accent-color)' } : {}"
-        >{{ p }}</button>
-        <span v-if="totalPages > 10" class="text-[0.625rem] text-[var(--text-muted)] px-2">… 共 {{ totalPages }} 页</span>
+        <template v-for="(p, i) in pages" :key="i">
+          <span v-if="p === '...'" class="text-[var(--text-muted)] text-sm px-1 select-none">…</span>
+          <button
+            v-else
+            @click="goPage(p as number)"
+            class="w-8 h-8 text-xs rounded-lg transition-all font-medium"
+            :class="p === page ? 'text-white' : 'text-[var(--text-muted)] hover:bg-[var(--accent-subtle)]'"
+            :style="p === page ? { background: 'var(--accent-color)' } : {}"
+            :aria-current="p === page ? 'page' : undefined"
+            :aria-label="`第 ${p} 页`"
+          >{{ p }}</button>
+        </template>
       </div>
     </template>
   </div>

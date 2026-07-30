@@ -8,32 +8,14 @@ const props = defineProps<{
 const toast = useToast()
 const chatInput = ref('')
 
-// ponytail: chat history persists across section switches AND page reloads
-// via localStorage. Capped at 50 messages (25 Q&A pairs) to stay within
-// localStorage size limits while preserving long conversations.
-const STORAGE_KEY = 'kura-ai-chat-history'
+// Chat history is ephemeral by default (M5 fix). For persistent history
+// across page reloads, use localStorage with save/load logic.
 const chatMessages = ref<{ role: 'user' | 'assistant'; content: string; suggestions?: any[] }[]>([])
 const chatLoading = ref(false)
-
-function loadHistory() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) chatMessages.value = JSON.parse(raw).slice(-50)
-  } catch { /* ignore - corrupted localStorage, start fresh */ }
-}
-
-function saveHistory() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(chatMessages.value.slice(-50)))
-  } catch { /* ignore - quota exceeded, keep in-memory only */ }
-}
-
-onMounted(loadHistory)
 
 // Clear conversation - admin wants a fresh start
 function clearChat() {
   chatMessages.value = []
-  try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
   toast.info('已清空对话')
 }
 
@@ -75,10 +57,8 @@ async function sendChat() {
       props.ssrCookie,
     )
     chatMessages.value.push({ role: 'assistant', content: reply.text, suggestions: reply.suggestions })
-    saveHistory()
   } catch (e: any) {
     chatMessages.value.push({ role: 'assistant', content: `错误: ${e.message || '未知错误'}` })
-    saveHistory()
   } finally {
     chatLoading.value = false
   }

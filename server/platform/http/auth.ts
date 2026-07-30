@@ -120,3 +120,42 @@ export function definePublicHandler<S extends HandlerSchemas | undefined = undef
     ...opts,
   })
 }
+
+export interface TelegramAuth {
+  kind: 'telegram'
+}
+
+/**
+ * Telegram bot webhook handler wrapper.
+ *
+ * 验证 x-telegram-bot-api-secret-token，bot.token 已配置，确保 webhook
+ * 请求来源可信。所有错误通过 AppError 抛出，统一走 { code, message } 契约。
+ */
+export function defineTelegramHandler<S extends HandlerSchemas | undefined = undefined>(
+  opts: CommonOptions<S> & { handler: (ctx: Ctx<TelegramAuth, S>) => unknown | Promise<unknown> },
+) {
+  return defineWrappedHandler({
+    authKind: 'telegram',
+    authenticate: async (event) => {
+      // Verify bot is configured
+      const { bot } = await import('../../utils/bot')
+      if (!bot.token) {
+        throw new AppError('SERVICE_UNAVAILABLE', 503, 'Bot not configured')
+      }
+
+      // Verify webhook secret token
+      const secret = getHeader(event, 'x-telegram-bot-api-secret-token')
+      const expectedSecret = process.env.BOT_WEBHOOK_SECRET
+
+      if (process.env.NODE_ENV === 'production' && !expectedSecret) {
+        throw new AppError('INTERNAL', 500, 'Webhook secret not configured')
+      }
+      if (expectedSecret && secret !== expectedSecret) {
+        throw new AppError('UNAUTHORIZED', 401, 'Unauthorized')
+      }
+
+      return { kind: 'telegram' as const }
+    },
+    ...opts,
+  })
+}

@@ -26,16 +26,17 @@ function switchTab(tab: string) {
   navigateTo(`/admin?tab=${tab}`)
 }
 
-// Route-level code splitting — only load the active panel
-const DashboardPanel = defineAsyncComponent(() => import('~/components/admin/DashboardPanel.vue'))
-const PostsPanel = defineAsyncComponent(() => import('~/components/admin/PostsPanel.vue'))
-const TagsPanel = defineAsyncComponent(() => import('~/components/admin/TagsPanel.vue'))
-const AutoRatingPanel = defineAsyncComponent(() => import('~/components/admin/AutoRatingPanel.vue'))
-const AiAssistantPanel = defineAsyncComponent(() => import('~/components/admin/AiAssistantPanel.vue'))
-const AiProvidersPanel = defineAsyncComponent(() => import('~/components/admin/AiProvidersPanel.vue'))
-const ExtensionKeysPanel = defineAsyncComponent(() => import('~/components/admin/ExtensionKeysPanel.vue'))
-const SettingsPanel = defineAsyncComponent(() => import('~/components/admin/SettingsPanel.vue'))
-const PasswordPanel = defineAsyncComponent(() => import('~/components/admin/PasswordPanel.vue'))
+// Route-level code splitting — only load the active panel.
+// Each defineAsyncComponent explicitly sets a name so KeepAlive can track them.
+const DashboardPanel = defineAsyncComponent({ loader: () => import('~/components/admin/DashboardPanel.vue'), name: 'DashboardPanel' })
+const PostsPanel = defineAsyncComponent({ loader: () => import('~/components/admin/PostsPanel.vue'), name: 'PostsPanel' })
+const TagsPanel = defineAsyncComponent({ loader: () => import('~/components/admin/TagsPanel.vue'), name: 'TagsPanel' })
+const AutoRatingPanel = defineAsyncComponent({ loader: () => import('~/components/admin/AutoRatingPanel.vue'), name: 'AutoRatingPanel' })
+const AiAssistantPanel = defineAsyncComponent({ loader: () => import('~/components/admin/AiAssistantPanel.vue'), name: 'AiAssistantPanel' })
+const AiProvidersPanel = defineAsyncComponent({ loader: () => import('~/components/admin/AiProvidersPanel.vue'), name: 'AiProvidersPanel' })
+const ExtensionKeysPanel = defineAsyncComponent({ loader: () => import('~/components/admin/ExtensionKeysPanel.vue'), name: 'ExtensionKeysPanel' })
+const SettingsPanel = defineAsyncComponent({ loader: () => import('~/components/admin/SettingsPanel.vue'), name: 'SettingsPanel' })
+const PasswordPanel = defineAsyncComponent({ loader: () => import('~/components/admin/PasswordPanel.vue'), name: 'PasswordPanel' })
 
 // ponytail: component lookup for keep-alive include list — must match the
 // panel's `name` option. defineAsyncComponent preserves the underlying name.
@@ -77,7 +78,7 @@ const panelMap: Record<string, ReturnType<typeof defineAsyncComponent>> = {
 
     <!-- Tab content — keep-alive preserves panel state across tab switches -->
     <div>
-      <KeepAlive>
+      <KeepAlive :max="3">
         <component :is="panelMap[currentTab] || panelMap.dashboard" />
       </KeepAlive>
     </div>

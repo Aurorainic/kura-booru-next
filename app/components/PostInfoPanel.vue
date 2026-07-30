@@ -27,7 +27,7 @@ const emit = defineEmits<{
     </div>
 
     <!-- Description -->
-    <div v-if="post.description" class="description text-sm text-[var(--text-primary)] leading-relaxed" v-html="post.description" />
+    <div v-if="post.description" class="description text-sm text-[var(--text-primary)] leading-relaxed">{{ post.description }}</div>
 
     <!-- Info card -->
     <div class="dash-card !p-4 space-y-3">
@@ -98,8 +98,4 @@ const emit = defineEmits<{
 </template>
 
 <style scoped>
-.description :deep(a) {
-  color: var(--accent-color);
-  text-decoration: underline;
-}
 </style>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // AdminStatusBar: consolidated top-of-page status bar.
-// Replaces the duplicate system-status polling in DashboardPanel and the AI
-// status line in AiAssistantPanel. One poller, two indicators.
+// Provides aiStatus and aiEnabled to child/admin panels via inject,
+// replacing the duplicate getAiStatus calls in AiAssistantPanel.
 import type { AiStatus } from '~/types'
 
 const { ssrCookie } = useSsrContext()
@@ -12,6 +12,11 @@ let pollTimer: ReturnType<typeof setInterval> | null = null
 let alive = true
 
 const aiEnabled = computed(() => aiStatus.value?.enabled && aiStatus.value?.endpoint && aiStatus.value?.model)
+
+// Share AI status via useState so sibling panels (e.g. AiAssistantPanel)
+// can consume it without duplicating the getAiStatus call. (H5 fix)
+const sharedAiStatus = useState<AiStatus | null>('sharedAiStatus', () => null)
+watch(aiStatus, (v) => { sharedAiStatus.value = v }, { immediate: true })
 
 function endpointHost(ep: string | undefined | null): string {
   try { return ep ? new URL(ep).hostname : '' } catch { return '' }

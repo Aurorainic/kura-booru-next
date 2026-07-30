@@ -63,6 +63,12 @@ services:
         condition: service_healthy
     networks:
       - kura-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f sidecar.py > /dev/null && echo ok || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # ---------------------------------------------------------------------------
   # PostgreSQL 18 — Primary database

@@ -1,5 +1,22 @@
+function isPathSafe(key: string): boolean {
+  // Prevent path traversal: reject empty/slash-only keys, absolute paths,
+  // and any '..' component or '.' component.
+  if (!key || key === '/') return false
+  const parts = key.split('/')
+  for (const part of parts) {
+    if (part === '..' || part === '.') return false
+  }
+  return true
+}
+
 export default defineEventHandler(async (event) => {
   const key = event.path.replace(/^\/i\/?/, '')
+
+  // Path traversal guard
+  if (!isPathSafe(key)) {
+    return new Response('Forbidden', { status: 403 })
+  }
+
   const s3Base = process.env.S3_EXTERNAL_URL || ''
   if (!s3Base) {
     return new Response('S3_EXTERNAL_URL not configured', { status: 502 })

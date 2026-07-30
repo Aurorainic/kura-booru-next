@@ -1,7 +1,7 @@
 import { eq, and, sql, desc, asc, inArray, exists } from 'drizzle-orm'
 import { db } from '../../utils/db'
 import { posts, tags, postTags, tagAliases } from '../../schema'
-import type { Rating } from '~/types'
+import type { Rating } from '../../platform/schemas/enums'
 import { clampPerPage } from '../pagination'
 import { serializePost } from './serialize'
 import { parseSearchQuery } from '../search/parser'

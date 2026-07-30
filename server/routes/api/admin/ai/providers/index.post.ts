@@ -40,14 +40,15 @@ export default defineAdminHandler({
     }
     const enabled = body?.enabled === true
 
-    // Single active provider: enabling the new row disables all others.
-    if (enabled) {
-      await db.update(aiProviders).set({ enabled: false })
-    }
-
-    const [row] = await db.insert(aiProviders).values({
-      name, endpoint, model, apiKey, enabled,
-    }).returning()
+    // Single active provider: enabling the new row disables all others (atomic).
+    const [row] = await db.transaction(async (tx) => {
+      if (enabled) {
+        await tx.update(aiProviders).set({ enabled: false })
+      }
+      return tx.insert(aiProviders).values({
+        name, endpoint, model, apiKey, enabled,
+      }).returning()
+    })
 
     if (!row) throw new AppError('INTERNAL', 500, 'Insert failed')
 

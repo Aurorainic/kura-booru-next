@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "将 Pixiv 作品导入你的 Kura Booru 实例",
   "permissions": ["storage"],
-  "host_permissions": ["https://*.pixiv.net/*", "*://www.pixiv.net/*", "*://phixiv.net/*"],
+  "host_permissions": ["https://*.pixiv.net/*"],
   "background": {
     "service_worker": "background/service-worker.js"
   },

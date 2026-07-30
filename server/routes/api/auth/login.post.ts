@@ -17,26 +17,45 @@ export default definePublicHandler({
     const failKey = `login:fail:${ip}:${body.username}`
     const lockKey = `login:lock:${ip}:${body.username}`
 
-    const isLocked = await redis.get(lockKey)
-    if (isLocked) {
-      throw new AppError('RATE_LIMITED', 429, 'Too many attempts. Try again later.')
+    try {
+      const isLocked = await redis.get(lockKey)
+      if (isLocked) {
+        throw new AppError('RATE_LIMITED', 429, 'Too many attempts. Try again later.')
+      }
+    } catch (err) {
+      // Redis down → fail-open: allow login attempt to proceed.
+      // Without this, a Redis outage would permanently lock out the admin.
+      if (!(err instanceof AppError)) {
+        console.warn('[login] Redis unavailable, skipping rate-limit check')
+      } else {
+        throw err
+      }
     }
 
     // verifyAdminLogin, createSession auto-imported by Nitro
     const admin = await verifyAdminLogin(body.username, body.password)
     if (!admin) {
-      const fails = await redis.incr(failKey)
-      if (fails === 1) await redis.expire(failKey, 300)
-      if (fails >= 5) {
-        await redis.set(lockKey, '1', { EX: 60 })
-        await redis.del(failKey)
+      try {
+        const fails = await redis.incr(failKey)
+        if (fails === 1) await redis.expire(failKey, 300)
+        if (fails >= 5) {
+          await redis.set(lockKey, '1', { EX: 60 })
+          await redis.del(failKey)
+        }
+      } catch {
+        // Redis down — fail-open: allow retry without lockout tracking.
+        console.warn('[login] Redis unavailable, skipping failure tracking')
       }
       throw new AppError('UNAUTHORIZED', 401, 'Invalid credentials')
     }
 
     // Reset counters on successful login
-    await redis.del(failKey)
-    await redis.del(lockKey)
+    try {
+      await redis.del(failKey)
+      await redis.del(lockKey)
+    } catch {
+      // Non-fatal: Redis down, counters reset on next restart.
+    }
 
     const token = await createSession(admin.id)
     setSessionCookie(event, token)

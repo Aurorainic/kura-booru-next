@@ -3,7 +3,7 @@
 import { eq, and, sql, desc, asc } from 'drizzle-orm'
 import { db } from '../../utils/db'
 import { tags } from '../../schema'
-import type { TagCategory } from '~/types'
+import type { TagCategory } from '../../platform/schemas/enums'
 import { callAi } from './client'
 import type { MergeSuggestion } from './types'
 

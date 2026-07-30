@@ -19,11 +19,11 @@ async function startImport() {
   results.value = []
 
   try {
-    // Enqueue all URLs
-    const resp = await $fetch<{ results: { task_id: string; status: string }[] }>('/api/tasks/web-import', {
+    // Enqueue all URLs via fetchApi (consistent with other API calls)
+    const resp = await fetchApi<{ results: { task_id: string; status: string }[] }>('/tasks/web-import', undefined, {
       method: 'POST',
-      credentials: 'include',
-      body: { urls: urlList },
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ urls: urlList }),
     })
     results.value = resp.results
     const taskIds = resp.results.map(r => r.task_id).filter(Boolean)

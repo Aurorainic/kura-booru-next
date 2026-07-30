@@ -32,10 +32,14 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     internalApiUrl: process.env.INTERNAL_API_URL || 'http://127.0.0.1:3000/api',
+    // enableAiTagProcessing: only the server checks this flag to decide
+    // whether to dispatch AI tagging jobs. The client never needs to know
+    // this value — kept at root level (server-only) to avoid leaking the
+    // feature toggle to the browser bundle.
+    enableAiTagProcessing: process.env.ENABLE_AI_TAG_PROCESSING || 'false',
     public: {
       gitTag: process.env.KURA_VERSION || process.env.PUBLIC_GIT_TAG || 'dev',
       repoUrl: process.env.PUBLIC_REPO_URL || '',
-      enableAiTagProcessing: process.env.ENABLE_AI_TAG_PROCESSING || 'false',
     },
   },
 

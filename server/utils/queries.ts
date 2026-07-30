@@ -1,7 +1,7 @@
 import { inArray } from 'drizzle-orm'
 import { db } from './db'
 import { autoRatingRules } from '../schema'
-import type { Rating } from '~/types'
+import type { Rating } from '../platform/schemas/enums'
 
 // v0.9.0 R2.2: queries.ts split into lib/. This file is now a re-export
 // point (backward compat for Nitro auto-import consumers) + the auto-rating

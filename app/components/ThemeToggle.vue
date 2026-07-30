@@ -9,17 +9,25 @@ const themes: Array<{ key: 'auto' | 'light' | 'dark'; label: string; icon: strin
 const current = ref<'auto' | 'light' | 'dark'>('auto')
 const spinning = ref(false)
 
+// Declared at top level so both onMounted and onUnmounted can access it
+let mq: MediaQueryList | null = null
+let onSystemChange: ((this: MediaQueryList, ev: MediaQueryListEvent) => void) | null = null
+
 onMounted(() => {
   current.value = (localStorage.getItem('kura-theme-preference') as typeof current.value) || 'auto'
   applyTheme(current.value)
 
-  // F-C-1: Listen for system theme changes when in 'auto' mode
-  const mq = window.matchMedia('(prefers-color-scheme: dark)')
-  const onSystemChange = () => {
+  // Listen for system theme changes when in 'auto' mode
+  mq = window.matchMedia('(prefers-color-scheme: dark)')
+  onSystemChange = () => {
     if (current.value === 'auto') applyTheme('auto')
   }
   mq.addEventListener('change', onSystemChange)
-  onUnmounted(() => mq.removeEventListener('change', onSystemChange))
+})
+
+// onUnmounted is top-level (parallel to onMounted, not nested inside it) — M6 fix
+onUnmounted(() => {
+  if (mq && onSystemChange) mq.removeEventListener('change', onSystemChange)
 })
 
 function applyTheme(theme: 'auto' | 'light' | 'dark') {

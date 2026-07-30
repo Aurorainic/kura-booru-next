@@ -109,7 +109,10 @@ import_database() {
 
     log_info "Importing dump to production database..."
 
-    # Import dump
+    # Extract password from connection string for non-interactive psql
+    export PGPASSWORD=$(echo "$PROD_DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+
+    # Import dump (PGPASSWORD is set for non-interactive auth)
     psql "$PROD_DATABASE_URL" < "$dump_file"
 
     if [ $? -eq 0 ]; then

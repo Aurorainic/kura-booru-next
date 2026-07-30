@@ -1,11 +1,17 @@
 <script setup lang="ts">
 const { ssrCookie } = useSsrContext()
-const { data: stats, pending } = await useAsyncData('dashboard', async () => {
+const { data: stats, pending, refresh } = await useAsyncData('dashboard', async () => {
   try {
     return await fetchDashboardStats(ssrCookie.value)
   } catch {
     return null
   }
+})
+
+// Refresh dashboard data when the panel is reactivated (e.g. navigating back
+// from another admin tab), so the displayed stats are not stale.
+onActivated(() => {
+  refresh()
 })
 
 const overviewCards = computed(() => {
@@ -116,6 +122,7 @@ const ratingBg = (rating: string) => {
               stroke-width="0.5"
               class="transition-all duration-500"
               style="opacity: 0.85;"
+              :aria-label="`${getSourceSiteLabel(slice.source_site)}: ${slice.count} 张 (${(slice.pct * 100).toFixed(0)}%)`"
             />
             <circle cx="16" cy="16" r="7" style="fill: var(--bg-surface);" />
           </svg>

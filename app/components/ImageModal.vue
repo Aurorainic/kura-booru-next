@@ -1,9 +1,12 @@
 <script setup lang="ts">
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   src: string
   alt?: string
   detailHref?: string
-}>()
+}>(), {
+  alt: '',
+  detailHref: '',
+})
 const showModal = defineModel<boolean>({ default: false })
 
 const scale = ref(1)

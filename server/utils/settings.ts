@@ -1,6 +1,7 @@
 import { db } from './db'
 import { settings } from '../schema/settings'
 import { eq, sql } from 'drizzle-orm'
+import { isAiEnabled } from '../lib/ai/config'
 
 let settingsCache: Record<string, string> = {}
 let settingsCacheAt = 0
@@ -19,9 +20,6 @@ export async function getSettings(): Promise<Record<string, string>> {
 
 export async function getPublicSettings() {
   const all = await getSettings()
-  // Lazy import: lib/ai/config imports getSettings from this module — a static
-  // import here would create a circular dependency at module-eval time.
-  const { isAiEnabled } = await import('../lib/ai/config')
   return {
     site_title: all.site_title || 'Kura Booru',
     site_description: all.site_description || '',

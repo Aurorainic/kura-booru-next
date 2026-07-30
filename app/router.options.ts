@@ -6,6 +6,11 @@ const SCROLL_KEY_PREFIX = 'kura-scroll:'
 
 export default <RouterConfig>{
   scrollBehavior(to, from, savedPosition) {
+    // Hash navigation — scroll to element with smooth behavior.
+    if (to.hash) {
+      return { el: to.hash, behavior: 'smooth' }
+    }
+
     // Browser back/forward with a saved position — use it directly.
     if (savedPosition) {
       return savedPosition

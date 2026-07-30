@@ -3,6 +3,19 @@
 import { getAiConfig } from './config'
 import type { AiMessage } from './types'
 
+// ── Custom Error class ──
+
+class AiError extends Error {
+  statusCode?: number
+  retriable?: boolean
+  constructor(message: string, opts?: { statusCode?: number; retriable?: boolean; cause?: unknown }) {
+    super(message, opts?.cause ? { cause: opts.cause } : undefined)
+    this.name = 'AiError'
+    this.statusCode = opts?.statusCode
+    this.retriable = opts?.retriable
+  }
+}
+
 // ── Core API call ──
 
 const AI_TIMEOUT_MS = 30_000
@@ -15,7 +28,7 @@ function isRetriableStatus(status: number): boolean {
 async function callAiOnce(messages: AiMessage[], opts?: { json?: boolean; temperature?: number }, signal?: AbortSignal): Promise<string> {
   const cfg = getAiConfig()
   if (!cfg.enabled || !cfg.configured) {
-    throw Object.assign(new Error('AI not configured'), { statusCode: 503 })
+    throw new AiError('AI not configured', { statusCode: 503 })
   }
 
   const baseEndpoint = cfg.endpoint!.replace(/\/$/, '')
@@ -42,9 +55,10 @@ async function callAiOnce(messages: AiMessage[], opts?: { json?: boolean; temper
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '')
-    const err = new Error(`AI API ${resp.status}: ${text.slice(0, 200)}`)
-    Object.assign(err, { statusCode: resp.status, retriable: isRetriableStatus(resp.status) })
-    throw err
+    throw new AiError(`AI API ${resp.status}: ${text.slice(0, 200)}`, {
+      statusCode: resp.status,
+      retriable: isRetriableStatus(resp.status),
+    })
   }
 
   const data = await resp.json()

@@ -28,6 +28,8 @@ const pages = computed(() => {
   return result
 })
 
+const route = useRoute()
+
 function pageUrl(page: number): string {
   if (import.meta.client) {
     const url = new URL(window.location.href)
@@ -39,16 +41,19 @@ function pageUrl(page: number): string {
     url.searchParams.set('per_page', String(props.perPage))
     return url.pathname + '?' + url.searchParams.toString()
   }
-  // ponytail: SSR fallback — useRequestURL for server-side
-  const reqUrl = useRequestURL()
-  const params = new URLSearchParams(reqUrl.search)
-  if (page === 1) {
-    params.delete('page')
-  } else {
-    params.set('page', String(page))
-  }
+  // ponytail: SSR — useRoute().path is deterministic unlike useRequestURL()
+  // which can have inconsistent pathname behavior in certain SSR edge cases.
+  const params = new URLSearchParams()
+  if (page > 1) params.set('page', String(page))
   params.set('per_page', String(props.perPage))
-  return reqUrl.pathname + '?' + params.toString()
+  // Append any existing query params from the route
+  const routeQuery = route.query
+  for (const [k, v] of Object.entries(routeQuery)) {
+    if (k !== 'page' && k !== 'per_page' && v !== undefined) {
+      params.set(k, String(v))
+    }
+  }
+  return route.path + '?' + params.toString()
 }
 
 function changePerPage(value: number) {

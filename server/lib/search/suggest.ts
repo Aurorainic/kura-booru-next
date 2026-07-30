@@ -13,6 +13,7 @@ import { tags } from '../../schema/tags'
 import { posts } from '../../schema/posts'
 import { postTags } from '../../schema/post_tags'
 import { serializeTag } from '../posts/serialize'
+import { clampPerPage } from '../pagination'
 
 /**
  * Returns up to `perPage` tag suggestions for `prefix`.
@@ -41,6 +42,6 @@ export async function suggestTags(prefix: string, isAdmin: boolean, perPage = 10
       sql`CASE WHEN ${tags.name} ILIKE ${prefix + '%'} THEN 0 ELSE 1 END`,
       desc(tags.postCount),
     )
-    .limit(perPage)
+    .limit(clampPerPage(perPage))
   return rows.map(serializeTag)
 }

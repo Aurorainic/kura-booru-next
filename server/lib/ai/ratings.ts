@@ -3,7 +3,7 @@
 import { eq, and, desc } from 'drizzle-orm'
 import { db } from '../../utils/db'
 import { posts, postTags, tags } from '../../schema'
-import type { Rating } from '~/types'
+import type { Rating } from '../../platform/schemas/enums'
 import { callAi } from './client'
 import { isAiEnabled } from './config'
 import { chunk } from './utility'

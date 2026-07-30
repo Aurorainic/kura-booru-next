@@ -1,8 +1,10 @@
 <script setup lang="ts">
-defineProps<{
+withDefaults(defineProps<{
   title: string
   subtitle?: string
-}>()
+}>(), {
+  subtitle: '',
+})
 </script>
 
 <template>

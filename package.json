@@ -12,6 +12,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "postinstall": "nuxt prepare",
+    "test": "npm run test:contract",
     "test:contract": "node server/platform/contract/check.mjs"
   },
   "dependencies": {

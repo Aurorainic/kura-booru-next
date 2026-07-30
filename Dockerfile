@@ -35,6 +35,10 @@ RUN npm run build
 # ── Stage 3: production ──
 FROM node:22-alpine AS production
 WORKDIR /app
+
+# Create non-root user for security
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
 COPY --from=build /app/.output ./.output
 EXPOSE 3000
 ENV HOST=0.0.0.0
@@ -42,6 +46,7 @@ ENV PORT=3000
 ENV NODE_ENV=production
 ARG KURA_VERSION
 ENV KURA_VERSION=${KURA_VERSION}
+USER appuser
 CMD ["node", ".output/server/index.mjs"]
 
 # ── Stage 4: dev (hot-reload, for local dev only) ──

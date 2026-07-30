@@ -1,6 +1,6 @@
 // v0.9.0 R2.5: split from server/utils/ai.ts. Tag classification (capability ①).
 
-import type { TagCategory } from '~/types'
+import type { TagCategory } from '../../platform/schemas/enums'
 import { callAi } from './client'
 import { chunk } from './utility'
 import type { TagClassification } from './types'

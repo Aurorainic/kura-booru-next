@@ -31,8 +31,9 @@
         }
 
         if (!response || !response.success) {
-          btn.textContent = response && response.error ? response.error : "失败";
           btn.className = "kura-error";
+          btn.textContent = "失败";
+          btn.title = response && response.error ? response.error : "失败";
           resetButton();
           return;
         }

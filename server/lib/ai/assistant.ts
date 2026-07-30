@@ -75,7 +75,7 @@ async function gatherAssistantContext(query: string): Promise<string> {
       db.select({ count: sql<number>`count(*)` }).from(tags),
       db.select({ count: sql<number>`count(*)` }).from(tags).where(isNull(tags.aiProcessedAt)),
       db.select({ count: sql<number>`count(*)` }).from(tags).where(sql`${tags.translation} IS NULL OR ${tags.translation} = ''`),
-      db.select({ count: sql<number>`count(*)` }).from(posts).where(isNull(posts.aiTagStatus)),
+      db.select({ count: sql<number>`count(*)` }).from(posts).where(eq(posts.aiTagStatus, 'pending')),
       db.select({ count: sql<number>`count(*)` }).from(posts).where(eq(posts.rating, 'safe')),
       db.select({ count: sql<number>`count(*)` }).from(posts).where(eq(posts.rating, 'questionable')),
       db.select({ count: sql<number>`count(*)` }).from(posts).where(eq(posts.rating, 'explicit')),

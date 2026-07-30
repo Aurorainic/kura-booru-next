@@ -26,8 +26,9 @@ const { isMac } = usePlatform()
 const modKey = computed(() => isMac.value ? '⌘' : 'Ctrl')
 const showKeycap = computed(() => !query.value && !loading.value)
 
-function onInput(value: string) {
-  query.value = value
+// Using v-model on the input, so autocomplete logic is driven by a watcher
+// on `query` instead of manually reading event.target.value.
+watch(query, (value) => {
   if (debounceTimer) clearTimeout(debounceTimer)
   if (inFlight) { inFlight.abort(); inFlight = null }
 
@@ -61,6 +62,11 @@ function onInput(value: string) {
       }
     }
   }, 250)
+})
+
+// Kept for template binding but just triggers the existing watcher logic
+function onDebouncedAutocomplete() {
+  // v-model already updates query; the watcher handles debounced autocomplete
 }
 
 function onKeyDown(e: KeyboardEvent) {
@@ -136,8 +142,8 @@ onUnmounted(() => {
       <input
         ref="inputEl"
         type="search"
-        :value="query"
-        @input="onInput(($event.target as HTMLInputElement).value)"
+        v-model="query"
+        @input="onDebouncedAutocomplete"
         @keydown="onKeyDown"
         @focus="onFocus"
         @blur="onBlur"

@@ -70,7 +70,9 @@ export async function generateThumbnails(
       .toBuffer()
     lqipDataUri = `data:image/webp;base64,${lqipBuf.toString('base64')}`
 
-    // Re-derive dims/mime from the actual image bytes — sidecar's values
+    // sharp 不可用时（未安装或加载失败），降级使用 sidecar 传来的 fallback 值。
+  // 此时无水印/缩略图/LQIP 生成，仅保留原始尺寸和 MIME 信息。
+  // Re-derive dims/mime from the actual image bytes — sidecar's values
     // come from Pillow on the downloaded file, sharp sees the same bytes so
     // they agree; sharp wins on conflict (it's the bytes we upload).
     const probed = await img.metadata()

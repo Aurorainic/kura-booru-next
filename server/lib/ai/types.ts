@@ -1,6 +1,6 @@
 // v0.9.0 R2.5: split from server/utils/ai.ts. Shared types for the AI module.
 
-import type { Rating, TagCategory } from '~/types'
+import type { Rating, TagCategory } from '../../platform/schemas/enums'
 
 // ── Types ──
 
@@ -20,7 +20,7 @@ export interface TagClassification {
 export interface AiJobStatus {
   id: string
   type: 'classify' | 'merges' | 'ratings'
-  status: 'running' | 'done' | 'error'
+  status: 'running' | 'done' | 'error' | 'gone'
   total: number
   done: number
   errors: string[]

@@ -113,4 +113,47 @@ describe("popup save", () => {
     expect(status.textContent).toBe("");
     expect(status.className).toBe("");
   });
+
+  it("shows error when API key lacks kb_ext_ prefix", () => {
+    const { dom, storageData } = setupPopup();
+    vi.runAllTicks();
+
+    const keyInput = dom.window.document.getElementById("api-key") as HTMLInputElement;
+    const urlInput = dom.window.document.getElementById("server-url") as HTMLInputElement;
+    urlInput.value = "https://kura.example.com";
+    keyInput.value = "BACKEND_API_KEY_123";  // wrong prefix
+
+    dom.window.document.getElementById("save-btn")!.click();
+    vi.runAllTicks();
+
+    const status = dom.window.document.getElementById("status")!;
+    expect(status.textContent).toBe("Key 应以 kb_ext_ 开头 — 去 admin 后台生成");
+    expect(status.className).toBe("error");
+
+    // Verify nothing was persisted
+    expect(storageData.apiKey).toBeUndefined();
+
+    // Verify error clears after 3000ms
+    vi.advanceTimersByTime(3000);
+    expect(status.textContent).toBe("");
+    expect(status.className).toBe("");
+  });
+
+  it("saves when API key has correct kb_ext_ prefix", () => {
+    const { dom, storageData } = setupPopup();
+    vi.runAllTicks();
+
+    const urlInput = dom.window.document.getElementById("server-url") as HTMLInputElement;
+    const keyInput = dom.window.document.getElementById("api-key") as HTMLInputElement;
+    urlInput.value = "https://kura.example.com";
+    keyInput.value = "kb_ext_abc123";  // correct prefix
+
+    dom.window.document.getElementById("save-btn")!.click();
+    vi.runAllTicks();
+
+    const status = dom.window.document.getElementById("status")!;
+    expect(status.textContent).toBe("已保存！");
+    expect(status.className).toBe("success");
+    expect(storageData.apiKey).toBe("kb_ext_abc123");
+  });
 });

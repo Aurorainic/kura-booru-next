@@ -19,13 +19,24 @@ export default defineNitroPlugin(() => {
 async function startPipelineWorker() {
   console.log('[pipeline-worker] started')
 
+  // Graceful shutdown via AbortController. On SIGTERM/SIGINT, the worker
+  // completes the current iteration and exits cleanly. BRPOP has a 5s timeout
+  // so the abort signal is checked at most 5s after it fires.
+  const ac = new AbortController()
+  const onSignal = () => {
+    console.log('[pipeline-worker] shutdown signal received, draining...')
+    ac.abort()
+  }
+  process.on('SIGTERM', onSignal)
+  process.on('SIGINT', onSignal)
+
   // Use dedicated connection for blocking BRPOP — shared proxy would deadlock
   const blockRedis = await getBlockingRedis()
 
-  while (true) {
+  while (!ac.signal.aborted) {
     try {
-      // Block until a job ID arrives
-      const result = await (blockRedis as any).BRPOP('kura:pending_results', 0)
+      // Block until a job ID arrives (with 5s timeout so we can check abort signal)
+      const result = await (blockRedis as any).BRPOP('kura:pending_results', 5)
       if (!result) continue
 
       // brpop returns [key, element] in node-redis v4+
@@ -74,11 +85,14 @@ async function startPipelineWorker() {
 
       console.log(`[pipeline-worker] job ${jobId}: ${pipeResult.status}`)
     } catch (err) {
+      if (ac.signal.aborted) break
       console.error('[pipeline-worker] error:', err)
       // Brief pause on error to avoid tight loop
       await new Promise(r => setTimeout(r, 1000))
     }
   }
+
+  console.log('[pipeline-worker] stopped')
 }
 
 /**

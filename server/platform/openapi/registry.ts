@@ -8,7 +8,7 @@
 import { OpenAPIRegistry, OpenApiGeneratorV31 } from '@asteasolutions/zod-to-openapi'
 import type { HandlerSchemas } from '../http/handler'
 
-export type AuthKind = 'public' | 'session' | 'apikey-union' | 'ext-union'
+export type AuthKind = 'public' | 'session' | 'apikey-union' | 'ext-union' | 'telegram'
 
 export interface RegisteredRoute {
   method: 'get' | 'post' | 'put' | 'patch' | 'delete'

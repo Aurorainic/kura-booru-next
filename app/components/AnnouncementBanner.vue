@@ -49,6 +49,9 @@ onMounted(() => {
 
   if (lines.value.length === 0) return
 
+  // Attach resize listener inside onMounted so it pairs with onUnmounted
+  window.addEventListener('resize', onResize)
+
   // Start rotation after initial line is shown
   scrollTimers.push(setTimeout(() => startRotation(), 600))
   scheduleScroll(0, 500)
@@ -98,10 +101,7 @@ function onResize() {
   }, 200)
 }
 
-// Attach once — onMounted runs only on client
-if (import.meta.client) {
-  window.addEventListener('resize', onResize)
-}
+
 
 function dismiss() {
   if (dismissed.value) return

@@ -4,7 +4,7 @@ import { posts } from '../../schema/posts'
 import { tags } from '../../schema/tags'
 import { postTags } from '../../schema/post_tags'
 import { tagAliases } from '../../schema/tag_aliases'
-import type { TagCategory } from '~/types'
+import type { TagCategory } from '../../platform/schemas/enums'
 import { clampPerPage } from '../pagination'
 import { serializeTag } from '../posts/serialize'
 

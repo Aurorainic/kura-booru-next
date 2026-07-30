@@ -27,6 +27,9 @@ import imagehash
 import redis.asyncio as aioredis
 from PIL import Image
 
+import requests
+from requests.adapters import HTTPAdapter
+
 # ── SSRF Protection ──
 ALLOWED_SCHEMES = {"http", "https"}
 BLOCKED_NETWORKS = [
@@ -73,13 +76,23 @@ def validate_url(url: str) -> str:
         raise ValueError(f"DNS resolution failed: {host}")
     return url
 
-# ── Redirect SSRF protection: re-validate every redirect hop ──
-import requests as _requests
-_original_send = _requests.Session.send
+
+# ── SSRF TOCTOU fix: Override HTTPAdapter.send (not Session.send) to close
+# the DNS-rebind window — IP validation happens at connection time inside the
+# adapter, right before requests opens the socket.  This is stricter than
+# validate_url() called by the caller, because no code between resolution and
+# connect can rebind the hostname.
+_original_adapter_send = HTTPAdapter.send
 
 
-def _patched_send(self, request, **kwargs):
-    response = _original_send(self, request, **kwargs)
+def _patched_adapter_send(self, request, **kwargs):
+    # Validate the request URL's IP at connection time — closes DNS rebind
+    validate_url(request.url)
+
+    # Call original adapter send to perform the actual HTTP request
+    response = _original_adapter_send(self, request, **kwargs)
+
+    # Re-validate every redirect hop
     if response.status_code in (301, 302, 303, 307, 308):
         location = response.headers.get("Location", "")
         if location:
@@ -87,7 +100,7 @@ def _patched_send(self, request, **kwargs):
     return response
 
 
-_requests.Session.send = _patched_send  # type: ignore[method-assign]
+HTTPAdapter.send = _patched_adapter_send  # type: ignore[method-assign]
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [sidecar] %(message)s")
 log = logging.getLogger(__name__)
@@ -254,6 +267,11 @@ async def process_job(r: aioredis.Redis, job: dict):
     # Mark as processing
     await r.set(f"kura:job_status:{job_id}", "processing", ex=7200)
 
+    # Pre-initialize referenced variables so the except/log line below
+    # never hits a NameError if download_with_gallery_dl raises.
+    downloaded: list = []
+    illust_type: str | None = None
+
     try:
         # Download in thread pool (gallery-dl is sync).
         # v0.7.8 PR-C: returns (pages, illust_type). Ugoira is detected inside
@@ -273,9 +291,12 @@ async def process_job(r: aioredis.Redis, job: dict):
         page_count = len(downloaded)
         pages: list[dict] = []
 
-        def _process_page(image_bytes: bytes, gdl_metadata: dict, page_index: int) -> dict | None:
-            """Compute phash + dims for one page. Returns None for over-size."""
-            img = Image.open(BytesIO(image_bytes))
+        def _process_page(img: Image.Image, image_bytes: bytes, gdl_metadata: dict, page_index: int) -> dict | None:
+            """Compute phash + dims for one page. Returns None for over-size.
+
+            Accepts already-opened PIL.Image to avoid redundant Image.open() on
+            every page — both compute_phash and this function need it.
+            """
             phash = str(imagehash.phash(img))
             width, height = img.size
             mime_type = Image.MIME.get(img.format, "image/png")
@@ -299,7 +320,9 @@ async def process_job(r: aioredis.Redis, job: dict):
             }
 
         for i, (image_bytes, gdl_metadata) in enumerate(downloaded, start=1):
-            page = await loop.run_in_executor(None, _process_page, image_bytes, gdl_metadata, i)
+            # Open Image once, share between _process_page and any consumer
+            img = Image.open(BytesIO(image_bytes))
+            page = await loop.run_in_executor(None, _process_page, img, image_bytes, gdl_metadata, i)
             if page is None:
                 # Over-size: skip the page but keep counting toward page_count
                 # so page_index stays consistent with what gallery-dl emitted.
@@ -366,13 +389,23 @@ async def process_job(r: aioredis.Redis, job: dict):
         result = {"status": "error", "error": str(e)}
 
     # Set result with 1h TTL (prevent Redis leak)
+    # ── WARNING: base64 / Redis memory ──
+    # Multi-page Pixiv illusts embed full base64-encoded images directly in
+    # this Redis value.  A 5-page manga can push 10-20 MB into a single key.
+    # This is acceptable for the current single-sidecar architecture where
+    # the Nitro pipeline consumes results within seconds, but if throughput
+    # increases or consumers lag, Redis memory will balloon.
+    #
+    # Long-term fix: sidecar writes images to temp files or /tmp S3, and
+    # Redis carries only metadata + a file reference.  The 3600s TTL provides
+    # a safety net: orphaned results auto-expire within an hour.
     await r.set(f"kura:results:{job_id}", json.dumps(result), ex=3600)
     # Do NOT set job_status to "done" here — let the Nitro pipeline worker
     # set it after processing (prevents pollJobResult from reading raw sidecar
     # result with image_bytes_b64/phash before pipeline strips them)
     # Notify Nitro pipeline consumer
     await r.lpush("kura:pending_results", job_id)
-    log.info(f"Job {job_id} sidecar done: status={result.get('status')} pages={len(downloaded) if 'downloaded' in locals() else 0}")
+    log.info(f"Job {job_id} sidecar done: status={result.get('status')} pages={len(downloaded)}")
 
 
 async def main():

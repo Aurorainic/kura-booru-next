@@ -13,41 +13,44 @@ export default defineAdminHandler({
 
     const body = await readBody<{ add_tags?: string[]; remove_tag_ids?: string[] }>(event)
 
-    // Remove tags (bulk): single DELETE for all tagIds, then single UPDATE to decrement counts
-    if (body?.remove_tag_ids?.length) {
-      const removeIds = [...new Set(body.remove_tag_ids)]
-      await db.delete(postTags).where(and(eq(postTags.postId, id), inArray(postTags.tagId, removeIds)))
-      await db.update(tags).set({ postCount: sql`GREATEST(post_count - 1, 0)` }).where(inArray(tags.id, removeIds))
-    }
+    // Both remove and add ops run inside a single transaction for atomicity.
+    await db.transaction(async (tx) => {
+      // Remove tags (bulk): single DELETE for all tagIds, then single UPDATE to decrement counts
+      if (body?.remove_tag_ids?.length) {
+        const removeIds = [...new Set(body.remove_tag_ids)]
+        await tx.delete(postTags).where(and(eq(postTags.postId, id), inArray(postTags.tagId, removeIds)))
+        await tx.update(tags).set({ postCount: sql`GREATEST(post_count - 1, 0)` }).where(inArray(tags.id, removeIds))
+      }
 
-    // Add tags (bulk): upsert all names, then insert post_tag links, then increment counts only for new links
-    if (body?.add_tags?.length) {
-      const cleanNames = [...new Set(body.add_tags.map(n => n.trim().toLowerCase()).filter(Boolean))]
-      if (cleanNames.length) {
-        // B-P3-2: Use onConflictDoUpdate to avoid TOCTOU race
-        const upserted = await db.insert(tags).values(
-          cleanNames.map(name => ({ name, category: 'general' as const })),
-        )
-          .onConflictDoUpdate({ target: tags.name, set: { name: sql`excluded.name` } })
-          .returning({ id: tags.id })
-        if (upserted.length === 0) throw new AppError('INTERNAL', 500, 'Tag upsert failed')
+      // Add tags (bulk): upsert all names, then insert post_tag links, then increment counts only for new links
+      if (body?.add_tags?.length) {
+        const cleanNames = [...new Set(body.add_tags.map(n => n.trim().toLowerCase()).filter(Boolean))]
+        if (cleanNames.length) {
+          // B-P3-2: Use onConflictDoUpdate to avoid TOCTOU race
+          const upserted = await tx.insert(tags).values(
+            cleanNames.map(name => ({ name, category: 'general' as const })),
+          )
+            .onConflictDoUpdate({ target: tags.name, set: { name: sql`excluded.name` } })
+            .returning({ id: tags.id })
+          if (upserted.length === 0) throw new AppError('INTERNAL', 500, 'Tag upsert failed')
 
-        const tagIds = upserted.map(t => t.id)
-        const inserted = await db.insert(postTags).values(
-          tagIds.map(tagId => ({ postId: id, tagId })),
-        )
-          .onConflictDoNothing()
-          .returning({ tagId: postTags.tagId })
+          const tagIds = upserted.map(t => t.id)
+          const inserted = await tx.insert(postTags).values(
+            tagIds.map(tagId => ({ postId: id, tagId })),
+          )
+            .onConflictDoNothing()
+            .returning({ tagId: postTags.tagId })
 
-        // Increment count only for newly linked tags. onConflictDoNothing is a no-op
-        // when the (postId, tagId) row already exists, so we must derive new links
-        // from the RETURNING set, not from the upserted set.
-        const newTagIds = inserted.map(r => r.tagId)
-        if (newTagIds.length) {
-          await db.update(tags).set({ postCount: sql`post_count + 1` }).where(inArray(tags.id, newTagIds))
+          // Increment count only for newly linked tags. onConflictDoNothing is a no-op
+          // when the (postId, tagId) row already exists, so we must derive new links
+          // from the RETURNING set, not from the upserted set.
+          const newTagIds = inserted.map(r => r.tagId)
+          if (newTagIds.length) {
+            await tx.update(tags).set({ postCount: sql`post_count + 1` }).where(inArray(tags.id, newTagIds))
+          }
         }
       }
-    }
+    })
 
     // Return updated post
     const post = await db.select().from(posts).where(eq(posts.id, id)).limit(1)

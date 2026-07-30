@@ -21,7 +21,7 @@ export function useConfirm() {
       danger?: boolean
     }): Promise<boolean> {
       return new Promise<boolean>((resolve) => {
-        const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        const id = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
           ? crypto.randomUUID()
           : `c-${Date.now()}`
         // ponytail: replace any prior pending confirm so the new one shows.

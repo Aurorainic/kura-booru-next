@@ -26,6 +26,8 @@ async function handleImport(url) {
   }
 
   try {
+    var controller = new AbortController();
+    var timeout = setTimeout(function () { controller.abort(); }, 30000);
     var resp = await fetch(config.serverUrl + "/api/tasks/web-import", {
       method: "POST",
       headers: {
@@ -33,7 +35,9 @@ async function handleImport(url) {
         "X-Api-Key": config.apiKey,
       },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
     if (resp.ok) {
       var data = await resp.json();
@@ -73,9 +77,13 @@ async function checkTaskStatus(taskId) {
   }
 
   try {
+    var controller = new AbortController();
+    var timeout = setTimeout(function () { controller.abort(); }, 30000);
     var resp = await fetch(config.serverUrl + "/api/tasks/" + taskId, {
       headers: { "X-Api-Key": config.apiKey },
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
     if (resp.ok) {
       return await resp.json();

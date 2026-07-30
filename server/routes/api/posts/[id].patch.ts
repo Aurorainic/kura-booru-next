@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { eq } from 'drizzle-orm'
 import { defineApiKeyHandler } from '../../../platform/http/auth'
 import { AppError } from '../../../platform/errors'
@@ -10,16 +11,15 @@ import { serializePost } from '../../../lib/posts/serialize'
 // user-bound token is tracked as a follow-up.
 export default defineApiKeyHandler({
   auditAction: 'rating mutation',
+  schemas: {
+    body: z.object({
+      rating: zRating.describe('New rating for the post'),
+    }),
+  },
   doc: { method: 'patch', path: '/api/posts/:id', summary: 'Update post rating (session or apikey)' },
-  handler: async ({ event }) => {
+  handler: async ({ event, body }) => {
     const id = event.context.params?.id as string
     if (!id) throw new AppError('VALIDATION_FAILED', 400, 'Post ID required')
-
-    const body = await readBody<{ rating: string }>(event)
-    if (!body?.rating) throw new AppError('VALIDATION_FAILED', 400, 'rating required')
-    // zRating validates, but keep the runtime check for non-schema path
-    const allowed = ['safe', 'questionable', 'explicit']
-    if (!allowed.includes(body.rating)) throw new AppError('VALIDATION_FAILED', 400, 'Invalid rating')
 
     const [updated] = await db.update(posts)
       .set({ rating: body.rating as any })

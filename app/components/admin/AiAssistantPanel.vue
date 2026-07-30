@@ -9,11 +9,26 @@ import AiStatusBar from '~/components/admin/ai/AiStatusBar.vue'
 const { ssrCookie } = useSsrContext()
 const route = useRoute()
 
-// ── AI Status (single fetch on mount; AdminStatusBar at page top also polls system queue) ──
+// ── AI Status — consumed from AdminStatusBar's shared useState to avoid
+// duplicate getAiStatus calls. Falls back to local fetch if the shared
+// state is unavailable (e.g. AdminStatusBar rendered elsewhere).
+const sharedAiStatus = useState<AiStatus | null>('sharedAiStatus', () => null)
 const aiStatus = ref<AiStatus | null>(null)
 const aiLoading = ref(true)
 
+const aiEnabled = computed(() => !!(aiStatus.value?.enabled && aiStatus.value?.endpoint && aiStatus.value?.model))
+
 onMounted(async () => {
+  // Try reading from shared state first (set by AdminStatusBar)
+  if (sharedAiStatus.value !== null) {
+    aiStatus.value = sharedAiStatus.value
+    aiLoading.value = false
+    // Watch for future updates from AdminStatusBar
+    watch(sharedAiStatus, (v) => { if (v !== null) aiStatus.value = v }, { immediate: false })
+    return
+  }
+
+  // Fallback: fetch locally if AdminStatusBar hasn't loaded yet
   try {
     aiStatus.value = await getAiStatus(ssrCookie.value)
   } catch (e: any) {
@@ -23,8 +38,6 @@ onMounted(async () => {
     aiLoading.value = false
   }
 })
-
-const aiEnabled = computed(() => !!(aiStatus.value?.enabled && aiStatus.value?.endpoint && aiStatus.value?.model))
 
 // ── Sub-section state (persisted to URL ?section=) ──
 const sections = [

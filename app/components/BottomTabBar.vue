@@ -1,7 +1,9 @@
 <script setup lang="ts">
-defineProps<{
+withDefaults(defineProps<{
   isAdmin?: boolean
-}>()
+}>(), {
+  isAdmin: false,
+})
 
 const route = useRoute()
 
