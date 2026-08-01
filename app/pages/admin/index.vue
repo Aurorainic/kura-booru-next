@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { defineAsyncComponent } from 'vue'
 
-const { isAdmin, ssrCookie } = useSsrContext()
+const { isAdmin, ssrCookie, intranetMode } = useSsrContext()
 const route = useRoute()
 
-if (!isAdmin.value) {
+if (!isAdmin.value && !intranetMode.value) {
   throw createError({ statusCode: 403, statusMessage: 'Admin access required' })
 }
 
@@ -27,19 +27,20 @@ function switchTab(tab: string) {
 }
 
 // Route-level code splitting — only load the active panel.
-// Each defineAsyncComponent explicitly sets a name so KeepAlive can track them.
-const DashboardPanel = defineAsyncComponent({ loader: () => import('~/components/admin/DashboardPanel.vue'), name: 'DashboardPanel' })
-const PostsPanel = defineAsyncComponent({ loader: () => import('~/components/admin/PostsPanel.vue'), name: 'PostsPanel' })
-const TagsPanel = defineAsyncComponent({ loader: () => import('~/components/admin/TagsPanel.vue'), name: 'TagsPanel' })
-const AutoRatingPanel = defineAsyncComponent({ loader: () => import('~/components/admin/AutoRatingPanel.vue'), name: 'AutoRatingPanel' })
-const AiAssistantPanel = defineAsyncComponent({ loader: () => import('~/components/admin/AiAssistantPanel.vue'), name: 'AiAssistantPanel' })
-const AiProvidersPanel = defineAsyncComponent({ loader: () => import('~/components/admin/AiProvidersPanel.vue'), name: 'AiProvidersPanel' })
-const ExtensionKeysPanel = defineAsyncComponent({ loader: () => import('~/components/admin/ExtensionKeysPanel.vue'), name: 'ExtensionKeysPanel' })
-const SettingsPanel = defineAsyncComponent({ loader: () => import('~/components/admin/SettingsPanel.vue'), name: 'SettingsPanel' })
-const PasswordPanel = defineAsyncComponent({ loader: () => import('~/components/admin/PasswordPanel.vue'), name: 'PasswordPanel' })
+// SFC `name` options (defineOptions) drive KeepAlive include matching;
+// AsyncComponentOptions has no `name` field in Vue 3.5 (removed at TS level).
+const DashboardPanel = defineAsyncComponent(() => import('~/components/admin/DashboardPanel.vue'))
+const PostsPanel = defineAsyncComponent(() => import('~/components/admin/PostsPanel.vue'))
+const TagsPanel = defineAsyncComponent(() => import('~/components/admin/TagsPanel.vue'))
+const AutoRatingPanel = defineAsyncComponent(() => import('~/components/admin/AutoRatingPanel.vue'))
+const AiAssistantPanel = defineAsyncComponent(() => import('~/components/admin/AiAssistantPanel.vue'))
+const AiProvidersPanel = defineAsyncComponent(() => import('~/components/admin/AiProvidersPanel.vue'))
+const ExtensionKeysPanel = defineAsyncComponent(() => import('~/components/admin/ExtensionKeysPanel.vue'))
+const SettingsPanel = defineAsyncComponent(() => import('~/components/admin/SettingsPanel.vue'))
+const PasswordPanel = defineAsyncComponent(() => import('~/components/admin/PasswordPanel.vue'))
 
-// ponytail: component lookup for keep-alive include list — must match the
-// panel's `name` option. defineAsyncComponent preserves the underlying name.
+// ponytail: component lookup for keep-alive include list — panel SFCs declare
+// their own name via defineOptions so KeepAlive include matching works.
 const panelMap: Record<string, ReturnType<typeof defineAsyncComponent>> = {
   dashboard: DashboardPanel,
   posts: PostsPanel,

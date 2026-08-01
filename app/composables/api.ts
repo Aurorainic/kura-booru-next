@@ -152,7 +152,13 @@ export async function changePassword(currentPassword: string, newPassword: strin
 // ── Settings ──
 
 export async function fetchPublicSettings(ssrCookie?: string): Promise<SiteSettings> {
-  return fetchApi<SiteSettings>('/settings/public', undefined, { ssrCookie })
+  const data = await fetchApi<Record<string, string>>('/settings/public', undefined, { ssrCookie })
+  // intranet_mode 由服务端 run_mode 设置推导（DB 设置，非 env）；SSR 已注入，
+  // 客户端兜底为 false。
+  if (data.intranet_mode === undefined) {
+    data.intranet_mode = 'false'
+  }
+  return data as unknown as SiteSettings
 }
 
 // ── Auto-Rating Rules ──
@@ -286,17 +292,43 @@ export async function revokeExtensionKey(id: string): Promise<{ ok: boolean }> {
   return fetchApi(`/admin/extension-keys/${id}`, undefined, { method: 'DELETE' })
 }
 
-// ── Admin Settings ──
+// ── Admin Settings (v0.10.0: 7 类卡片, metadata + masked secrets) ──
 
-export async function fetchAdminSettings(ssrCookie?: string): Promise<Record<string, string>> {
-  return fetchApi<Record<string, string>>('/admin/settings/', undefined, { ssrCookie })
+export interface SettingItem {
+  key: string
+  category: string
+  type: 'text' | 'textarea' | 'number' | 'boolean' | 'secret' | 'select' | 'readonly'
+  label: string
+  description?: string
+  note?: string
+  placeholder?: string
+  options?: { value: string; label: string }[]
+  public?: boolean
+  value: string
+  secret: boolean
+  masked: string
+}
+
+export interface SettingCategoryMeta {
+  key: string
+  label: string
+  description: string
+}
+
+export interface AdminSettingsResponse {
+  categories: SettingCategoryMeta[]
+  items: SettingItem[]
+}
+
+export async function fetchAdminSettings(ssrCookie?: string): Promise<AdminSettingsResponse> {
+  return fetchApi<AdminSettingsResponse>('/admin/settings/', undefined, { ssrCookie })
 }
 
 export async function updateAdminSettings(updates: Record<string, string>): Promise<{ ok: boolean }> {
   return fetchApi('/admin/settings/', undefined, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(updates),
+    body: JSON.stringify({ settings: updates }),
   })
 }
 
@@ -313,6 +345,18 @@ export async function testRedisConnection(url: string): Promise<{ ok: boolean; e
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url }),
+  })
+}
+
+export async function testS3Connection(): Promise<{ ok: boolean; error?: string; bucket?: string; region?: string; endpoint?: string }> {
+  return fetchApi('/admin/settings/test-s3', undefined, { method: 'POST' })
+}
+
+export async function testBotConnection(body: { token?: string; proxyType?: string; proxyUrl?: string } = {}): Promise<{ ok: boolean; error?: string; username?: string; id?: number; via?: string }> {
+  return fetchApi('/admin/settings/test-bot', undefined, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   })
 }
 

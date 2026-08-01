@@ -138,14 +138,16 @@ export function defineTelegramHandler<S extends HandlerSchemas | undefined = und
     authKind: 'telegram',
     authenticate: async (event) => {
       // Verify bot is configured
-      const { bot } = await import('../../utils/bot')
-      if (!bot.token) {
+      const { getBot, ensureBotReady } = await import('../../utils/bot')
+      const bot = await getBot()
+      if (!bot.token || bot.token === 'unset') {
         throw new AppError('SERVICE_UNAVAILABLE', 503, 'Bot not configured')
       }
 
       // Verify webhook secret token
       const secret = getHeader(event, 'x-telegram-bot-api-secret-token')
-      const expectedSecret = process.env.BOT_WEBHOOK_SECRET
+      const { getBotConfig } = await import('../../utils/settings')
+      const expectedSecret = (await getBotConfig()).webhookSecret
 
       if (process.env.NODE_ENV === 'production' && !expectedSecret) {
         throw new AppError('INTERNAL', 500, 'Webhook secret not configured')

@@ -1,4 +1,11 @@
 <script setup lang="ts">
+const { intranetMode } = useSsrContext()
+
+// Intranet mode has no login wall; bounce straight to home.
+if (intranetMode.value) {
+  await navigateTo('/')
+}
+
 const username = ref('')
 const password = ref('')
 const showPassword = ref(false)

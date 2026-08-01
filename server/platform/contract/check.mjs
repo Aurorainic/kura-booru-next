@@ -8,7 +8,7 @@
  *   C. 路由文件推导出的 (method, path) 必须与清单一致（防 method/路径改名漂移）
  *   D. 清单内 method+path 不允许重复
  *
- * 运行：node server/platform/contract/check.mjs（npm run test:contract）
+ * 运行：node server/platform/contract/check.mjs（pnpm run test:contract）
  */
 import { readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'

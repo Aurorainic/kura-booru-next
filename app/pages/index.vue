@@ -8,7 +8,9 @@ const route = useRoute()
 // so we need watch to re-fetch when the URL changes.
 const page = computed(() => Math.max(1, parseInt(route.query.page as string || '1')))
 const ratingParam = computed(() => route.query.rating as Rating | null)
-const rating = computed(() => isAdmin.value && ratingParam.value ? ratingParam.value : undefined)
+// intranet mode: every visitor is admin (handled by middleware), so rating
+// filters apply without the admin check; non-admin still get no rating filter.
+const rating = computed<Rating | undefined>(() => isAdmin.value ? (ratingParam.value ?? undefined) : undefined)
 
 const perPageCookie = useCookie('kura-per-page', { sameSite: 'lax' })
 const perPage = computed(() => {

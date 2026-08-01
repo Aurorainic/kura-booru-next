@@ -44,8 +44,9 @@ export async function processResult(result: SidecarResult, forceRating?: 'safe' 
   const imageBuffer = Buffer.from(result.image_bytes_b64, 'base64')
   const meta = result.metadata
 
-  // ── MAX_IMAGE_SIZE check ──
-  const maxSize = parseInt(process.env.MAX_IMAGE_SIZE || '0', 10)
+  // ── MAX_IMAGE_SIZE check（DB settings，热刷新） ──
+  const { getImageSizes } = await import('../../utils/settings')
+  const maxSize = (await getImageSizes()).maxImageSize
   if (maxSize > 0 && imageBuffer.length > maxSize) {
     return { status: 'too_large', source_site: meta.source_site, source_id: meta.source_id }
   }
@@ -201,8 +202,9 @@ async function processMultiImageResult(
     const imageBuffer = Buffer.from(page.image_bytes_b64, 'base64')
 
     // Per-page MAX_IMAGE_SIZE check (sidecar already filtered too-larges, but
-    // belt-and-suspenders in case env changes between sidecar and pipeline).
-    const maxSize = parseInt(process.env.MAX_IMAGE_SIZE || '0', 10)
+    // belt-and-suspenders in case settings change between sidecar and pipeline).
+    const { getImageSizes } = await import('../../utils/settings')
+    const maxSize = (await getImageSizes()).maxImageSize
     if (maxSize > 0 && imageBuffer.length > maxSize) {
       pageResults.push({ page_index: page.page_index, status: 'failed', error: 'too_large' })
       continue

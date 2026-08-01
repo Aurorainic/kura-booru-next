@@ -37,7 +37,6 @@ async function sendChat() {
   if (!q || chatLoading.value) return
 
   chatMessages.value.push({ role: 'user', content: q })
-  saveHistory()
   chatInput.value = ''
   chatLoading.value = true
 

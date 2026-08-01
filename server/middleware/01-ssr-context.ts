@@ -36,6 +36,20 @@ export default defineEventHandler(async (event) => {
   }
   event.context.siteSettings = settingsCache.data
 
+  // Intranet mode: everyone is admin; short-circuit further checks.
+  // run_mode 来自 DB settings（默认 intranet），后台切换即时生效。
+  const { getRunMode } = await import('../utils/settings')
+  const intranetMode = await getRunMode() === 'intranet'
+  event.context.intranetMode = intranetMode
+  if (intranetMode) {
+    event.context.isAdmin = true
+    // Inject the flag into settings so the client UI can hide login affordances.
+    if (event.context.siteSettings) {
+      event.context.siteSettings.intranet_mode = 'true'
+    }
+    return
+  }
+
   // Maintenance mode redirect (non-admin → /maintenance)
   const settings = event.context.siteSettings
   const maintenanceMode = (settings?.maintenance_mode || 'false').toLowerCase() === 'true'

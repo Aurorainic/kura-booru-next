@@ -1,20 +1,18 @@
 import { defineAdminHandler } from '../../../../platform/http/auth'
 import { AppError } from '../../../../platform/errors'
+import { updateSettings } from '../../../../utils/settings'
+import { SETTING_DEF_MAP } from '../../../../utils/settings-defs'
 
-// Admin settings key allowlist. Only these keys can be written via the
-// settings endpoint. Adding a new setting key requires an explicit entry here.
-const ALLOWED_KEYS = new Set([
-  'site_title',
-  'site_description',
-  'announcement',
-  'head_inject',
-  'maintenance_mode',
-  'database_url',
-  'redis_url',
-])
+// 允许写入的键 = 注册表内全部非 readonly 键（secret 项空串=保持原值）。
+// readonly 项（infra/admin）由 env 提供，后台不可写。
+const WRITABLE_KEYS = new Set(
+  Object.values(SETTING_DEF_MAP)
+    .filter(d => d.type !== 'readonly')
+    .map(d => d.key),
+)
 
 export default defineAdminHandler({
-  doc: { method: 'put', path: '/api/admin/settings', summary: 'Update admin settings' },
+  doc: { method: 'put', path: '/api/admin/settings', summary: 'Update admin settings (hot reload)' },
   handler: async ({ event }) => {
     const body = await readBody(event)
     const settings = body.settings as Record<string, string> | undefined
@@ -23,13 +21,16 @@ export default defineAdminHandler({
       throw new AppError('VALIDATION_FAILED', 400, 'settings object required')
     }
 
-    // Filter out unlisted keys silently — admin is trusted but defense-in-depth
-    // prevents accidental writes from future frontend changes.
+    // 只接受注册表内的可写键；secret 键空串会被 updateSettings 忽略（保持原值）。
     const filtered: Record<string, string> = {}
     for (const [key, value] of Object.entries(settings)) {
-      if (ALLOWED_KEYS.has(key)) {
+      if (WRITABLE_KEYS.has(key)) {
         filtered[key] = String(value)
       }
+    }
+
+    if (Object.keys(filtered).length === 0) {
+      throw new AppError('VALIDATION_FAILED', 400, 'no writable settings provided')
     }
 
     await updateSettings(filtered)

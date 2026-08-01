@@ -25,87 +25,105 @@ interface BotContext extends Context {
   config: BotConfig
 }
 
-const BOT_TOKEN = process.env.BOT_TOKEN || ''
-const BOT_ADMIN_IDS = (process.env.BOT_ADMIN_IDS || '').split(',').map(Number).filter(Boolean)
-const SITE_URL = process.env.SITE_URL || ''
-
 // URL extraction pattern (from url-patterns.ts + generic)
 const URL_PATTERN = /https?:\/\/[^\s<>"']+/gi
 
-if (!BOT_TOKEN) {
-  console.warn('[bot] BOT_TOKEN not set, bot disabled')
+// ── Bot config: DB settings first, env as bootstrap fallback (v0.10.0) ──
+// 热刷新：getBotConfig() 每次调用读取 settings（10s 缓存），token/adminIds/
+// proxyUrl 变化后调用 rebuildBot() 重建实例。getBotConfig 内部已含 env 回退。
+let _botInstance: Bot<BotContext> | null = null
+let _handlersRegistered = false
+
+async function getBotConfigLazy() {
+  const { getBotConfig } = await import('../../utils/settings')
+  return getBotConfig()
 }
 
-export const bot = new Bot<BotContext>(BOT_TOKEN)
+/** 以当前配置构建 Bot 实例；代理/中转连接由 buildBotClient 统一处理。 */
+async function buildBot(): Promise<Bot<BotContext>> {
+  const cfg = await getBotConfigLazy()
+  const { buildBotClient } = await import('../../utils/bot-proxy')
+  type BotOpts = NonNullable<ConstructorParameters<typeof Bot<BotContext>>[1]>
+  const opts: BotOpts = {}
+  const client = buildBotClient(cfg.proxyType, cfg.proxyUrl)
+  if (client) opts.client = client as BotOpts['client']
+  return new Bot<BotContext>(cfg.token || 'unset', opts)
+}
 
-// Lazy-init
+/** 获取（惰性构建）Bot 实例；首次构建时注册全部 handler。 */
+export async function getBot(): Promise<Bot<BotContext>> {
+  if (!_botInstance) {
+    _botInstance = await buildBot()
+    await syncSiteUrl()
+    registerHandlers(_botInstance)
+    _handlersRegistered = true
+  }
+  return _botInstance
+}
+
+/** settings 热刷新：销毁实例，下次 getBot() 用新配置重建并重新注册。 */
+export async function rebuildBot() {
+  _botInstance = null
+  _botReady = null
+  await getBot()
+}
+
+async function getS3ExternalUrlLazy(): Promise<string> {
+  const { getS3ExternalUrl } = await import('../../utils/s3')
+  return getS3ExternalUrl()
+}
+
+// ── Admin IDs / Site URL（运行时读取，支持热刷新） ──
+async function getAdminIds(): Promise<number[]> {
+  const cfg = await getBotConfigLazy()
+  return cfg.adminIds
+}
+
+async function getSiteUrlLazy(): Promise<string> {
+  const { getSiteUrl } = await import('../../utils/settings')
+  return getSiteUrl()
+}
+
+// ── Bot 实例：Proxy 转发到当前实例，热刷新重建后 handler 由
+// registerHandlers 重新注册到新实例。外部（webhook/auth）仍按原 API 用 bot。
 let _botReady: Promise<void> | null = null
-export function ensureBotReady() {
-  if (!_botReady) _botReady = bot.init()
-  return _botReady
+
+export async function ensureBotReady(): Promise<void> {
+  const cfg = await getBotConfigLazy()
+  if (!cfg.token) return
+  const b = await getBot()
+  if (!_botReady) _botReady = b.init()
+  await _botReady
 }
 
-// ── Auth middleware (T-P0-4: reject non-admins) ──
-bot.use(async (ctx, next) => {
-  const userId = ctx.from?.id
+// SITE_URL / admin ids 运行时值（热刷新支持）——handler 闭包读取的是 let 变量。
+let SITE_URL = ''
 
-  // Handle forwarded channel messages (negative ID)
-  const effectiveUserId = (ctx.chat?.type === 'private' && userId && userId < 0)
-    ? ctx.chat?.id : userId
-
-  const isAdmin = effectiveUserId ? BOT_ADMIN_IDS.includes(effectiveUserId) : false
-  ctx.config = { isAdmin, lang: 'zh' }
-
-  if (!isAdmin) {
-    try { await ctx.reply(t('unauthorized', ctx.config.lang)) } catch { /* ignore */ }
-    return // don't propagate to handlers
-  }
-  await next()
-})
-
-// ── Per-chat language from Redis ──
-bot.use(async (ctx, next) => {
-  if (!ctx.config.isAdmin) return // already rejected above, but guard
-  const chatId = ctx.chat?.id?.toString()
-  if (chatId) {
-    // Try new key, fall back to old key (T-P2-1 migration)
-    let lang = await redis.get(`kura:bot:lang:${chatId}`)
-    if (!lang) {
-      lang = await redis.get(`kura:bot_lang:${chatId}`)
-      if (lang) await redis.set(`kura:bot:lang:${chatId}`, lang)
-      else lang = 'en' // default to en (old default)
-    }
-    ctx.config.lang = lang
-  }
-  await next()
-})
-
-// ── Per-chat concurrency semaphore (T-P3-3: only wrap enqueueJob, not entire handler) ──
-const chatSemaphores = new Map<string, { count: number; max: number; queue: (() => void)[] }>()
-function getSemaphore(chatId: string, max = 3) {
-  if (!chatSemaphores.has(chatId)) {
-    chatSemaphores.set(chatId, { count: 0, max, queue: [] })
-  }
-  return chatSemaphores.get(chatId)!
+/** 更新运行时站点 URL（getBot/rebuildBot 时同步）。 */
+async function syncSiteUrl() {
+  SITE_URL = await getSiteUrlLazy()
 }
 
-async function acquireSemaphore(chatId: string): Promise<void> {
-  const sem = getSemaphore(chatId)
-  if (sem.count >= sem.max) {
-    await new Promise<void>(resolve => sem.queue.push(resolve))
-  }
-  sem.count++
+const botHandlerProxy: ProxyHandler<Bot<BotContext>> = {
+  get(_t: Bot<BotContext>, prop: string | symbol) {
+    const real = _botInstance ?? new Bot<BotContext>('unset')
+    const val = Reflect.get(real, prop)
+    // 方法转发时绑定真实实例，避免 this 指向 proxy。
+    return typeof val === 'function' ? val.bind(real) : val
+  },
+  set(_t: Bot<BotContext>, prop: string | symbol, value: unknown) {
+    const real = _botInstance ?? new Bot<BotContext>('unset')
+    return Reflect.set(real, prop, value)
+  },
 }
 
-function releaseSemaphore(chatId: string) {
-  const sem = chatSemaphores.get(chatId)
-  if (!sem) return
-  sem.count--
-  const next = sem.queue.shift()
-  if (next) next()
-}
+export const bot: Bot<BotContext> = new Proxy<Bot<BotContext>>(
+  {} as Bot<BotContext>,
+  botHandlerProxy,
+)
 
-// ── i18n helpers (T-P3-4: centralized) ──
+// ── i18n helpers (T-P3-4: centralized) — module-level: handlers inside
+// registerHandlers and pollAndNotify/showRatingMenu (module-level) both use t().
 const T = {
   zh: {
     welcome: '👋 你好！发送图片链接来保存到图库。\n\n命令：\n/search 标签名 — 搜索\n/random — 随机图片\n/stats — 统计\n/autopass — 自动标记为公开\n/lang — 切换语言',
@@ -176,36 +194,81 @@ const T = {
   },
 }
 
-export function t(key: string, lang: string, ...args: any[]): string {
+function t(key: string, lang: string, ...args: any[]): string {
   const strings: Record<string, any> = lang === 'zh' ? T.zh : T.en
   const val = strings[key]
   return typeof val === 'function' ? val(...args) : (val || key)
 }
 
-export const i18nLabels = {
-  zh: {
-    processingComplete: '处理完成',
-    waitingRating: '等待评级',
-    rating: '评级',
-    autoRule: '自动规则',
-    default: '默认',
-    manual: '手动',
-    auto: '自动',
-  },
-  en: {
-    processingComplete: 'Processing complete',
-    waitingRating: 'Waiting for rating',
-    rating: 'Rating',
-    autoRule: 'Auto-rating',
-    default: 'default',
-    manual: 'manual',
-    auto: 'auto',
-  },
+function registerHandlers(b: Bot<BotContext>) {
+
+// ── Auth middleware (T-P0-4: reject non-admins) ──
+b.use(async (ctx, next) => {
+  const userId = ctx.from?.id
+
+  // Handle forwarded channel messages (negative ID)
+  const effectiveUserId = (ctx.chat?.type === 'private' && userId && userId < 0)
+    ? ctx.chat?.id : userId
+
+  const adminIds = await getAdminIds()
+  const isAdmin = effectiveUserId ? adminIds.includes(effectiveUserId) : false
+  ctx.config = { isAdmin, lang: 'zh' }
+
+  if (!isAdmin) {
+    try { await ctx.reply(t('unauthorized', ctx.config.lang)) } catch { /* ignore */ }
+    return // don't propagate to handlers
+  }
+  await next()
+})
+
+// ── Per-chat language from Redis ──
+b.use(async (ctx, next) => {
+  if (!ctx.config.isAdmin) return // already rejected above, but guard
+  const chatId = ctx.chat?.id?.toString()
+  if (chatId) {
+    // Try new key, fall back to old key (T-P2-1 migration)
+    let lang = await redis.get(`kura:bot:lang:${chatId}`)
+    if (!lang) {
+      lang = await redis.get(`kura:bot_lang:${chatId}`)
+      if (lang) await redis.set(`kura:bot:lang:${chatId}`, lang)
+      else lang = 'en' // default to en (old default)
+    }
+    ctx.config.lang = lang
+  }
+  await next()
+})
+
+// ── Per-chat concurrency semaphore (T-P3-3: only wrap enqueueJob, not entire handler) ──
+const chatSemaphores = new Map<string, { count: number; max: number; queue: (() => void)[] }>()
+function getSemaphore(chatId: string, max = 3) {
+  if (!chatSemaphores.has(chatId)) {
+    chatSemaphores.set(chatId, { count: 0, max, queue: [] })
+  }
+  return chatSemaphores.get(chatId)!
 }
+
+async function acquireSemaphore(chatId: string): Promise<void> {
+  const sem = getSemaphore(chatId)
+  if (sem.count >= sem.max) {
+    await new Promise<void>(resolve => sem.queue.push(resolve))
+  }
+  sem.count++
+}
+
+function releaseSemaphore(chatId: string) {
+  const sem = chatSemaphores.get(chatId)
+  if (!sem) return
+  sem.count--
+  const next = sem.queue.shift()
+  if (next) next()
+}
+
+// ── i18n helpers: T/t 定义已移至模块级（registerHandlers 上方），
+// handler 与 pollAndNotify 共享同一份。
 
 // ── Commands ──
 
-bot.command('start', async (ctx) => {
+b.command('start', async (ctx) => {
   try {
     const keyboard = {
       inline_keyboard: [[
@@ -216,7 +279,7 @@ bot.command('start', async (ctx) => {
   } catch (err) { console.error('[bot] start error:', err) }
 })
 
-bot.command('search', async (ctx) => {
+b.command('search', async (ctx) => {
   try {
     const query = ctx.message?.text?.split(' ').slice(1).join(' ')
     if (!query) { await ctx.reply(t('usageSearch', ctx.config.lang)).catch(() => {}); return }
@@ -239,13 +302,13 @@ bot.command('search', async (ctx) => {
   } catch (err) { console.error('[bot] search error:', err) }
 })
 
-bot.command('random', async (ctx) => {
+b.command('random', async (ctx) => {
   try {
     const post = await getRandomPost(true)
     if (!post) { await ctx.reply(t('noPosts', ctx.config.lang)).catch(() => {}); return }
 
     const previewUrl = post.preview_key
-      ? `${process.env.S3_EXTERNAL_URL || ''}/${post.preview_key}`
+      ? `${await getS3ExternalUrlLazy()}/${post.preview_key}`
       : null
 
     const caption = `${t('randomCaption', ctx.config.lang, post.title || '')}\n${SITE_URL}/posts/${post.id}`
@@ -266,7 +329,7 @@ bot.command('random', async (ctx) => {
   } catch (err) { console.error('[bot] random error:', err) }
 })
 
-bot.command('stats', async (ctx) => {
+b.command('stats', async (ctx) => {
   try {
     const [pc, tc, ptc, sc] = await Promise.all([
       db.select({ count: sql`count(*)` }).from(posts),
@@ -284,7 +347,7 @@ bot.command('stats', async (ctx) => {
   } catch (err) { console.error('[bot] stats error:', err) }
 })
 
-bot.command('autopass', async (ctx) => {
+b.command('autopass', async (ctx) => {
   try {
     const chatId = ctx.chat?.id?.toString()
     if (!chatId) return
@@ -297,7 +360,7 @@ bot.command('autopass', async (ctx) => {
   } catch (err) { console.error('[bot] autopass error:', err) }
 })
 
-bot.command('lang', async (ctx) => {
+b.command('lang', async (ctx) => {
   try {
     const chatId = ctx.chat?.id?.toString()
     if (!chatId) return
@@ -314,7 +377,7 @@ bot.command('lang', async (ctx) => {
   } catch (err) { console.error('[bot] lang error:', err) }
 })
 
-bot.command('info', async (ctx) => {
+b.command('info', async (ctx) => {
   try {
     const url = ctx.message?.text?.split(' ').slice(1).join(' ')
     if (!url) { await ctx.reply(t('usageInfo', ctx.config.lang)).catch(() => {}); return }
@@ -345,7 +408,7 @@ bot.command('info', async (ctx) => {
   } catch (err) { console.error('[bot] info error:', err) }
 })
 
-bot.command('save', async (ctx) => {
+b.command('save', async (ctx) => {
   try {
     const url = ctx.message?.text?.split(' ').slice(1).join(' ')
     if (!url) { await ctx.reply(t('usageInfo', ctx.config.lang)).catch(() => {}); return }
@@ -361,7 +424,7 @@ bot.command('save', async (ctx) => {
 })
 
 // ! aliases (T-P1-2)
-bot.hears(/^!save\b/, async (ctx) => {
+b.hears(/^!save\b/, async (ctx) => {
   try {
     const url = ctx.message?.text?.replace(/^!save\s*/, '').trim()
     if (!url) return
@@ -375,7 +438,7 @@ bot.hears(/^!save\b/, async (ctx) => {
   } catch (err) { console.error('[bot] !save error:', err) }
 })
 
-bot.hears(/^!search\b/, async (ctx) => {
+b.hears(/^!search\b/, async (ctx) => {
   try {
     const query = ctx.message?.text?.replace(/^!search\s*/, '').trim()
     if (!query) return
@@ -387,7 +450,7 @@ bot.hears(/^!search\b/, async (ctx) => {
   } catch (err) { console.error('[bot] !search error:', err) }
 })
 
-bot.hears(/^!random$/, async (ctx) => {
+b.hears(/^!random$/, async (ctx) => {
   try {
     const post = await getRandomPost(true)
     if (!post) { await ctx.reply(t('noPosts', ctx.config.lang)).catch(() => {}); return }
@@ -395,7 +458,7 @@ bot.hears(/^!random$/, async (ctx) => {
   } catch (err) { console.error('[bot] !random error:', err) }
 })
 
-bot.hears(/^!info\b/, async (ctx) => {
+b.hears(/^!info\b/, async (ctx) => {
   try {
     const url = ctx.message?.text?.replace(/^!info\s*/, '').trim()
     if (!url) return
@@ -413,7 +476,7 @@ bot.hears(/^!info\b/, async (ctx) => {
 })
 
 // ── /aitags command (AI capability ⑦) ──
-bot.command('aitags', async (ctx) => {
+b.command('aitags', async (ctx) => {
   try {
     const modeArg = ctx.message?.text?.split(' ')[1]
     const mode = (modeArg === 'all' ? 'all' : 'unprocessed') as 'unprocessed' | 'all'
@@ -436,7 +499,7 @@ bot.command('aitags', async (ctx) => {
 })
 
 // ── /ai command (AI capability ⑧) ──
-bot.command('ai', async (ctx) => {
+b.command('ai', async (ctx) => {
   try {
     const query = ctx.message?.text?.split(' ').slice(1).join(' ')
     if (!query) {
@@ -460,7 +523,7 @@ bot.command('ai', async (ctx) => {
   } catch (err) { console.error('[bot] /ai error:', err) }
 })
 
-bot.hears(/^!ai\b/, async (ctx) => {
+b.hears(/^!ai\b/, async (ctx) => {
   try {
     const query = ctx.message?.text?.replace(/^!ai\s*/, '').trim()
     if (!query) return
@@ -474,7 +537,7 @@ bot.hears(/^!ai\b/, async (ctx) => {
 })
 
 // ── URL detection handler (T-P0-1: extract URLs from text) ──
-bot.on('message:text', async (ctx) => {
+b.on('message:text', async (ctx) => {
   try {
     const text = ctx.message.text
 
@@ -529,7 +592,7 @@ bot.on('message:text', async (ctx) => {
 })
 
 // ── Photo caption handler (T-P1-6) ──
-bot.on('message:photo', async (ctx) => {
+b.on('message:photo', async (ctx) => {
   try {
     const caption = ctx.message.caption || ''
     const urls = [...new Set(caption.match(URL_PATTERN) || [])]
@@ -569,7 +632,7 @@ bot.on('message:photo', async (ctx) => {
 })
 
 // ── Callback query handler (T-P0-3: rating buttons + search pagination + random) ──
-bot.on('callback_query', async (ctx) => {
+b.on('callback_query', async (ctx) => {
   const data = ctx.callbackQuery.data ?? ''
   const chatId = ctx.chat?.id?.toString()
   if (!chatId) return
@@ -585,7 +648,7 @@ bot.on('callback_query', async (ctx) => {
     } else if (data.startsWith('random:another')) {
       const post = await getRandomPost(true)
       if (!post) return ctx.answerCallbackQuery({ text: t('noPosts', ctx.config.lang) })
-      const previewUrl = post.preview_key ? `${process.env.S3_EXTERNAL_URL || ''}/${post.preview_key}` : null
+      const previewUrl = post.preview_key ? `${await getS3ExternalUrlLazy()}/${post.preview_key}` : null
       const caption = `${t('randomCaption', ctx.config.lang, post.title || '')}\n${SITE_URL}/posts/${post.id}`
       const keyboard = {
         inline_keyboard: [[
@@ -613,6 +676,8 @@ bot.on('callback_query', async (ctx) => {
 
   await ctx.answerCallbackQuery().catch(() => {})
 })
+
+}
 
 // ── Poll and notify (T-P0-2) ──
 async function pollAndNotify(

@@ -45,6 +45,11 @@ export async function generateThumbnails(
   fallbackMime?: string,
 ): Promise<ThumbnailResult> {
   const sharpMod = await getSharp()
+  // v0.10.0: 尺寸从 DB settings 读取（thumb_size / preview_size），热刷新。
+  const { getImageSizes } = await import('../../../utils/settings')
+  const sizes = await getImageSizes()
+  const thumbSize = sizes.thumbSize
+  const previewSize = sizes.previewSize
   let thumbBuffer: Buffer | null = null
   let midBuffer: Buffer | null = null
   let previewBuffer: Buffer | null = null
@@ -57,9 +62,9 @@ export async function generateThumbnails(
   if (sharpMod) {
     const img = sharpMod.default(imageBuffer)
     ;[thumbBuffer, midBuffer, previewBuffer, largeBuffer] = await Promise.all([
-      img.clone().resize(300, 300, { fit: 'inside' }).webp({ quality: 80 }).toBuffer(),
+      img.clone().resize(thumbSize, thumbSize, { fit: 'inside' }).webp({ quality: 80 }).toBuffer(),
       img.clone().resize(640, undefined, { fit: 'inside' }).webp({ quality: 82 }).toBuffer(),
-      img.clone().resize(1280, undefined, { fit: 'inside' }).webp({ quality: 85 }).toBuffer(),
+      img.clone().resize(previewSize, undefined, { fit: 'inside' }).webp({ quality: 85 }).toBuffer(),
       img.clone().resize(2000, undefined, { fit: 'inside' }).webp({ quality: 85 }).toBuffer(),
     ])
     // LQIP: 20×20 webp blur → base64 data URI (embedded in API response, no extra request)

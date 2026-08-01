@@ -16,32 +16,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
+          cache: pnpm
       # postinstall runs `nuxt prepare`, which generates the .nuxt tsconfig refs
       # that `nuxt typecheck` consumes — must succeed for typecheck to be valid.
-      - run: npm ci
-      - run: npx nuxt typecheck
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec nuxt typecheck
 
   extension-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: extension/package-lock.json
-      - name: Install extension deps
-        run: |
-          cd extension
-          npm ci
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
       - name: Run tests
-        run: |
-          cd extension
-          npx vitest run
+        run: pnpm --filter kura-booru-next-extension test
 
   sidecar-tests:
     runs-on: ubuntu-latest
@@ -72,5 +69,5 @@ jobs:
         with:
           node-version: "24"
       # check.mjs is zero-dependency and imports .ts directly — Node 24's
-      # type-stripping runs it without npm ci.
+      # type-stripping runs it without pnpm install.
       - run: node server/platform/contract/check.mjs

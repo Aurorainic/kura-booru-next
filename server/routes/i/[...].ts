@@ -17,7 +17,8 @@ export default defineEventHandler(async (event) => {
     return new Response('Forbidden', { status: 403 })
   }
 
-  const s3Base = process.env.S3_EXTERNAL_URL || ''
+  const { getS3ExternalUrl } = await import('../../utils/s3')
+  const s3Base = await getS3ExternalUrl()
   if (!s3Base) {
     return new Response('S3_EXTERNAL_URL not configured', { status: 502 })
   }

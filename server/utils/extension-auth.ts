@@ -109,7 +109,7 @@ export async function verifyExtensionKey(raw: string | undefined | null): Promis
 
 // ponytail: invariant self-check. Runs once at module load — catches the
 // trivial breakages (prefix drift, hash mismatch, generator regression)
-// without spinning up a DB. Run with `npx tsx server/utils/extension-auth.ts`
+// without spinning up a DB. Run with `pnpm exec tsx server/utils/extension-auth.ts`
 // or via `nuxt typecheck`. No-op in production.
 if (process.env.NODE_ENV !== 'production') {
   ;(async () => {

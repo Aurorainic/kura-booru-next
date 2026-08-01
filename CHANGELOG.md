@@ -2,6 +2,30 @@
 
 本文件记录项目的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+> 未完工进度：v0.10.0 进行中，以下变更尚未全部验收，可能随开发调整。
+
+### 新增
+- **全站设置迁移至数据库（7 类后台卡片）** — 站点标题/URL/公告/head 注入/维护模式、图片尺寸（缩略图/预览/上传上限）、S3 存储六项、Telegram Bot（token/webhook secret/管理员 ID/中转）、Pixiv 凭证与 Backend API Key 全部迁入 `settings` 表；后台「设置」页按 7 类卡片分区管理，保存即热刷新生效。`.env` 仅保留启动必需配置（`DATABASE_URL` / `REDIS_URL` / `SECRET_KEY` / `SESSION_SECRET` / `POSTGRES_*` / `PORT` 等），业务配置不再依赖环境变量。
+- **设置热刷新机制** — 新增 `server/utils/settings-defs.ts` 注册表（键/分类/类型/掩码/默认值）+ `server/plugins/07-settings-hot-reload.ts` 刷新钩子：S3 客户端自动重建、Telegram Bot 实例重建（token/管理员/中转变更即时生效）、Pixiv 凭证与上传上限经 Redis 同步到 sidecar（`kura:pixiv:*` / `kura:max_image_size`）。
+- **Telegram Bot 境内中转支持** — 后台「机器人」卡片新增「中转类型」下拉（HTTP(S) 代理 / SOCKS5 代理 / MTProto 反代 apiRoot / 直连）与「测试 Bot 连接 (getMe)」按钮（按所选类型实测连通，返回用户名或错误详情）。实现依赖：undici `ProxyAgent`（http）、socks-proxy-agent + undici `Agent({connect})` 包装（socks，`secureEndpoint: true`）、grammy `apiRoot`（mtproto）。
+- **运行模式开关（内网/公网）** — 原 `KURA_INTERNET_MODE` 环境变量移除，改为后台「站点 → 运行模式」下拉（默认 intranet）：内网模式所有访客视为管理员、隐藏登录/退出入口、全部评级可见；公网模式恢复登录墙与评级限制（匿名仅见 safe）。切换即时生效，公网模式改回需管理员登录。部署文档同步更新。
+- **后台设置卡片自适应排版** — 卡片区改 CSS 瀑布流（窄屏单列 / xl+ 双列，`break-inside-avoid` 自动均衡高度），字段区窄屏单列 / sm+ 双列（textarea 跨整行）；新增 `select` 类型渲染；敏感项掩码显示、留空保持原值。
+- **新管理端点**：`POST /api/admin/settings/test-s3`（HeadBucket + ListBuckets 兜底实测连通）、`POST /api/admin/settings/test-bot`（getMe，支持候选 token/类型/地址，返回 `via` 链路标识）。契约清单同步登记。
+
+### 变更
+- **包管理器 npm → pnpm** — 项目迁移至 pnpm（`packageManager: pnpm@11.3.0` + `pnpm-workspace.yaml`）；`Dockerfile` / CI / 文档中全部 npm 命令改为 pnpm。依赖新增 `undici@^7.29.0`（**必须 7.x**：8.x 与 Node 24 内置 undici 不兼容，dispatcher 报 `invalid onRequestStart method`）、`socks-proxy-agent@^10.1.0`。
+- **机器人配置读取** — `server/lib/bot/bot.ts` 改为 DB settings 优先 + env 回退的惰性构建（`getBot()` / `rebuildBot()`），代理/中转连接统一封装于 `server/utils/bot-proxy.ts`（`buildBotClient`，bot 与测试端点共用）。
+- **S3 客户端** — `server/utils/s3.ts` 改为按 settings 惰性构建 + 可重建（`resetS3Client`），配置变更后自动生效。
+- **管理端点契约** — `/api/admin/settings` GET 返回 `{ categories, items }`（含 type/label/description/options/masked 元数据）而非扁平 `{ key: value }`；PUT 收 `{ settings }` 且仅接受注册表内键。
+- **`getIsAdmin` / SSR 上下文** — 内网判定改读 DB `run_mode`（10s 缓存热刷新），`event.context.intranetMode` 与 `siteSettings.intranet_mode` 均由该设置推导。
+
+### 修复
+- **后台登录入口在 intranet 模式误显** — 登录/退出入口现在由 `intranetMode` 统一控制（`default.vue` / `BottomTabBar.vue` / `login.vue`），内网模式完全隐藏。
+- **`defineAsyncComponent` 类型错误** — 移除 Vue 3.5 不存在的 `name` 选项（`admin/index.vue`），KeepAlive 匹配改由 SFC `defineOptions` 驱动。
+- **worker 健康检查误报** — alpine 镜像无 `pgrep`，compose healthcheck 改查 `/proc/1/cmdline`。
+
 ## [Unreleased] (v0.9.0)
 
 ### 新增

@@ -74,6 +74,12 @@ const ADMIN_CACHE_TTL = 30_000
 const ADMIN_CACHE_MAX = 256
 
 export async function getIsAdmin(cookieHeader: string): Promise<boolean> {
+  // ponytail: intranet mode treats every visitor as admin. Single source of truth
+  // for admin elevation so all handlers (defineAdminHandler, public rating filters,
+  // etc.) see it without per-route guards. run_mode 来自 DB settings（默认 intranet），
+  // 后台切换后经 settings 缓存热刷新（10s TTL）。
+  const { getRunMode } = await import('./settings')
+  if (await getRunMode() === 'intranet') return true
   if (!cookieHeader) return false
   const cookies = parseCookies(cookieHeader)
   const token = cookies[SESSION_COOKIE]

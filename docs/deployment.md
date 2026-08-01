@@ -83,6 +83,26 @@ docker compose --env-file ../.env -f docker-compose.yml up -d
 
 The browser talks directly to the Nuxt server (`:3000`), which handles SSR and proxies image requests to S3 internally.
 
+### Run Mode: Intranet vs Public (Admin Panel Switch)
+
+The run mode is a **database setting**, configured in the admin panel at
+`/admin?tab=settings` → **站点 → 运行模式** (default: `intranet`). No environment
+variable is involved; changing it takes effect immediately (hot-reload).
+
+- **intranet（内网）** — no admin login wall: every visitor is treated as an
+  admin, all content ratings are visible, `/admin` and all panels are open,
+  and login/logout UI entries are hidden. Use only on a trusted local network
+  (LAN or VPN).
+- **public（公网）** — login wall + rating restrictions restored: anonymous
+  visitors see only `safe` content, non-safe returns 404, and admin actions
+  require an admin session.
+
+Do **not** run the public internet in `intranet` mode, because it completely
+disables the admin access control.
+
+> 提示：首次部署（settings 表无 `run_mode` 记录）时默认即为 `intranet`；
+> 公网部署请先在后台切换到「公网模式」再对外暴露。
+
 ### Reverse Proxy Optimized Mode (Production)
 
 Use any reverse proxy for HTTPS termination, compression, and static asset caching. The proxy forwards all traffic to the Nuxt container.
@@ -148,7 +168,7 @@ strategy and rollback.
 The stack uses the same PostgreSQL as v1. Existing tables and data are reused. If starting fresh:
 
 ```bash
-npm run db:push   # Push Drizzle schema to database
+pnpm run db:push   # Push Drizzle schema to database
 ```
 
 ### 4. Configure Reverse Proxy (Reverse Proxy Optimized mode only)

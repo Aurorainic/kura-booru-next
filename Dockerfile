@@ -9,8 +9,10 @@
 # ── Stage 1: deps ──
 FROM node:22-alpine AS deps
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm install -g pnpm@11.3.0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY extension/package.json ./extension/package.json
+RUN pnpm install --frozen-lockfile
 
 # ── Stage 2: build ──
 # ponytail: NODE_ENV=production 是 prod 构建根因开关。Nuxt 按 NODE_ENV 决定
@@ -20,6 +22,7 @@ RUN npm ci
 FROM node:22-alpine AS build
 ARG KURA_VERSION
 WORKDIR /app
+RUN npm install -g pnpm@11.3.0
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV KURA_VERSION=${KURA_VERSION}
@@ -30,7 +33,7 @@ ENV KURA_VERSION=${KURA_VERSION}
 # for runtime, but the build-time value is what gates the client build.
 ENV NODE_ENV=production
 RUN test "${NODE_ENV:-}" = "production" || { echo "FATAL: build stage requires NODE_ENV=production, got '${NODE_ENV:-unset}' — this would ship a dev bundle to GHCR"; exit 1; }
-RUN npm run build
+RUN pnpm run build
 
 # ── Stage 3: production ──
 FROM node:22-alpine AS production
@@ -55,4 +58,4 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 EXPOSE 3000
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+CMD ["pnpm", "run", "dev", "--", "--host", "0.0.0.0"]

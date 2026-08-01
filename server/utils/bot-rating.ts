@@ -75,7 +75,8 @@ export async function confirmRating(
   label: string,
 ) {
   const baseUrl = process.env.INTERNAL_API_URL || `http://localhost:${process.env.PORT || 3000}`
-  const apiKey = process.env.BACKEND_API_KEY
+  const { getBackendApiKey } = await import('./settings')
+  const apiKey = await getBackendApiKey()
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (apiKey) headers['x-api-key'] = apiKey
 

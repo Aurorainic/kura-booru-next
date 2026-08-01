@@ -1,8 +1,10 @@
 <script setup lang="ts">
 withDefaults(defineProps<{
   isAdmin?: boolean
+  intranetMode?: boolean
 }>(), {
   isAdmin: false,
+  intranetMode: false,
 })
 
 const route = useRoute()
@@ -77,13 +79,13 @@ onUnmounted(() => {
             <template v-if="isAdmin">
               <div class="border-t border-[var(--border-color)]" />
               <NuxtLink to="/admin?tab=dashboard" class="block px-4 py-3 text-sm text-[var(--accent-color)] hover:bg-[var(--accent-subtle)] transition-colors">管理后台</NuxtLink>
-              <form action="/logout" method="post" class="contents">
+            </template>
+            <template v-if="!intranetMode">
+              <div class="border-t border-[var(--border-color)]" />
+              <form v-if="isAdmin" action="/logout" method="post" class="contents">
                 <button type="submit" class="block w-full text-left px-4 py-3 text-sm text-[var(--color-danger)] hover:bg-[var(--accent-subtle)] transition-colors">退出登录</button>
               </form>
-            </template>
-            <template v-else>
-              <div class="border-t border-[var(--border-color)]" />
-              <NuxtLink to="/login" class="block px-4 py-3 text-sm text-[var(--text-primary)] hover:bg-[var(--accent-subtle)] transition-colors">登录</NuxtLink>
+              <NuxtLink v-else to="/login" class="block px-4 py-3 text-sm text-[var(--text-primary)] hover:bg-[var(--accent-subtle)] transition-colors">登录</NuxtLink>
             </template>
           </div>
         </Transition>

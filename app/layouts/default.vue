@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import type { SiteSettings } from '~/types'
 
-const { siteSettings, isAdmin, ssrCookie } = useSsrContext()
+const { siteSettings, isAdmin, ssrCookie, intranetMode } = useSsrContext()
 
 // Initialize from SSR context
 if (import.meta.server) {
   const ctx = useRequestEvent()?.context || {}
   isAdmin.value = ctx.isAdmin || false
+  intranetMode.value = ctx.intranetMode || false
   ssrCookie.value = ctx.ssrCookie || ''
-  siteSettings.value = ctx.siteSettings || null
+  const settings = ctx.siteSettings || null
+  if (settings && settings.intranet_mode === undefined) {
+    settings.intranet_mode = String(!!ctx.intranetMode)
+  }
+  siteSettings.value = settings
 }
 
 const settings = siteSettings as Ref<SiteSettings | null>
@@ -98,13 +103,16 @@ const SCRIPT_OPEN_RE = /<scr\u0069pt\b([^>]*)>/gi
 const ATTR_RE = /(\w[\w-]*)=(?:"([^"]*)"|'([^']*)'|(\S+))/g
 const SCRIPT_CLOSE = '<' + '/script>'
 
-const headInjectEntries = computed(() => {
+const headInjectEntries = computed<import('@unhead/vue').ReactiveHead>(() => {
   // S7: head_inject is admin-trusted but still scope it to admin viewers —
   // anonymous visitors don't need analytics/tracking scripts.
   if (!isAdmin.value) return {}
   const html = headInject.value
   if (!html) return {}
-  const scripts: Record<string, string>[] = []
+  // ponytail: ResolvableScript is a distributed union — plain object literals
+  // don't structurally match it. Cast via any; shape is validated by unhead at
+  // render time anyway.
+  const scripts: any[] = []
   let m
   while ((m = SCRIPT_OPEN_RE.exec(html)) !== null) {
     const attrs: Record<string, string> = {}
@@ -175,13 +183,15 @@ useHead(headInjectEntries)
                   <NuxtLink to="/tags" class="block px-4 py-3 text-sm text-[var(--text-primary)] hover:bg-[var(--accent-subtle)] transition-colors" @click="navMenuOpen = false">标签</NuxtLink>
                   <NuxtLink to="/random" class="block px-4 py-3 text-sm text-[var(--text-primary)] hover:bg-[var(--accent-subtle)] transition-colors" @click="navMenuOpen = false">随机</NuxtLink>
                   <div class="border-t border-[var(--border-color)]" />
-                  <template v-if="isAdmin">
+                <template v-if="isAdmin">
                     <NuxtLink to="/admin?tab=dashboard" class="block px-4 py-3 text-sm text-[var(--accent-color)] hover:bg-[var(--accent-subtle)] transition-colors" @click="navMenuOpen = false">管理后台</NuxtLink>
-                    <form action="/logout" method="post" class="contents">
+                  </template>
+                  <template v-if="!intranetMode">
+                    <form v-if="isAdmin" action="/logout" method="post" class="contents">
                       <button type="submit" class="block w-full text-left px-4 py-3 text-sm text-[var(--color-danger)] hover:bg-[var(--accent-subtle)] transition-colors">退出</button>
                     </form>
+                    <NuxtLink v-else to="/login" class="block px-4 py-3 text-sm text-[var(--text-primary)] hover:bg-[var(--accent-subtle)] transition-colors" @click="navMenuOpen = false">登录</NuxtLink>
                   </template>
-                  <NuxtLink v-else to="/login" class="block px-4 py-3 text-sm text-[var(--text-primary)] hover:bg-[var(--accent-subtle)] transition-colors" @click="navMenuOpen = false">登录</NuxtLink>
                 </div>
               </Transition>
             </div>
@@ -213,7 +223,7 @@ useHead(headInjectEntries)
     </footer>
 
     <!-- Mobile bottom tab bar -->
-    <BottomTabBar :is-admin="isAdmin" />
+    <BottomTabBar :is-admin="isAdmin" :intranet-mode="intranetMode" />
 
     <!-- Keyboard shortcuts cheatsheet (? to toggle) -->
     <KbdCheatSheet v-model="cheatsheetOpen" />

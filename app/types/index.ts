@@ -80,6 +80,7 @@ export interface SiteSettings {
   head_inject: string
   maintenance_mode: string
   ai_enabled?: string
+  intranet_mode?: string
 }
 
 export interface DashboardOverview {
