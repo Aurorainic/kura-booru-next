@@ -112,6 +112,9 @@ def test_chained_redirect_truncated_by_max_redirects():
     HTTPAdapter-level IP check even runs.
     """
     from gallery_dl import config as gdl_config
+    # max-redirects 由 setup_gallery_dl() 写入全局 config — 测试先初始化，
+    # 否则直接 import 模块时 config 未设置（CI 上实测为 None）
+    sidecar.setup_gallery_dl()
     max_redir = gdl_config.get((), "max-redirects")
     assert max_redir == 1, (
         f"Expected max-redirects=1 (DNS rebind defense), got {max_redir}. \n"
@@ -127,12 +130,15 @@ def test_redirect_hop_revalidates_url(mock_original_send):
     We simulate a 302 redirect to a blocked IP — the adapter patch
     must reject it at the hop, not just the initial URL.
     """
-    # Simulate: initial request succeeds with redirect
+    # Simulate: initial request succeeds with redirect.
+    # 初始 URL 用 IP 字面量（公网 1.1.1.1）— getaddrinfo 对字面 IP 不做
+    # DNS 查询，测试不依赖外部 DNS（原 public.example.com 在 CI runner 上
+    # 解析失败导致初始校验直接抛 DNS resolution failed）。
     redirect_resp = _MockResponse(302, "http://192.168.1.99/internal")
     mock_original_send.return_value = redirect_resp
 
     adapter = sidecar.HTTPAdapter()
-    req = _MockRequest("https://public.example.com/safe")
+    req = _MockRequest("https://1.1.1.1/safe")
 
     # The patch on HTTPAdapter.send calls validate_url on the redirect
     # Location, which should raise for the private IP.
