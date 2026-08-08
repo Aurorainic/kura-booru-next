@@ -26,8 +26,8 @@ const emit = defineEmits<{
       <span class="inline-block px-2.5 py-0.5 rounded-full text-[0.6875rem] font-bold" :class="getRatingColorClass(post.rating)">{{ getRatingLabel(post.rating) }}</span>
     </div>
 
-    <!-- Description -->
-    <div v-if="post.description" class="description text-sm text-[var(--text-primary)] leading-relaxed">{{ post.description }}</div>
+    <!-- Description (plain text; line breaks from sanitizer preserved) -->
+    <div v-if="post.description" class="description text-sm text-[var(--text-primary)] leading-relaxed whitespace-pre-line">{{ post.description }}</div>
 
     <!-- Info card -->
     <div class="dash-card !p-4 space-y-3">
