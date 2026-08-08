@@ -162,14 +162,3 @@ export interface RatingSuggestionItem {
   confidence: number
   reason: string
 }
-
-export interface AssistantSuggestion {
-  label: string
-  callback_data: string
-  action?: { type: string; payload: any }
-}
-
-export interface AssistantReply {
-  text: string
-  suggestions?: AssistantSuggestion[]
-}

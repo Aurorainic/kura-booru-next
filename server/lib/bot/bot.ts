@@ -7,7 +7,6 @@ import { searchPosts, getRandomPost, getPostBySource } from '../posts/repo'
 import { isAiEnabled } from '../ai/config'
 import { generatePostSummary } from '../ai/summary'
 import { suggestRatingForPost } from '../ai/ratings'
-import { adminAssistantChat } from '../ai/assistant'
 import { reprocessTags } from '../ai/reprocess'
 import { enqueueJob, pollJobResult } from '../../utils/queue'
 import { identifySource, resolveSourceOrOther } from '../../utils/url-patterns'
@@ -127,7 +126,6 @@ export async function syncBotWebhook(): Promise<void> {
     { command: 'stats', description: '站点统计 / Stats' },
     { command: 'autopass', description: '自动评级开关 / Toggle autopass' },
     { command: 'aitags', description: 'AI 标签处理 / AI tag processing' },
-    { command: 'ai', description: 'AI 助手 / AI assistant' },
     { command: 'lang', description: '切换语言 / Switch language' },
     { command: 'start', description: '开始使用 / Start' },
   ], { scope: { type: 'all_private_chats' } })
@@ -569,44 +567,6 @@ b.command('aitags', async (ctx) => {
       await ctx.reply(text).catch(() => {})
     }
   } catch (err) { console.error('[bot] /aitags error:', err) }
-})
-
-// ── /ai command (AI capability ⑧) ──
-b.command('ai', async (ctx) => {
-  try {
-    const query = ctx.message?.text?.split(' ').slice(1).join(' ')
-    if (!query) {
-      await ctx.reply(ctx.config.lang === 'zh' ? '用法: /ai <问题>' : 'Usage: /ai <question>').catch(() => {})
-      return
-    }
-    if (!isAiEnabled()) {
-      await ctx.reply(ctx.config.lang === 'zh' ? 'AI 未启用' : 'AI not enabled').catch(() => {})
-      return
-    }
-    const thinkingMsg = await ctx.reply('🤔 思考中…').catch(() => {})
-    const reply = await adminAssistantChat(query, { source: 'bot', lang: ctx.config.lang })
-    const keyboard = reply.suggestions?.length
-      ? { inline_keyboard: reply.suggestions.slice(0, 8).map(s => [{ text: s.label.slice(0, 64), callback_data: s.callback_data.slice(0, 64) }]) }
-      : undefined
-    if (thinkingMsg) {
-      await ctx.api.editMessageText(ctx.chat!.id, thinkingMsg.message_id, reply.text.slice(0, 4096), keyboard ? { reply_markup: keyboard } : undefined).catch(() => {})
-    } else {
-      await ctx.reply(reply.text.slice(0, 4096), keyboard ? { reply_markup: keyboard } : undefined).catch(() => {})
-    }
-  } catch (err) { console.error('[bot] /ai error:', err) }
-})
-
-b.hears(/^!ai\b/, async (ctx) => {
-  try {
-    const query = ctx.message?.text?.replace(/^!ai\s*/, '').trim()
-    if (!query) return
-    if (!isAiEnabled()) return
-    const thinkingMsg = await ctx.reply('🤔…').catch(() => {})
-    const reply = await adminAssistantChat(query, { source: 'bot', lang: ctx.config.lang })
-    if (thinkingMsg) {
-      await ctx.api.editMessageText(ctx.chat!.id, thinkingMsg.message_id, reply.text.slice(0, 4096)).catch(() => {})
-    }
-  } catch (err) { console.error('[bot] !ai error:', err) }
 })
 
 // ── URL detection handler (T-P0-1: extract URLs from text) ──

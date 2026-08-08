@@ -35,7 +35,9 @@ export default defineAdminHandler({
     const [updated] = await db.update(tags).set(updateData).where(eq(tags.id, id)).returning()
     if (!updated) throw new AppError('NOT_FOUND', 404, 'Tag update failed')
 
-    // Sync to tag_knowledge (source: 'manual')
+    // Sync to tag_knowledge (source: 'manual' — 人工纠偏，优先级最高，永远覆盖 AI 结果)
+    // agent 自学习闭环：管理员修正的分类/翻译/规范名写回经验库，后续 AI 分类会
+    // 采样到这些"已确认样例"，同类标签保持一致性。
     await db.insert(tagKnowledge).values({
       name: updated.name,
       danbooruName: updated.danbooruName,

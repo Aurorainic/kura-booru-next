@@ -20,9 +20,25 @@ export async function upsertTags(
 ): Promise<string[]> {
   const tagIds: string[] = []
 
-  if (tagNames.length > 0) {
+  // ponytail: gallery-dl 的 tag 列表可能把画师也作为一个 "artist:xxx" 前缀标签
+  // 返回（Pixiv 尤其常见）。这些应并入 artist 专用字段，而不是作为独立 general
+  // 标签入库——否则会出现 "artist:みこフライ" 这种既带前缀又被归为 artist 的怪标签。
+  const cleanNames: string[] = []
+  let extractedArtist = artistName
+  for (const raw of tagNames) {
+    const name = (raw || '').trim()
+    if (!name) continue
+    if (name.startsWith('artist:')) {
+      const bare = name.slice('artist:'.length).trim()
+      if (bare && !extractedArtist) extractedArtist = bare
+      continue  // 前缀标签不进入普通标签
+    }
+    cleanNames.push(name)
+  }
+
+  if (cleanNames.length > 0) {
     const rows = await tx.insert(tags)
-      .values(tagNames.map(name => ({ name, category: 'general' as any, postCount: 1 })))
+      .values(cleanNames.map(name => ({ name, category: 'general' as any, postCount: 1 })))
       .onConflictDoUpdate({
         target: tags.name,
         set: { postCount: sql`${tags.postCount} + 1` },
@@ -32,10 +48,10 @@ export async function upsertTags(
   }
 
   // Artist tag: dedicated upsert with category=artist
-  if (artistName) {
+  if (extractedArtist) {
     const [tag] = await tx
       .insert(tags)
-      .values({ name: artistName, category: 'artist' as any, postCount: 1 })
+      .values({ name: extractedArtist, category: 'artist' as any, postCount: 1 })
       .onConflictDoUpdate({
         target: tags.name,
         set: {

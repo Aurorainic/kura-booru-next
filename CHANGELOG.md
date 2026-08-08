@@ -21,6 +21,7 @@
 - **安全模式（Safe Mode）** — 后台「站点」新增 `safe_mode_enabled` 与 `safe_mode_in_intranet` 开关。开启后列表/随机接口仅返回 `safe` 评级；搜索与详情仍返回全部评级但追加 `is_blurred`，前端用 `PostBlurOverlay` 点击后展开，避免管理员在公网/内网环境中意外暴露敏感内容。
 
 ### 变更
+- **AI 对话模块归档**（`archive/ai-chat/`）— admin assistant chat（`assistant.ts` / `/api/admin/ai/chat` / `AiChatPanel.vue` / Bot `/ai`、`!ai` 命令）整体移入 `archive/ai-chat/`，不再参与构建；契约清单移除 `/api/admin/ai/chat`（61→60 路由文件）。分类 / 合并 / 评级能力不受影响。
 - **包管理器 npm → pnpm** — 项目迁移至 pnpm（`packageManager: pnpm@11.3.0` + `pnpm-workspace.yaml`）；`Dockerfile` / CI / 文档中全部 npm 命令改为 pnpm。依赖新增 `undici@^7.29.0`（**必须 7.x**：8.x 与 Node 24 内置 undici 不兼容，dispatcher 报 `invalid onRequestStart method`）、`socks-proxy-agent@^10.1.0`。
 - **组件自动导入改为按文件名注册（`pathPrefix: false`）** — Nuxt 默认 `pathPrefix: true` 会给子目录组件加目录前缀（`ui/ConfirmDialog.vue` → `UiConfirmDialog`），而模板用的是无前缀名，导致共享 UI 组件全部解析失败（详见修复「全站删除按钮无响应」）。改为按文件名注册，无 basename 冲突，admin 面板本就显式 import 不受影响。
 - **web-import 入队前协议校验** — `/api/tasks/web-import` 与 `/api/tasks` 在入队前校验 URL 必须为 http/https（并在既有的私网地址校验之前），`ftp://` 等协议直接在入口拒绝，不再进入 sidecar 下载环节白跑一趟。

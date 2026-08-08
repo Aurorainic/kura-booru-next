@@ -44,8 +44,7 @@ export const ENDPOINT_CONTRACTS: EndpointContract[] = [
   { method: 'POST', path: '/api/tasks/web-import', file: 'api/tasks/web-import.post.ts', auth: 'ext-union', frozen: 'extension' },
   { method: 'GET', path: '/api/tasks/web-import/stream', file: 'api/tasks/web-import/stream.get.ts', auth: 'session' },
   { method: 'GET', path: '/api/tasks/:id', file: 'api/tasks/[id].get.ts', auth: 'session-or-apikey', frozen: 'extension' },
-  // admin/ai (6)
-  { method: 'POST', path: '/api/admin/ai/chat', file: 'api/admin/ai/chat.post.ts', auth: 'session' },
+  // admin/ai (5)
   { method: 'POST', path: '/api/admin/ai/classify-tags', file: 'api/admin/ai/classify-tags.post.ts', auth: 'session' },
   { method: 'POST', path: '/api/admin/ai/suggest-merges', file: 'api/admin/ai/suggest-merges.post.ts', auth: 'session' },
   { method: 'POST', path: '/api/admin/ai/suggest-ratings', file: 'api/admin/ai/suggest-ratings.post.ts', auth: 'session' },

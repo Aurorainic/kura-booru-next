@@ -1,4 +1,4 @@
-import type { AiStatus, AiJobStatus, TagClassificationSuggestion, MergeSuggestion, RatingSuggestionItem, AssistantReply, AiProvidersResponse, AiProvider, AiConnectionTestResult } from '~/types'
+import type { AiStatus, AiJobStatus, TagClassificationSuggestion, MergeSuggestion, RatingSuggestionItem, AiProvidersResponse, AiProvider, AiConnectionTestResult } from '~/types'
 import { fetchApi } from './api'
 
 // 显式 import 规避 auto-import 在异步 chunk 的失效（源自前端审计结论，审计文档已随仓库清理移除）
@@ -55,20 +55,6 @@ export async function suggestRatingsAI(
 
 export async function getAiJobStatus(jobId: string, ssrCookie?: string): Promise<AiJobStatus> {
   return fetchApi<AiJobStatus>(`/admin/ai/jobs/${jobId}`, undefined, { ssrCookie })
-}
-
-// ── Admin Assistant Chat ──
-
-export async function adminChat(
-  params: { query: string; history?: { role: string; content: string }[]; lang?: string },
-  ssrCookie?: string,
-): Promise<AssistantReply> {
-  return fetchApi('/admin/ai/chat', undefined, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...params, source: 'web' }),
-    ssrCookie,
-  })
 }
 
 // ── AI Provider Management (v0.9.0) ──

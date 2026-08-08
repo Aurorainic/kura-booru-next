@@ -73,6 +73,43 @@ export interface AiConnectionTestResult {
   error?: string
 }
 
+/**
+ * 从 AI 原始输出中稳健地提取 JSON。
+ *
+ * 部分模型（尤其 deepseek 等）即使开了 response_format，也可能把 JSON
+ * 包在 ```json ... ``` 代码围栏里，或前后加闲聊文字。JSON.parse 直接失败
+ * 会让整个批次作废。这里先剥围栏、再截取首个平衡的 {...} 区间。
+ */
+export function extractJsonFromRaw(raw: string): unknown {
+  let text = (raw || '').trim()
+  // 剥掉 ```json ... ``` 围栏
+  const fence = text.match(/^```(?:json)?\s*\n([\s\S]*?)\n```\s*$/)
+  if (fence?.[1]) text = fence[1].trim()
+
+  // 若剥围栏后仍非纯 JSON，尝试截取第一个平衡的 {...}
+  if (!text.startsWith('{')) {
+    const start = text.indexOf('{')
+    if (start === -1) throw new Error('AI 输出中未找到 JSON 对象')
+    let depth = 0
+    let inString = false
+    let escape = false
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i]
+      if (inString) {
+        if (escape) escape = false
+        else if (ch === '\\') escape = true
+        else if (ch === '"') inString = false
+        continue
+      }
+      if (ch === '"') inString = true
+      else if (ch === '{') depth++
+      else if (ch === '}') { depth--; if (depth === 0) { text = text.slice(start, i + 1); break } }
+    }
+  }
+  return JSON.parse(text)
+}
+
+
 const TEST_TIMEOUT_MS = 15_000
 
 /**

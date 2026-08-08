@@ -1,4 +1,6 @@
 <script setup lang="ts">
+<!-- ARCHIVED (v0.10.0): AI 对话模块已归档，不再被 AiAssistantPanel 引用。
+     原位置: app/components/admin/ai/AiChatPanel.vue。git 历史可恢复。 -->
 import type { AssistantReply } from '~/types'
 
 const props = defineProps<{
