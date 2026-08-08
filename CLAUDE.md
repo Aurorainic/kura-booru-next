@@ -4,7 +4,7 @@
 >
 > 文档与代码注释双语（中/英）；新增代码注释沿用所在文件风格。
 
-Current version: v0.9.0 (v0.10.0 in progress — see `CHANGELOG.md` `[Unreleased]`).
+Current version: v0.10.0 (released 2026-08-08).
 
 **Authoritative docs** (for depth; this file is the map):
 - `docs/architecture.md` + `docs/architecture/{overview,data-model,extension,decisions}.md` — architecture, data model, extension, ADRs
