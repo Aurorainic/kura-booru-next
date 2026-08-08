@@ -33,12 +33,23 @@ from requests.adapters import HTTPAdapter
 # ── SSRF Protection ──
 ALLOWED_SCHEMES = {"http", "https"}
 BLOCKED_NETWORKS = [
+    ipaddress.ip_network("0.0.0.0/8"),
     ipaddress.ip_network("127.0.0.0/8"),
     ipaddress.ip_network("10.0.0.0/8"),
     ipaddress.ip_network("172.16.0.0/12"),
     ipaddress.ip_network("192.168.0.0/16"),
     ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("192.0.0.0/24"),
+    ipaddress.ip_network("192.0.2.0/24"),
+    ipaddress.ip_network("198.18.0.0/15"),
+    ipaddress.ip_network("198.51.100.0/24"),
+    ipaddress.ip_network("203.0.113.0/24"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("240.0.0.0/4"),
     ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("2001:db8::/32"),
+    ipaddress.ip_network("ff00::/8"),
     ipaddress.ip_network("fc00::/7"),
 ]
 
@@ -136,7 +147,7 @@ def apply_pixiv_config(refresh: str, phpsessid: str):
         "pixiv": {
             "refresh-token": refresh,
             "cookies": {"PHPSESSID": phpsessid},
-        }
+        },
     }
     from gallery_dl import config
 
@@ -144,6 +155,36 @@ def apply_pixiv_config(refresh: str, phpsessid: str):
         "refresh-token": refresh,
         "cookies": {"PHPSESSID": phpsessid},
     })
+
+
+async def load_dl_proxy(r) -> str:
+    """Load download proxy from Redis (server-synced, hot-reload) → env fallback.
+
+    Server writes kura:dl_proxy_type / kura:dl_proxy_url on settings change.
+    gallery-dl accepts proxy URLs via config.set(("extractor",), "proxy", url).
+    http:// and socks5:// schemes are supported by requests/urllib3.
+    """
+    try:
+        proxy_type = await r.get("kura:dl_proxy_type") or ""
+        proxy_url = await r.get("kura:dl_proxy_url") or ""
+    except Exception:
+        proxy_type = ""
+        proxy_url = ""
+    if not proxy_url:
+        return ""
+    if proxy_type == "socks" and not proxy_url.startswith("socks"):
+        proxy_url = f"socks5://{proxy_url.split('://')[-1]}" if "://" in proxy_url else f"socks5://{proxy_url}"
+    return proxy_url
+
+
+def apply_dl_proxy(proxy_url: str):
+    """Apply proxy to gallery-dl global config (idempotent)."""
+    from gallery_dl import config
+    if proxy_url:
+        config.set(("extractor",), "proxy", proxy_url)
+        log.info(f"[sidecar] download proxy set: {proxy_url}")
+    else:
+        config.set(("extractor",), "proxy", None)
 
 
 def setup_gallery_dl():
@@ -171,7 +212,7 @@ def setup_gallery_dl():
     apply_pixiv_config(pixiv_refresh, pixiv_phpsessid)
 
 
-def download_with_gallery_dl(url: str, pixiv: tuple[str, str] | None = None) -> tuple[list[tuple[bytes, dict]], str | None]:
+def download_with_gallery_dl(url: str, pixiv: tuple[str, str] | None = None, proxy: str = "") -> tuple[list[tuple[bytes, dict]], str | None]:
     """Download images using gallery-dl as a library.
 
     Returns (pages, illust_type):
@@ -197,6 +238,9 @@ def download_with_gallery_dl(url: str, pixiv: tuple[str, str] | None = None) -> 
             os.environ.get("PIXIV_REFRESH_TOKEN", ""),
             os.environ.get("PIXIV_PHPSESSID", ""),
         )
+
+    # Apply download proxy (gallery-dl uses requests internally).
+    apply_dl_proxy(proxy)
 
     import tempfile
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -310,8 +354,10 @@ async def process_job(r: aioredis.Redis, job: dict):
         loop = asyncio.get_event_loop()
         # Load Pixiv creds from Redis (server-synced; hot-reload friendly).
         pixiv = await load_pixiv_credentials(r)
+        # Load download proxy from Redis (server-synced; hot-reload friendly).
+        dl_proxy = await load_dl_proxy(r)
         downloaded, illust_type = await loop.run_in_executor(
-            None, download_with_gallery_dl, url, pixiv
+            None, download_with_gallery_dl, url, pixiv, dl_proxy
         )
 
         is_ugoira = illust_type == "ugoira"

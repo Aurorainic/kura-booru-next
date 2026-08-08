@@ -31,20 +31,15 @@ function hashKey(raw: string): string {
 }
 
 function base62(bytes: number): string {
-  // ponytail: base62 alphabet, no padding. 32 random bytes → up to 43 chars
-  // (log₆₂(2²⁵⁶) ≈ 43.5). Caller always slices to 32, so this never truncates
-  // — unlike the previous 24-byte version which silently dropped trailing chars
-  // when the high bit set, biasing the distribution (security review fix).
+  // ponytail: 32 chars x base62 via rejection sampling. Avoids BigInt
+  // literals, which esbuild flags as unsupported for Nitro's es2019 target.
   const alpha = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
-  const buf = randomBytes(bytes)
-  let n = 0n
-  for (const b of buf) n = (n << 8n) | BigInt(b)
-  let out = ''
-  while (n > 0n) {
-    out = alpha[Number(n % 62n)] + out
-    n /= 62n
+  const out: string[] = []
+  while (out.length < bytes) {
+    const b = randomBytes(1)[0]!
+    if (b < 248) out.push(alpha.charAt(b % 62))
   }
-  return out.slice(0, 43)
+  return out.join('')
 }
 
 /**
@@ -53,7 +48,7 @@ function base62(bytes: number): string {
  * visible prefix for UI identification.
  */
 export function generateExtensionKey(): { raw: string; prefix: string; hash: string } {
-  const raw = `${EXT_KEY_PREFIX}${base62(32).slice(0, 32)}`
+  const raw = `${EXT_KEY_PREFIX}${base62(32)}`
   return { raw, prefix: raw.slice(0, 12), hash: hashKey(raw) }
 }
 

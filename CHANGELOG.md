@@ -10,9 +10,12 @@
 - **全站设置迁移至数据库（7 类后台卡片）** — 站点标题/URL/公告/head 注入/维护模式、图片尺寸（缩略图/预览/上传上限）、S3 存储六项、Telegram Bot（token/webhook secret/管理员 ID/中转）、Pixiv 凭证与 Backend API Key 全部迁入 `settings` 表；后台「设置」页按 7 类卡片分区管理，保存即热刷新生效。`.env` 仅保留启动必需配置（`DATABASE_URL` / `REDIS_URL` / `SECRET_KEY` / `SESSION_SECRET` / `POSTGRES_*` / `PORT` 等），业务配置不再依赖环境变量。
 - **设置热刷新机制** — 新增 `server/utils/settings-defs.ts` 注册表（键/分类/类型/掩码/默认值）+ `server/plugins/07-settings-hot-reload.ts` 刷新钩子：S3 客户端自动重建、Telegram Bot 实例重建（token/管理员/中转变更即时生效）、Pixiv 凭证与上传上限经 Redis 同步到 sidecar（`kura:pixiv:*` / `kura:max_image_size`）。
 - **Telegram Bot 境内中转支持** — 后台「机器人」卡片新增「中转类型」下拉（HTTP(S) 代理 / SOCKS5 代理 / MTProto 反代 apiRoot / 直连）与「测试 Bot 连接 (getMe)」按钮（按所选类型实测连通，返回用户名或错误详情）。实现依赖：undici `ProxyAgent`（http）、socks-proxy-agent + undici `Agent({connect})` 包装（socks，`secureEndpoint: true`）、grammy `apiRoot`（mtproto）。
-- **运行模式开关（内网/公网）** — 原 `KURA_INTERNET_MODE` 环境变量移除，改为后台「站点 → 运行模式」下拉（默认 intranet）：内网模式所有访客视为管理员、隐藏登录/退出入口、全部评级可见；公网模式恢复登录墙与评级限制（匿名仅见 safe）。切换即时生效，公网模式改回需管理员登录。部署文档同步更新。
+- **运行模式开关（内网/公网）** — 原 `KURA_INTERNET_MODE` 环境变量移除，改为后台「站点 → 运行模式」下拉（默认 public）：内网模式所有访客视为管理员、隐藏登录/退出入口、全部评级可见；公网模式恢复登录墙与评级限制（匿名仅见 safe）。切换即时生效，公网模式改回需管理员登录。部署文档同步更新。
 - **后台设置卡片自适应排版** — 卡片区改 CSS 瀑布流（窄屏单列 / xl+ 双列，`break-inside-avoid` 自动均衡高度），字段区窄屏单列 / sm+ 双列（textarea 跨整行）；新增 `select` 类型渲染；敏感项掩码显示、留空保持原值。
 - **新管理端点**：`POST /api/admin/settings/test-s3`（HeadBucket + ListBuckets 兜底实测连通）、`POST /api/admin/settings/test-bot`（getMe，支持候选 token/类型/地址，返回 `via` 链路标识）。契约清单同步登记。
+- **下载代理（无需 Bot 即可导入）** — 后台「集成」卡片新增「下载代理类型 / 地址」（HTTP(S) / SOCKS5），sidecar 的 gallery-dl 下载走此代理。与 Bot 代理独立配置（无 mtproto），满足未启用 Telegram Bot 场景下的境内下载需求。设置经 Redis 同步到 sidecar，热刷新生效。
+- **批量导入面板入口** — 导入功能从独立页面移入管理后台 tab（`?tab=import`）；全站菜单栏常驻「导入」按钮（公网模式仅已登录管理员可见，内网模式所有访客可见），首页空状态页保留「批量导入」入口。面板 SSE 流式进度：每 URL 独立显示状态图标 + 详情，完成后显示汇总（成功/失败/过大/超时）。
+- **安全模式（Safe Mode）** — 后台「站点」新增 `safe_mode_enabled` 与 `safe_mode_in_intranet` 开关。开启后列表/随机接口仅返回 `safe` 评级；搜索与详情仍返回全部评级但追加 `is_blurred`，前端用 `PostBlurOverlay` 点击后展开，避免管理员在公网/内网环境中意外暴露敏感内容。
 
 ### 变更
 - **包管理器 npm → pnpm** — 项目迁移至 pnpm（`packageManager: pnpm@11.3.0` + `pnpm-workspace.yaml`）；`Dockerfile` / CI / 文档中全部 npm 命令改为 pnpm。依赖新增 `undici@^7.29.0`（**必须 7.x**：8.x 与 Node 24 内置 undici 不兼容，dispatcher 报 `invalid onRequestStart method`）、`socks-proxy-agent@^10.1.0`。
@@ -20,22 +23,71 @@
 - **S3 客户端** — `server/utils/s3.ts` 改为按 settings 惰性构建 + 可重建（`resetS3Client`），配置变更后自动生效。
 - **管理端点契约** — `/api/admin/settings` GET 返回 `{ categories, items }`（含 type/label/description/options/masked 元数据）而非扁平 `{ key: value }`；PUT 收 `{ settings }` 且仅接受注册表内键。
 - **`getIsAdmin` / SSR 上下文** — 内网判定改读 DB `run_mode`（10s 缓存热刷新），`event.context.intranetMode` 与 `siteSettings.intranet_mode` 均由该设置推导。
+- **公开设置接口白名单收窄** — `GET /api/settings/public` 仅返回 `site_title` / `site_description` / `announcement` / `head_inject` / `maintenance_mode`，不再公开 `site_url`、安全模式配置、AI/运行模式标志；SSR 上下文单独注入 UI 所需标志。
+- **Extension Key 生成兼容 Nitro es2019** — base62 生成改为无偏 rejection sampling，移除 BigInt 字面量，消除生产构建中的 esbuild 兼容警告。
+- **自动导入冲突清理** — `parseCookies` 重命名为 `parseCookieHeader`、移除 `SettingCategory` 重复 re-export，消除 typecheck/build 中的 duplicate import 警告。
 
 ### 修复
 - **后台登录入口在 intranet 模式误显** — 登录/退出入口现在由 `intranetMode` 统一控制（`default.vue` / `BottomTabBar.vue` / `login.vue`），内网模式完全隐藏。
 - **`defineAsyncComponent` 类型错误** — 移除 Vue 3.5 不存在的 `name` 选项（`admin/index.vue`），KeepAlive 匹配改由 SFC `defineOptions` 驱动。
 - **worker 健康检查误报** — alpine 镜像无 `pgrep`，compose healthcheck 改查 `/proc/1/cmdline`。
+- **SSRF TOCTOU 竞争** — 下载 URL 校验与请求之间可被 DNS 重绑定利用；HTTPAdapter 层加 socket 级 IP 复核，扩展 SSRF 测试覆盖重绑定场景。
+- **S3 反代路径遍历**（`/i/[...].ts`）— 路径未防护 `..`/`.` 组件；加 key 校验拒绝遍历，并封堵百分号编码、反斜杠、绝对路径与控制字符绕过。
+- **`v-html` 渲染外部描述**（PostInfoPanel）— 作品描述来自外部源（Pixiv/Twitter），改纯文本渲染。
+- **登录信息泄露**（login.vue）— 错误提示区分「用户不存在」与「密码错误」，改为统一文案。
+- **容器以 root 运行**（Dockerfile + sidecar/Dockerfile）— 补非 root 用户（appgroup/appuser）；sidecar `adduser` 语法适配 debian-slim（`-S` → `--system --ingroup`）。
+- **webhook 认证缺口**（webhook.post.ts）— `x-telegram-bot-api-secret-token` 校验补 `NODE_ENV=production` 强制 + bot 未配置 503。
+- **`settings/index.put.ts` 裸 select 泄露** — 改为走 `getSettings()`（投影白名单），杜绝未来新增敏感列被管理接口顺带返回。
+- **AI provider toggle 竞态** — 单活跃语义改为事务内更新，防并发写入出现双活跃。
+- **posts `[id].patch.ts` 绕过 Zod** — 补 schema 校验层；tags.put 重构拆分职责。
+- **bot.ts 显式 import 合规** — 移除大面积 auto-import 依赖（lib/ 不被 Nitro auto-import）。
+- **过时构建脚本清理** — 删 `infra/scripts/build.sh`（完全过时），migrate-db.sh 适配 pnpm。
+- **前端组件修复** — PhotoCard/Pagination/ImageModal/ThemeToggle/AdminStatusBar/DashboardPanel/PostsPanel 等样式与逻辑问题（vue-a11y、焦点、空态、aria）。
+- **Dockerfile 修复** — pnpm 构建阶段补全局安装（corepack/enable + pnpm@10.9.0），生产镜像 CMD 修正。
+- **extension 修复** — service-worker 后台任务兜底、popup 测试补齐 43 行。
+- **run_mode 默认值安全加固** — 默认从 intranet 改为 public（登录墙+评级限制），内网模式需手动选择；避免全新公网部署因默认内网模式被匿名接管。
+- **Bot 重建竞态** — `rebuildBot()` 改为先构建新实例再原子替换（不再先 null）；`getBot()` 加 in-flight promise guard 防并发构建 orphan 泄漏；`chatSemaphores` 提至模块级，重建不丢失信号量状态。
+- **test-bot SSRF 防护** — mtproto/http/socks 代理地址经 `isPrivateHost()` 校验，拒绝指向内网/私网。
+- **Webhook secret 常量时间比较** — 从 `!==` 改为 `crypto.timingSafeEqual`，与 `checkApiKey` 统一。
+- **Secret 可吊销** — `updateSettings` 接受 `__CLEAR__` 哨兵值清空密钥；`updateSettings` 补 readonly 键 defense-in-depth 过滤。
+- **Pixiv Redis 同步守卫** — 从 `in` 检查改为非空值检查，避免空串覆盖 sidecar 的 env 回退路径。
+- **测试 Bot 按钮可用** — 移除 secret 空串时的禁用条件，支持用已保存配置测试连接。
+- **`.env.example` 修正** — `THUMB_SIZE`/`PREVIEW_SIZE` 改为纯数字格式；补充 seed-only 说明。
+- **任务状态接口多图数据泄漏** — `/api/tasks/:id` 原实现只剥离顶层 `image_bytes_b64` / `phash`，多图结果的 `metadata.pages[]` 仍会返回原始图片与感知哈希；改为递归剥离全部层级。
+- **详情页安全模式遮罩回归** — 详情图片区无条件套用 `PostBlurOverlay`，导致所有作品默认被隐藏；改为仅在 `is_blurred === true` 时遮挡，并按作品 id 重置展开状态。
+- **web-import 入参校验** — `urls` 必须为非空字符串数组，异常请求体不再落入后续 `.map()` 导致 500。
+- **批量导入 SSE 清理修复** — `ImportPanel` 的 `onUnmounted` 从事件处理器移到 setup 顶层，离开后台 tab 时正确关闭 EventSource，避免连接泄漏。
+- **Extension 导入错误展示** — content script 直接展示服务端返回的 `error` 文案，不再一律显示「失败」；对应 37 条扩展测试全部通过。
+- **Sidecar SSRF 黑名单补齐** — 增加 CGNAT、文档/基准/保留段、组播、IPv6 文档/组播等私网与保留地址范围，并补充回归测试。
 
-## [Unreleased] (v0.9.0)
+## [0.9.0] - 2026-07-20
 
 ### 新增
+- **服务端分层重构（ADR-0004 落地的横切层）** — `server/utils/*.ts` 巨型文件拆分：
+  - `server/lib/` 承载领域逻辑（posts/tags/search/import/ai/bot 各成模块，`queries.ts` → repo 模块化）
+  - `server/platform/` 承载横切关注点（`http/` handler 包装与 zod schema、`contract/` 契约冻结、`queue/`、`jobs/`、`errors/`、`openapi/`）
+  - 全部端点迁移到 `defineAdminHandler` / `defineApiKeyHandler` / `defineExtHandler` / `definePublicHandler` / `defineTelegramHandler` 包装；zod@4 全量入参校验；统一错误形状 `{ code, message, details? }`（`AppError`）
+- **契约冻结（ADR-0004）** — `server/platform/contract/endpoints.ts` 冻结 59 端点（extension/bot/image 三类标 frozen）；`check.mjs` 双向漂移守护：路由文件与契约清单不一致即失败；`npm run test:contract` + CI 契约 job。
+- **队列重构（ADR-0001 + pg-boss）** — 定义 `JobQueue` 接口（enqueue/getStatus/consume/retry）；Node 侧 AI jobs + 定时任务（dashboard-refresh / sync-tasks）收编 pg-boss（SKIP LOCKED 恰好一次、重试 + DLQ + redrive）；sidecar Redis 桥（`kura:jobs`→BRPOP）不变。spike 验证 7/7 PASS。
+- **搜索去 RediSearch（ADR-0002）** — 删除 RediSearch 依赖，autocomplete 改走 PG `pg_trgm`（审计 §5 三重名不副实证据链：Redis 里既无索引也无数据）。
+- **多档缩略图 srcset（ADR-0003）** — 导入期 sharp 预生成 300w/640w/1280w/2000w 四档 + LQIP 20²，webp 独立 S3 key（`<base>-<w>w.webp` 后缀约定）；前端 PhotoCard 接 `srcset/sizes`，旧格式回退单图；`/i/` 反代不变（Range 透传 + 流式）。
+- **phash 前缀桶索引（B6）** — 为 phash 前缀桶查找加 expression index（跨时代 phash 去重 8-bit Hamming 阈值查询提速）。
 - **AI Provider 配置迁移至管理后台** — 新增 `ai_providers` 表（迁移 `0007_ai_providers.sql`）与新管理标签页「AI 设置」：Provider 可增删改、启停（同时最多一个生效）、测试连接（显示延迟/错误），并提供全局「AI 标签处理」开关（settings KV `ai_tag_processing_enabled`）。变更即时生效，无需重启。首次启动时若表为空且 `AI_PROVIDER_*` 环境变量已设置，会自动导入为一条 Provider 记录；环境变量降级为可选的 seed/fallback。
 - **管理 API**：`GET/POST /api/admin/ai/providers`、`PUT/DELETE /api/admin/ai/providers/:id`、`POST /api/admin/ai/providers/test`、`PUT /api/admin/ai/toggle`。API Key 在任何 GET 响应中只返回掩码（前 4 + 后 4），编辑时留空表示保持不变。
+- **前端配套重构** — 删前端死代码（api.ts 5 函数 + utils.ts + main.css 冗余类）；抽 `useAiJobPolling` composable（3 个 AI 面板轮询收敛）；`ai.ts` 显式 import `fetchApi`（规避 auto-import chunk 失效）；AiChatPanel 发送最近 10 条消息作历史上下文 + 清空对话按钮 + 空态 3 个快捷问题。
 
 ### 变更
+- **服务端目录规范** — `server/utils/` 文件改为 re-export shim（向后兼容），新代码从 `lib/` / `platform/` 显式 import；**`server/modules/` 名称被 Nitro 保留**（scanModules 会在构建期执行每个文件，曾导致 bot 模块在 CI 空 token 下抛 `Empty token!`），故领域目录定名 `server/lib/`。
 - `getAiConfig()` 改为读取 DB 快照（启动时 + 每次管理端写入后刷新），保持同步签名，所有既有调用方不变；迁移未应用时自动回退到环境变量行为。
 - pipeline / bot 中 8 处 `ENABLE_AI_TAG_PROCESSING` 直接环境变量检查统一改为 `isAiEnabled()`。
 - 页脚 AI 徽章改由公开设置接口的 `ai_enabled` 字段驱动（仅布尔标志，不含任何密钥/端点信息），不再依赖构建期 env 快照。
+- **CI 收紧** — docker-publish 加「tag 必须打在 main 分支 commit 上」校验（防 fork/分支上打 v* tag 污染 `:latest`）；build-extension 由任意 push 收紧为 v* tag push。
+- **文档重组** — 8 个过程性文档移入存档（runbook/audit/spike 等）；重写 architecture/decisions/SUMMARY/CLAUDE.md 反映 v0.9.0 结构。
+
+### 修复
+- **pg-boss 定时任务静默不注册** — `schedule()` 有 FK 约束，队列不存在直接抛错中断 `registerJobs`（被插件 catch 吞掉仅日志可见）。按 spike 顺序补 `createQueue`，dashboard-refresh / sync-tasks 定时任务恢复注册。
+- **`server/modules` 构建期执行** — Nitro 2.13 `scanModules` 把 `server/modules/**` 每个文件当 Nitro module 在构建期用 jiti 执行；重命名为 `server/lib`（24 文件移动 + 14 处 import + 文档同步）。
+- **类型修复** — AiStatusBar/AdminStatusBar 补 `AiStatus` 显式 import（TS2304）；AiStatusBar 模板内 IIFE `new URL` 改 `endpointHost` 函数（TS2339）；dashboard `db.execute().rows` 类型兼容（`as any` 过渡）。
 
 ## [0.8.1] - 2026-07-17
 

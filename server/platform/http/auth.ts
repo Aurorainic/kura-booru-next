@@ -152,8 +152,14 @@ export function defineTelegramHandler<S extends HandlerSchemas | undefined = und
       if (process.env.NODE_ENV === 'production' && !expectedSecret) {
         throw new AppError('INTERNAL', 500, 'Webhook secret not configured')
       }
-      if (expectedSecret && secret !== expectedSecret) {
-        throw new AppError('UNAUTHORIZED', 401, 'Unauthorized')
+      if (expectedSecret) {
+        // ponytail: constant-time comparison — same pattern as checkApiKey.
+        const crypto = await import('crypto')
+        const a = Buffer.from(secret || '')
+        const b = Buffer.from(expectedSecret)
+        if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+          throw new AppError('UNAUTHORIZED', 401, 'Unauthorized')
+        }
       }
 
       return { kind: 'telegram' as const }

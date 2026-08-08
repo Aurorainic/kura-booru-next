@@ -8,7 +8,7 @@
  * 同时启动时把 DB 中的 Pixiv 凭证同步一次（幂等）。
  */
 
-import { onSettingsChanged, getPixivConfig, getSettings } from '../utils/settings'
+import { onSettingsChanged, getPixivConfig } from '../utils/settings'
 
 async function syncPixivToRedis() {
   try {
@@ -16,13 +16,17 @@ async function syncPixivToRedis() {
     const pixiv = await getPixivConfig()
     const { getImageSizes } = await import('../utils/settings')
     const sizes = await getImageSizes()
-    const all = await getSettings()
-    // 仅当 DB 已 seed（有 pixiv 键）时写入；否则 sidecar 仍用 env 回退。
-    if ('pixiv_refresh_token' in all || 'pixiv_phpsessid' in all) {
+    // 仅当至少一个 Pixiv 凭证有值时才写入 Redis，避免空串覆盖 sidecar 的 env 回退。
+    if (pixiv.refreshToken || pixiv.phpsessid) {
       await redis.set('kura:pixiv:refresh_token', pixiv.refreshToken || '')
       await redis.set('kura:pixiv:phpsessid', pixiv.phpsessid || '')
     }
     await redis.set('kura:max_image_size', String(sizes.maxImageSize))
+    // 下载代理同步到 Redis（sidecar 读取，gallery-dl 使用）
+    const { getDlProxyConfig } = await import('../utils/settings')
+    const dlProxy = await getDlProxyConfig()
+    await redis.set('kura:dl_proxy_type', dlProxy.proxyType || '')
+    await redis.set('kura:dl_proxy_url', dlProxy.proxyUrl || '')
   } catch (err) {
     console.warn('[settings] pixiv redis sync failed (non-fatal):', err)
   }

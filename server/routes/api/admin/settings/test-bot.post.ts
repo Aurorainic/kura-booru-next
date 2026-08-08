@@ -22,6 +22,17 @@ export default defineAdminHandler({
       throw new AppError('VALIDATION_FAILED', 400, 'bot_token not configured')
     }
 
+    // SSRF 防护：mtproto 的 proxyUrl 作为 apiRoot 被 getMe 直接请求，
+    // 必须校验不指向内网/私网地址。http/socks 代理同理。
+    if (proxyUrl) {
+      const { isPrivateHost } = await import('../../../../utils/settings')
+      let host = ''
+      try { host = new URL(proxyUrl).hostname } catch { /* invalid URL */ }
+      if (host && await isPrivateHost(host)) {
+        return { ok: false, error: '中转地址指向内网/私网地址，已拒绝' }
+      }
+    }
+
     try {
       const opts: Record<string, any> = {}
       const client = buildBotClient(proxyType, proxyUrl)

@@ -1,4 +1,6 @@
 // fetchAuthStatus, fetchPublicSettings NOT available in Nitro server — use in-process calls instead
+import { getPublicSettings } from '../utils/settings'
+import { isAiEnabled } from '../lib/ai/config'
 
 let settingsCache: { data: any; etag: string | null; at: number } = { data: null, etag: null, at: 0 }
 const SETTINGS_REVALIDATE_MS = 10_000
@@ -27,7 +29,9 @@ export default defineEventHandler(async (event) => {
   const now = Date.now()
   if (now - settingsCache.at > SETTINGS_REVALIDATE_MS) {
     try {
-      const data = await getPublicSettings()
+      const data = await getPublicSettings() as Record<string, string>
+      // UI-only flags are injected into the SSR context, not the public API.
+      data.ai_enabled = String(isAiEnabled())
       settingsCache = { data, etag: null, at: now }
     } catch {
       // Backend failure: keep stale data, back off for full TTL
@@ -37,7 +41,7 @@ export default defineEventHandler(async (event) => {
   event.context.siteSettings = settingsCache.data
 
   // Intranet mode: everyone is admin; short-circuit further checks.
-  // run_mode 来自 DB settings（默认 intranet），后台切换即时生效。
+  // run_mode 来自 DB settings（默认 public），后台切换即时生效。
   const { getRunMode } = await import('../utils/settings')
   const intranetMode = await getRunMode() === 'intranet'
   event.context.intranetMode = intranetMode

@@ -182,34 +182,28 @@ const ratingBg = (rating: string) => {
       </div>
     </div>
 
-    <!-- System status — queue depth now lives in AdminStatusBar (top of page).
-         This panel only renders the per-card stats; polling moved to the bar. -->
+    <!-- Recent uploads — queue depth now lives in AdminStatusBar (top of page),
+         so this card shows the latest posts instead of repeating overview stats. -->
     <div class="dash-card !p-5">
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest">系统状态</h3>
-        <span class="inline-flex items-center gap-1.5 text-[0.625rem] text-[var(--text-muted)]">
-          <span class="w-1.5 h-1.5 rounded-full" style="background: var(--color-success);" />
-          系统正常
-        </span>
+      <h3 class="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest mb-4">最近收录</h3>
+      <div v-if="stats.recent_posts.length" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <NuxtLink
+          v-for="post in stats.recent_posts.slice(0, 4)"
+          :key="post.id"
+          :to="`/posts/${post.id}`"
+          class="rounded-xl overflow-hidden transition-all duration-200 hover:-translate-y-0.5"
+          style="background: var(--bg-alt); border: 1px solid var(--border-color);"
+        >
+          <div class="aspect-square overflow-hidden">
+            <img :src="getImageUrl(post.thumb_key)" :alt="post.title || ''" class="w-full h-full object-cover" loading="lazy" />
+          </div>
+          <div class="p-2.5">
+            <p class="text-[0.6875rem] font-medium text-[var(--text-primary)] truncate">{{ post.title || getSourceSiteLabel(post.source_site) }}</p>
+            <p class="text-[0.625rem] text-[var(--text-muted)] mt-0.5 tabular-nums">{{ formatDate(post.created_at) }}</p>
+          </div>
+        </NuxtLink>
       </div>
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div class="text-center p-4 rounded-xl" style="background: var(--accent-subtle);">
-          <p class="text-2xl font-bold tabular-nums" style="font-feature-settings: 'tnum';">{{ stats.overview.total_posts }}</p>
-          <p class="text-[0.6875rem] font-medium text-[var(--text-muted)] mt-1">作品总数</p>
-        </div>
-        <div class="text-center p-4 rounded-xl" style="background: var(--accent-subtle);">
-          <p class="text-2xl font-bold tabular-nums" style="font-feature-settings: 'tnum';">{{ stats.overview.total_tags }}</p>
-          <p class="text-[0.6875rem] font-medium text-[var(--text-muted)] mt-1">标签总数</p>
-        </div>
-        <div class="text-center p-4 rounded-xl" style="background: var(--accent-subtle);">
-          <p class="text-2xl font-bold tabular-nums" style="font-feature-settings: 'tnum';">{{ stats.overview.total_post_tags }}</p>
-          <p class="text-[0.6875rem] font-medium text-[var(--text-muted)] mt-1">关联总数</p>
-        </div>
-        <div class="text-center p-4 rounded-xl" style="background: var(--accent-subtle);">
-          <p class="text-sm font-medium text-[var(--text-muted)]">存储</p>
-          <p class="text-xs text-[var(--text-muted)] mt-1">{{ formatFileSize(stats.overview.total_file_size_bytes) }}</p>
-        </div>
-      </div>
+      <p v-else class="text-xs text-[var(--text-muted)]">暂无收录</p>
     </div>
   </div>
 

@@ -9,6 +9,9 @@ export default defineExtHandler({
   handler: async ({ event, auth }) => {
     const body = await readBody<{ urls?: string[]; force_rating?: string }>(event)
     if (!body?.urls?.length) throw new AppError('VALIDATION_FAILED', 400, 'urls required')
+    if (!Array.isArray(body.urls) || body.urls.some((url) => typeof url !== 'string' || !url.trim())) {
+      throw new AppError('VALIDATION_FAILED', 400, 'urls must be non-empty strings')
+    }
 
     // ponytail: force_rating requires the key have canForceRating (admin opt-in
     // at key creation). Without it, we DON'T silently ignore the user's selection

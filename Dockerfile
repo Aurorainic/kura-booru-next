@@ -9,6 +9,11 @@
 # ── Stage 1: deps ──
 FROM node:22-alpine AS deps
 WORKDIR /app
+# 国内镜像加速:容器内没有宿主机 ~/.npmrc。注意 pnpm 不读 npm_config_*
+# 环境变量(与 npm 不同),需显式写入用户级 .npmrc(npm/pnpm 都读)。默认
+# npmmirror,可通过 --build-arg NPM_REGISTRY=... 覆盖(CI 等)。
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+RUN npm config set registry "${NPM_REGISTRY}"
 RUN npm install -g pnpm@11.3.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY extension/package.json ./extension/package.json
@@ -22,6 +27,9 @@ RUN pnpm install --frozen-lockfile
 FROM node:22-alpine AS build
 ARG KURA_VERSION
 WORKDIR /app
+# 同 deps 阶段:本阶段的 npm install -g pnpm 也需要走加速镜像
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+RUN npm config set registry "${NPM_REGISTRY}"
 RUN npm install -g pnpm@11.3.0
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

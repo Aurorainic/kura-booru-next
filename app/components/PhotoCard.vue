@@ -21,6 +21,9 @@ const imgLoaded = ref(false)
 const modalOpen = ref(false)
 
 function onCardClick(e: MouseEvent) {
+  // 安全模式遮挡中：普通点击跟随 NuxtLink 跳转到详情页，不打开 modal
+  if (props.post.is_blurred) return
+
   // Single click → open in-place zoom modal; middle-click / Ctrl+click → default (new tab / navigate)
   if (e.button === 0 && !(e.metaKey || e.ctrlKey || e.shiftKey)) {
     e.preventDefault()
@@ -34,14 +37,42 @@ function onCardClick(e: MouseEvent) {
 <template>
   <NuxtLink
     :to="`/posts/${post.id}?from=gallery&page=${currentPage}${listParam ? '&list=' + listParam : ''}`"
-    class="masonry-item block mb-2 cursor-zoom-in"
+    class="masonry-item block mb-2"
+    :class="post.is_blurred ? 'cursor-pointer' : 'cursor-zoom-in'"
     :style="{
       animation: `blurReveal var(--duration-slow) var(--ease-out) both`,
       animationDelay: `${index < 12 ? index * 60 : 0}ms`,
     }"
     @click="onCardClick"
   >
-    <div class="img-container" :style="{ aspectRatio: `${post.width} / ${post.height}` }">
+    <!-- 安全模式遮挡：不渲染真实图片、LQIP、tag overlay、mobile info bar -->
+    <PostBlurOverlay v-if="post.is_blurred" :post="post">
+      <div class="img-container" :style="{ aspectRatio: `${post.width} / ${post.height}` }">
+        <img
+          v-if="lqip"
+          :src="lqip"
+          alt=""
+          aria-hidden="true"
+          class="lqip-blur"
+        />
+        <img
+          :src="previewUrl"
+          :srcset="srcset || undefined"
+          :sizes="srcset ? GALLERY_SIZES : undefined"
+          :alt="post.title || `作品 ${post.id.slice(0, 8)}`"
+          :width="post.width"
+          :height="post.height"
+          class="img-real"
+          :class="{ loaded: imgLoaded }"
+          loading="lazy"
+          decoding="async"
+          @load="imgLoaded = true"
+        />
+        <div v-if="!lqip && !imgLoaded" class="skeleton absolute inset-0" />
+      </div>
+    </PostBlurOverlay>
+
+    <div v-else class="img-container" :style="{ aspectRatio: `${post.width} / ${post.height}` }">
       <!-- LQIP blur placeholder -->
       <img
         v-if="lqip"
@@ -108,7 +139,7 @@ function onCardClick(e: MouseEvent) {
   </NuxtLink>
 
   <!-- Gallery zoom modal (open on click; "详情" button navigates to detail page) -->
-  <ImageModal v-model="modalOpen" :src="previewUrl" :alt="post.title || `作品 ${post.id.slice(0, 8)}`" :detail-href="`/posts/${post.id}`" />
+  <ImageModal v-if="!post.is_blurred" v-model="modalOpen" :src="previewUrl" :alt="post.title || `作品 ${post.id.slice(0, 8)}`" :detail-href="`/posts/${post.id}`" />
 </template>
 
 <style scoped>

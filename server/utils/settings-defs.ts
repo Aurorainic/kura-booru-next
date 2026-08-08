@@ -42,16 +42,18 @@ export interface SettingDef {
 
 export const SETTING_DEFS: SettingDef[] = [
   // ── 站点 ──
-  { key: 'run_mode', category: 'site', type: 'select', label: '运行模式', description: 'intranet（内网）：所有访客视为管理员，无需登录，所有评级可见，仅限可信内网使用；public（公网）：保留登录墙与评级限制。默认 intranet。', default: 'intranet', options: [
+  { key: 'run_mode', category: 'site', type: 'select', label: '运行模式', description: 'intranet（内网）：所有访客视为管理员，无需登录，所有评级可见，维护模式不生效——仅限可信内网使用；public（公网）：保留登录墙与评级限制，维护模式正常拦截。默认 public，内网模式需手动选择。', default: 'public', options: [
+    { value: 'public', label: '公网模式（登录墙 + 评级限制，默认）' },
     { value: 'intranet', label: '内网模式（无需登录，所有内容可见）' },
-    { value: 'public', label: '公网模式（登录墙 + 评级限制）' },
   ] },
   { key: 'site_title', category: 'site', type: 'text', label: '站点标题', description: '显示在浏览器标签与页面头部。', public: true, default: 'Kura Booru', env: 'SITE_TITLE' },
   { key: 'site_description', category: 'site', type: 'text', label: '站点描述', description: '首页 meta description。', public: true, default: '', env: 'SITE_DESCRIPTION' },
-  { key: 'site_url', category: 'site', type: 'text', label: '站点 URL', description: '对外访问地址，用于 CORS、Webhook、分享链接与站内回调。', public: true, default: 'http://localhost:3000', env: 'SITE_URL', placeholder: 'https://example.com' },
+  { key: 'site_url', category: 'site', type: 'text', label: '站点 URL', description: '对外访问地址，用于 CORS、Webhook、分享链接与站内回调。', public: false, default: 'http://localhost:3000', env: 'SITE_URL', placeholder: 'https://example.com' },
   { key: 'announcement', category: 'site', type: 'textarea', label: '公告内容', description: '支持 Markdown。多行轮播，溢出水平滚动。', public: true, default: '' },
   { key: 'head_inject', category: 'site', type: 'textarea', label: 'Head 注入', description: '注入到 <head> 的 HTML（如分析脚本）。', public: true, default: '' },
   { key: 'maintenance_mode', category: 'site', type: 'boolean', label: '维护模式', description: '开启后非管理员将被重定向到维护页面。', public: true, default: 'false' },
+  { key: 'safe_mode_enabled', category: 'site', type: 'boolean', label: '安全模式', description: '开启后列表/随机接口仅返回 safe 评级，搜索/详情返回全部评级但追加 is_blurred。', public: false, default: 'false' },
+  { key: 'safe_mode_in_intranet', category: 'site', type: 'boolean', label: '内网模式下启用安全模式', description: '运行模式为 intranet 时强制启用安全模式。', public: false, default: 'false' },
 
   // ── 图片 ──
   { key: 'thumb_size', category: 'images', type: 'number', label: '缩略图边长 (px)', description: '方形缩略图的最大边长（300w 档）。', default: '300', env: 'THUMB_SIZE', placeholder: '300' },
@@ -79,6 +81,12 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'bot_proxy_url', category: 'bot', type: 'text', label: '中转服务器地址', description: 'HTTP/SOCKS 代理填代理地址（如 http://127.0.0.1:19823）；MTProto 填 Bot API 反代根地址（如 https://tg-bot-api.example.com）。', default: '', env: 'BOT_PROXY_URL', placeholder: 'http://127.0.0.1:19823 或 https://tg-bot-api.example.com' },
 
   // ── 集成 ──
+  { key: 'dl_proxy_type', category: 'integrations', type: 'select', label: '下载代理类型', description: 'gallery-dl 下载图片时使用的网络代理。可复用 Bot 代理地址（仅需 HTTP/SOCKS）。留空直连。', default: '', options: [
+    { value: '', label: '无（直连）' },
+    { value: 'http', label: 'HTTP(S) 代理' },
+    { value: 'socks', label: 'SOCKS5 代理' },
+  ] },
+  { key: 'dl_proxy_url', category: 'integrations', type: 'text', label: '下载代理地址', description: '代理服务器地址（如 http://127.0.0.1:19823）。填入后 sidecar 下载图片走此代理，不配置 Telegram 机器人也可用。', default: '', placeholder: 'http://127.0.0.1:19823' },
   { key: 'pixiv_refresh_token', category: 'integrations', type: 'secret', label: 'Pixiv Refresh Token', description: 'gallery-dl Pixiv 登录刷新令牌（需同时配置 PHPSESSID）。', default: '', env: 'PIXIV_REFRESH_TOKEN' },
   { key: 'pixiv_phpsessid', category: 'integrations', type: 'secret', label: 'Pixiv PHPSESSID', description: 'Pixiv 会话 cookie。', default: '', env: 'PIXIV_PHPSESSID' },
   { key: 'backend_api_key', category: 'integrations', type: 'secret', label: 'Backend API Key', description: '平台合约 / API 客户端调用密钥（x-api-key）。', default: '', env: 'BACKEND_API_KEY' },

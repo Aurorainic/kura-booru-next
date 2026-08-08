@@ -125,17 +125,7 @@ function fieldSpan(item: SettingItem): string {
 
 <template>
   <div class="max-w-6xl">
-    <div class="flex items-center justify-between flex-wrap gap-3 mb-6">
-      <PageHeader title="站点设置" subtitle="全站配置均已迁移到数据库，保存后立即热刷新生效。" />
-      <div class="flex items-center gap-3">
-        <button @click="save" :disabled="saving" class="btn-primary !px-5 !py-2.5 !text-sm">
-          {{ saving ? '保存中…' : '保存所有更改' }}
-        </button>
-        <Transition name="fade">
-          <span v-if="saved" class="text-sm font-medium text-[var(--color-success)]">✓ 已保存</span>
-        </Transition>
-      </div>
-    </div>
+    <PageHeader title="站点设置" subtitle="全站配置均已迁移到数据库，保存后立即热刷新生效。" class="mb-6" />
 
     <!-- 自适应瀑布流：窄屏单列，xl+ 双列（CSS columns 自动均衡高度，避免同行等高空隙） -->
     <div class="columns-1 xl:columns-2 gap-6">
@@ -232,7 +222,7 @@ function fieldSpan(item: SettingItem): string {
               <!-- textarea -->
               <template v-else-if="item.type === 'textarea'">
                 <label class="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider block mb-1.5">{{ item.label }}</label>
-                <textarea v-model="draft[item.key]" rows="3" :class="fieldClasses() + ' resize-none'"
+                <textarea v-model="draft[item.key]" :rows="item.key === 'announcement' ? 4 : item.key === 'head_inject' ? 6 : 3" :class="fieldClasses() + ' resize-none'"
                   :style="{ ...fieldStyle(), fontFamily: item.key === 'head_inject' ? 'var(--font-mono)' : undefined }"></textarea>
                 <p class="text-[0.625rem] text-[var(--text-muted)] mt-1">{{ item.description }}</p>
               </template>
@@ -271,7 +261,7 @@ function fieldSpan(item: SettingItem): string {
             </span>
           </div>
           <div v-if="cat.key === 'bot'" class="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t border-[var(--border-color)]">
-            <button @click="testBot" :disabled="testState('bot_test').testing || !(draft.bot_token || '')"
+            <button @click="testBot" :disabled="testState('bot_test').testing"
               class="btn-ghost !text-xs !px-4 !py-2 !border !border-[var(--border-color)] !rounded-xl disabled:opacity-40">
               {{ testState('bot_test').testing ? '测试中…' : '测试 Bot 连接 (getMe)' }}
             </button>
@@ -291,5 +281,17 @@ function fieldSpan(item: SettingItem): string {
       修改后立即生效（S3 客户端与 Bot 实例自动重建）。Telegram Bot 中转支持三种方式：HTTP(S) 代理、
       SOCKS5 代理、MTProto 反代（apiRoot）——先选「中转类型」再填地址，可用「测试 Bot 连接」验证。
     </p>
+
+    <!-- sticky 底部保存条：滚动时始终吸附底部可见，不必滚回顶部保存 -->
+    <div class="sticky bottom-0 mt-6 -mx-1 px-1 py-3 border-t border-[var(--border-color)] bg-[var(--bg-primary)]">
+      <div class="flex items-center gap-3">
+        <button @click="save" :disabled="saving" class="btn-primary !px-5 !py-2.5 !text-sm">
+          {{ saving ? '保存中…' : '保存所有更改' }}
+        </button>
+        <Transition name="fade">
+          <span v-if="saved" class="text-sm font-medium text-[var(--color-success)]">✓ 已保存</span>
+        </Transition>
+      </div>
+    </div>
   </div>
 </template>

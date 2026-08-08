@@ -1,7 +1,8 @@
 function isPathSafe(key: string): boolean {
   // Prevent path traversal: reject empty/slash-only keys, absolute paths,
-  // and any '..' component or '.' component.
-  if (!key || key === '/') return false
+  // backslashes, percent-encoded segments, and any '..' or '.' component.
+  // Valid S3 keys here are generated UUIDs, so percent characters never occur.
+  if (!key || key === '/' || key.startsWith('/') || /[\\%\u0000-\u001f\u007f]/.test(key)) return false
   const parts = key.split('/')
   for (const part of parts) {
     if (part === '..' || part === '.') return false

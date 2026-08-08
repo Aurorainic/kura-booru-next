@@ -18,6 +18,7 @@ export interface Post {
   description: string | null
   rating: Rating
   created_at: string
+  is_blurred?: boolean
   lqip?: string | null
   tags?: Tag[]
   // v0.7.8 PR-C: present only on multi-image posts. Mirrors the

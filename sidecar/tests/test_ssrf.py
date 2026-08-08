@@ -47,12 +47,21 @@ def test_validate_url_rejects_missing_host():
     "ip,blocked",
     [
         ("127.0.0.1", True),
+        ("0.0.0.0", True),
         ("10.0.0.1", True),
         ("172.16.0.1", True),
         ("192.168.1.1", True),
         ("169.254.169.254", True),  # cloud metadata endpoint
+        ("100.64.0.1", True),  # CGNAT
+        ("192.0.2.1", True),  # documentation
+        ("198.18.0.1", True),  # benchmarking
+        ("203.0.113.1", True),  # documentation
+        ("224.0.0.1", True),  # multicast
+        ("240.0.0.1", True),  # reserved
         ("::1", True),
         ("fc00::1", True),  # IPv6 ULA
+        ("2001:db8::1", True),  # IPv6 documentation
+        ("ff02::1", True),  # IPv6 multicast
         ("8.8.8.8", False),
         ("1.1.1.1", False),
     ],

@@ -60,6 +60,8 @@ const repoUrl = publicConfig.repoUrl || 'https://gitea.lainns.xyz/lainsaka/kura-
 // is a build-time snapshot that can't see admin changes. Read the flag from the
 // public settings payload (SSR context) instead.
 const enableAi = computed(() => settings.value?.ai_enabled === 'true')
+// Site-wide import entry: public mode → logged-in admins only; intranet mode → everyone.
+const showImport = computed(() => isAdmin.value || intranetMode.value)
 
 // Accent hue from cookie (SSR anti-flash)
 const accentCookie = useCookie('kura-accent-hue')
@@ -162,6 +164,16 @@ useHead(headInjectEntries)
           <div class="flex items-center gap-1 flex-shrink-0">
             <AccentPicker />
             <ThemeToggle />
+            <!-- Import (site-wide entry; public: logged-in admins only, intranet: everyone) -->
+            <NuxtLink
+              v-if="showImport"
+              to="/admin?tab=import"
+              class="h-9 px-3 rounded-[var(--radius-sm)] inline-flex items-center gap-1.5 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--accent-color)] hover:bg-[var(--accent-subtle)] transition-all active:scale-90"
+              aria-label="批量导入"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
+              <span>导入</span>
+            </NuxtLink>
             <!-- Overflow menu ("..."): secondary nav entries -->
             <div class="relative" data-nav-menu>
               <button

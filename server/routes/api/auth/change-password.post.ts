@@ -1,6 +1,8 @@
 import { eq } from 'drizzle-orm'
+import { getHeader, readBody } from 'h3'
 import { defineAdminHandler } from '../../../platform/http/auth'
 import { AppError } from '../../../platform/errors'
+import { parseCookieHeader, parseSession, verifyAdminPassword, changeAdminPassword, clearSessionCookie } from '../../../utils/auth'
 
 export default defineAdminHandler({
   doc: { method: 'post', path: '/api/auth/change-password', summary: 'Change admin password' },
@@ -11,7 +13,7 @@ export default defineAdminHandler({
     }
 
     const cookie = getHeader(event, 'cookie') || ''
-    const cookies = parseCookies(cookie)
+    const cookies = parseCookieHeader(cookie)
     const token = cookies['kura_admin_session']
     if (!token) throw new AppError('UNAUTHORIZED', 401, 'No session')
 

@@ -123,13 +123,13 @@ function goPage(p: number) {
         <table class="w-full text-sm">
           <thead>
             <tr class="border-b border-[var(--border-color)]" style="background: var(--accent-subtle);">
-              <th class="py-3 px-4 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">缩略图</th>
-              <th class="py-3 px-4 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">标题</th>
-              <th class="py-3 px-4 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">来源</th>
-              <th class="py-3 px-4 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">评级</th>
-              <th class="py-3 px-4 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">尺寸</th>
-              <th class="py-3 px-4 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider hidden lg:table-cell">日期</th>
-              <th class="py-3 px-4 text-right text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">操作</th>
+              <th class="py-2 px-3 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">缩略图</th>
+              <th class="py-2 px-3 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">标题</th>
+              <th class="py-2 px-3 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">来源</th>
+              <th class="py-2 px-3 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">评级</th>
+              <th class="py-2 px-3 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">尺寸</th>
+              <th class="py-2 px-3 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider hidden lg:table-cell">日期</th>
+              <th class="py-2 px-3 text-right text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -137,8 +137,8 @@ function goPage(p: number) {
               v-for="post in posts" :key="post.id"
               class="border-b border-[var(--border-color)]/50 transition-colors hover:bg-[var(--accent-subtle)]/50 group"
             >
-              <td class="py-2.5 px-4">
-                <NuxtLink :to="`/posts/${post.id}`" class="block w-16 h-16">
+              <td class="py-1.5 px-3">
+                <NuxtLink :to="`/posts/${post.id}`" class="block w-12 h-12">
                   <img
                     :src="`/i/${post.thumb_key}`"
                     :alt="post.title || ''"
@@ -147,13 +147,13 @@ function goPage(p: number) {
                   />
                 </NuxtLink>
               </td>
-              <td class="py-2.5 px-4 max-w-[200px] truncate font-medium text-[var(--text-primary)]" :title="post.title || ''">
-                {{ post.title || '(无标题)' }}
+              <td class="py-1.5 px-3 font-medium text-[var(--text-primary)]">
+                <div class="max-w-[180px] truncate" :title="post.title || ''">{{ post.title || '(无标题)' }}</div>
               </td>
-              <td class="py-2.5 px-4">
-                <span class="text-[0.6875rem] px-2 py-0.5 rounded-md font-medium" style="background: var(--accent-subtle); color: var(--accent-color);">{{ post.source_site }}</span>
+              <td class="py-1.5 px-3">
+                <span class="text-[0.6875rem] px-2 py-0.5 rounded-md font-semibold" style="background: var(--accent-color); color: var(--bg-primary);">{{ post.source_site }}</span>
               </td>
-              <td class="py-2.5 px-4">
+              <td class="py-1.5 px-3">
                 <select
                   :value="post.rating"
                   @change="updateRating(post, ($event.target as HTMLSelectElement).value)"
@@ -167,12 +167,12 @@ function goPage(p: number) {
                   <option value="explicit">限制</option>
                 </select>
               </td>
-              <td class="py-2.5 px-4 text-xs font-mono text-[var(--text-muted)]">{{ post.width }}×{{ post.height }}</td>
-              <td class="py-2.5 px-4 text-xs text-[var(--text-muted)] hidden lg:table-cell">{{ new Date(post.created_at).toLocaleDateString('zh-CN') }}</td>
-              <td class="py-2.5 px-4 text-right">
+              <td class="py-1.5 px-3 text-xs font-mono text-[var(--text-muted)]">{{ post.width }}×{{ post.height }}</td>
+              <td class="py-1.5 px-3 text-xs text-[var(--text-muted)] hidden lg:table-cell">{{ new Date(post.created_at).toLocaleDateString('zh-CN') }}</td>
+              <td class="py-1.5 px-3 text-right">
                 <button
                   @click="deletePostAction(post)"
-                  class="btn-danger !w-8 !h-8 !px-0 !py-0 !justify-center"
+                  class="btn-danger !w-8 !h-8 !px-0 !py-0 !justify-center opacity-40 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                   :disabled="deleting.has(post.id)"
                   :title="deleting.has(post.id) ? '删除中…' : '删除'"
                 >
@@ -194,7 +194,7 @@ function goPage(p: number) {
           <div class="flex-1 min-w-0 space-y-1">
             <div class="text-sm font-medium truncate text-[var(--text-primary)]">{{ post.title || '(无标题)' }}</div>
             <div class="flex items-center gap-2 text-[0.625rem] text-[var(--text-muted)]">
-              <span class="px-1.5 py-0.5 rounded text-[0.5625rem]" style="background: var(--accent-subtle); color: var(--accent-color);">{{ post.source_site }}</span>
+              <span class="px-1.5 py-0.5 rounded text-[0.5625rem] font-semibold" style="background: var(--accent-color); color: var(--bg-primary);">{{ post.source_site }}</span>
               <span>{{ post.width }}×{{ post.height }}</span>
             </div>
             <div class="flex items-center gap-2">

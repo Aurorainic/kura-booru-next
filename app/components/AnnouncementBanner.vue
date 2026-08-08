@@ -145,11 +145,11 @@ function dismiss() {
       </div>
       <button
         type="button"
-        class="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-color)]/10 transition-colors"
+        class="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded text-[var(--accent-color)] hover:bg-[var(--accent-color)]/15 transition-colors"
         aria-label="关闭公告"
         @click="dismiss"
       >
-        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
         </svg>
       </button>

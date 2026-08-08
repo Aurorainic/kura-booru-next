@@ -30,6 +30,9 @@ services:
     image: ${KURA_IMAGE_REGISTRY:-ghcr.io/aurorainic}/kura-booru-web:${KURA_IMAGE_TAG:-latest}
     container_name: kura-web
     restart: unless-stopped
+    # Linux Docker 无内置 host.docker.internal — 让容器能访问宿主机代理（127.0.0.1:19823）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:3000:3000"
     env_file:
@@ -56,6 +59,8 @@ services:
     image: ${KURA_IMAGE_REGISTRY:-ghcr.io/aurorainic}/kura-booru-worker:${KURA_IMAGE_TAG:-latest}
     container_name: kura-worker
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
       - ../.env
     depends_on:

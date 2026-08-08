@@ -81,7 +81,7 @@ export async function getIsAdmin(cookieHeader: string): Promise<boolean> {
   const { getRunMode } = await import('./settings')
   if (await getRunMode() === 'intranet') return true
   if (!cookieHeader) return false
-  const cookies = parseCookies(cookieHeader)
+  const cookies = parseCookieHeader(cookieHeader)
   const token = cookies[SESSION_COOKIE]
   if (!token) return false
 
@@ -179,7 +179,7 @@ export async function changeAdminPassword(adminId: string, newPassword: string) 
 }
 
 // ponytail: exposed so other routes (e.g. change-password) can avoid re-implementing cookie parsing.
-export function parseCookies(header: string): Record<string, string> {
+export function parseCookieHeader(header: string): Record<string, string> {
   const cookies: Record<string, string> = {}
   for (const part of header.split(';')) {
     const [k, ...v] = part.trim().split('=')

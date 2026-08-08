@@ -1,7 +1,7 @@
 import { db } from './db'
 import { settings } from '../schema/settings'
 import { eq } from 'drizzle-orm'
-import { isAiEnabled } from '../lib/ai/config'
+import type { H3Event } from 'h3'
 import { SETTING_DEFS, SETTING_DEF_MAP, SECRET_KEYS, maskSecret, type SettingCategory } from './settings-defs'
 
 let settingsCache: Record<string, string> = {}
@@ -30,26 +30,38 @@ export async function getSetting(key: string, fallback = ''): Promise<string> {
 }
 
 export async function getPublicSettings() {
+  // Contract whitelist: public clients never see run mode, AI flags, or
+  // safe-mode configuration. SSR middleware enriches its in-process copy
+  // with the UI-only flags instead.
   const all = await getSettings()
   return {
     site_title: all.site_title || SETTING_DEF_MAP.site_title?.default || 'Kura Booru',
     site_description: all.site_description || '',
-    site_url: all.site_url || SETTING_DEF_MAP.site_url?.default || '',
     announcement: all.announcement || '',
     head_inject: all.head_inject || '',
     maintenance_mode: all.maintenance_mode || 'false',
-    // v0.9.0: feature flag only (never keys/endpoints) — drives the footer AI
-    // badge now that the toggle lives in the DB instead of build-time env.
-    ai_enabled: String(isAiEnabled()),
-    // v0.10.0: run_mode 迁入 DB（默认 intranet），驱动 UI 隐藏登录/退出入口。
-    intranet_mode: String(all.run_mode !== 'public'),
   }
 }
 
-/** 运行模式：'intranet'（内网，默认）| 'public'（公网）。DB settings，env 已移除。 */
+/** 运行模式：'public'（公网，默认）| 'intranet'（内网）。DB settings，env 已移除。 */
 export async function getRunMode(): Promise<'intranet' | 'public'> {
   const all = await getSettings()
-  return all.run_mode === 'public' ? 'public' : 'intranet'
+  return all.run_mode === 'intranet' ? 'intranet' : 'public'
+}
+
+export async function getSafeModeEnabled(): Promise<boolean> {
+  return (await getSetting('safe_mode_enabled', 'false')) === 'true'
+}
+
+export async function getSafeModeInIntranet(): Promise<boolean> {
+  return (await getSetting('safe_mode_in_intranet', 'false')) === 'true'
+}
+
+export async function isSafeModeActive(event: H3Event): Promise<boolean> {
+  if (!(await getSafeModeEnabled())) return false
+  const runMode = await getRunMode()
+  if (runMode === 'public') return true
+  return runMode === 'intranet' && (await getSafeModeInIntranet())
 }
 
 /**
@@ -112,17 +124,19 @@ export async function getAdminSettings() {
 
 /**
  * 批量更新设置。只接受注册表内的键；secret 项若传入空串则视为「保持原值」。
+ * secret 项传入 '__CLEAR__' 则清空该密钥（用于吊销泄露的凭据）。
  * 写入后立即失效缓存（热刷新）。
  */
 export async function updateSettings(updates: Record<string, string>) {
   const allowed = new Set(SETTING_DEFS.map(d => d.key))
   for (const [key, value] of Object.entries(updates)) {
     if (!allowed.has(key)) continue
-    // secret 项空串 = 不修改
-    if (SECRET_KEYS.has(key) && value === '') continue
+    if (SETTING_DEF_MAP[key]?.type === 'readonly') continue  // defense-in-depth
+    if (SECRET_KEYS.has(key) && value === '') continue  // 空串 = 不修改
+    const writeValue = (SECRET_KEYS.has(key) && value === '__CLEAR__') ? '' : value
     await db.insert(settings)
-      .values({ key, value })
-      .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date() } })
+      .values({ key, value: writeValue })
+      .onConflictDoUpdate({ target: settings.key, set: { value: writeValue, updatedAt: new Date() } })
   }
   bustSettingsCache()
   // 触发依赖方的热刷新钩子（S3 客户端重建、bot 重建、sidecar 凭证同步等）。
@@ -197,6 +211,14 @@ export async function getPixivConfig() {
   return {
     refreshToken: all.pixiv_refresh_token || process.env.PIXIV_REFRESH_TOKEN || '',
     phpsessid: all.pixiv_phpsessid || process.env.PIXIV_PHPSESSID || '',
+  }
+}
+
+export async function getDlProxyConfig() {
+  const all = await getSettings()
+  return {
+    proxyType: all.dl_proxy_type || '',
+    proxyUrl: all.dl_proxy_url || '',
   }
 }
 
@@ -298,5 +320,3 @@ export async function checkApiKey(providedKey: string | undefined): Promise<bool
   if (a.length !== b.length) return false
   return crypto.timingSafeEqual(a, b)
 }
-
-export type { SettingCategory }

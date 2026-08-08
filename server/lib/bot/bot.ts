@@ -32,7 +32,31 @@ const URL_PATTERN = /https?:\/\/[^\s<>"']+/gi
 // 热刷新：getBotConfig() 每次调用读取 settings（10s 缓存），token/adminIds/
 // proxyUrl 变化后调用 rebuildBot() 重建实例。getBotConfig 内部已含 env 回退。
 let _botInstance: Bot<BotContext> | null = null
-let _handlersRegistered = false
+let _buildPromise: Promise<Bot<BotContext>> | null = null
+let _botReady: Promise<void> | null = null
+
+// ── Per-chat concurrency semaphore (module-level: survives rebuildBot) ──
+const chatSemaphores = new Map<string, { count: number; max: number; queue: (() => void)[] }>()
+function getSemaphore(chatId: string, max = 3) {
+  if (!chatSemaphores.has(chatId)) {
+    chatSemaphores.set(chatId, { count: 0, max, queue: [] })
+  }
+  return chatSemaphores.get(chatId)!
+}
+async function acquireSemaphore(chatId: string): Promise<void> {
+  const sem = getSemaphore(chatId)
+  if (sem.count >= sem.max) {
+    await new Promise<void>(resolve => sem.queue.push(resolve))
+  }
+  sem.count++
+}
+function releaseSemaphore(chatId: string) {
+  const sem = chatSemaphores.get(chatId)
+  if (!sem) return
+  sem.count--
+  const next = sem.queue.shift()
+  if (next) next()
+}
 
 async function getBotConfigLazy() {
   const { getBotConfig } = await import('../../utils/settings')
@@ -50,21 +74,30 @@ async function buildBot(): Promise<Bot<BotContext>> {
   return new Bot<BotContext>(cfg.token || 'unset', opts)
 }
 
-/** 获取（惰性构建）Bot 实例；首次构建时注册全部 handler。 */
+/** 获取（惰性构建）Bot 实例；首次构建时注册全部 handler。
+ *  in-flight promise guard: 并发调用共享同一个 build，避免 orphan Bot 泄漏。 */
 export async function getBot(): Promise<Bot<BotContext>> {
-  if (!_botInstance) {
-    _botInstance = await buildBot()
+  if (_botInstance) return _botInstance
+  if (_buildPromise) return _buildPromise
+  _buildPromise = (async () => {
+    const b = await buildBot()
     await syncSiteUrl()
-    registerHandlers(_botInstance)
-    _handlersRegistered = true
+    registerHandlers(b)
+    _botInstance = b  // atomic swap — old instance stays live until new one is ready
+    _botReady = null
+    return b
+  })()
+  try {
+    return await _buildPromise
+  } finally {
+    _buildPromise = null
   }
-  return _botInstance
 }
 
-/** settings 热刷新：销毁实例，下次 getBot() 用新配置重建并重新注册。 */
+/** settings 热刷新：构建新实例后原子替换（不先 null）。 */
 export async function rebuildBot() {
-  _botInstance = null
-  _botReady = null
+  _botInstance = null  // ponytail: null so getBot builds fresh; old instance GC'd
+  _buildPromise = null
   await getBot()
 }
 
@@ -86,7 +119,6 @@ async function getSiteUrlLazy(): Promise<string> {
 
 // ── Bot 实例：Proxy 转发到当前实例，热刷新重建后 handler 由
 // registerHandlers 重新注册到新实例。外部（webhook/auth）仍按原 API 用 bot。
-let _botReady: Promise<void> | null = null
 
 export async function ensureBotReady(): Promise<void> {
   const cfg = await getBotConfigLazy()
@@ -237,31 +269,6 @@ b.use(async (ctx, next) => {
   }
   await next()
 })
-
-// ── Per-chat concurrency semaphore (T-P3-3: only wrap enqueueJob, not entire handler) ──
-const chatSemaphores = new Map<string, { count: number; max: number; queue: (() => void)[] }>()
-function getSemaphore(chatId: string, max = 3) {
-  if (!chatSemaphores.has(chatId)) {
-    chatSemaphores.set(chatId, { count: 0, max, queue: [] })
-  }
-  return chatSemaphores.get(chatId)!
-}
-
-async function acquireSemaphore(chatId: string): Promise<void> {
-  const sem = getSemaphore(chatId)
-  if (sem.count >= sem.max) {
-    await new Promise<void>(resolve => sem.queue.push(resolve))
-  }
-  sem.count++
-}
-
-function releaseSemaphore(chatId: string) {
-  const sem = chatSemaphores.get(chatId)
-  if (!sem) return
-  sem.count--
-  const next = sem.queue.shift()
-  if (next) next()
-}
 
 // ── i18n helpers: T/t 定义已移至模块级（registerHandlers 上方），
 // handler 与 pollAndNotify 共享同一份。
