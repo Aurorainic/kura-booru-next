@@ -6,10 +6,9 @@
  * Allowed: basic text formatting, headings, lists, code, blockquote, links.
  * Anchors get http(s)-only href + rel hardening.
  *
- * Output is PLAIN TEXT (never rendered as HTML anywhere in the frontend — see
- * AGENTS.md "external descriptions are rendered as plain text, never v-html"):
+ * Output is PLAIN TEXT (never rendered as HTML anywhere in the frontend —
+ * CLAUDE.md "Hard-Won Rule #14: external artwork descriptions are plain text"):
  * block/line tags are converted to line breaks, remaining tags stripped, and
- * HTML entities decoded. e.g. Pixiv captions with `<br>` / `<a href>` become
  * readable multi-line text instead of leaking literal markup.
  */
 import DOMPurify from 'isomorphic-dompurify'
