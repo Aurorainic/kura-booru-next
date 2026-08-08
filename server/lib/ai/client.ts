@@ -18,7 +18,9 @@ class AiError extends Error {
 
 // ── Core API call ──
 
-const AI_TIMEOUT_MS = 30_000
+// ponytail: 30s 对 DeepSeek 等分类任务（25 标签 + JSON 输出）太紧，实测常超
+// 导致整批 reprocess abort。提到 60s 覆盖慢响应，重试仍有兜底。
+const AI_TIMEOUT_MS = 60_000
 const AI_MAX_RETRIES = 2
 
 function isRetriableStatus(status: number): boolean {

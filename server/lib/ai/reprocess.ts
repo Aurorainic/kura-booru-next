@@ -78,29 +78,22 @@ export async function reprocessTags(mode: 'unprocessed' | 'all'): Promise<{ proc
   const cached = await getTagKnowledge(names)
   const results = new Map<string, TagClassification>(cached)
 
-  const pendingRows = allTags.filter(t => !cached.has(t.name))
-  for (const batch of chunk(pendingRows, 50)) {
-    try {
-      const batchNames = batch.map(t => t.name)
-      const classifications = await classifyTags(batchNames)
-      if (classifications.length) {
-        await upsertTagKnowledge(classifications)
-        for (const c of classifications) results.set(c.name, c)
-      }
-    } catch (e) {
-      console.error('[ai] reprocessTags batch failed:', e)
-    }
-  }
+  // 每处理一批就把该批结果同步到 tags 表（不再等全部批次结束才一次性更新）。
+  // ponytail: 之前末尾统一 UPDATE——若中途某批抛异常中断整个函数，knowledge 已
+  // 写但 tags 未同步，造成记忆与事实漂移（且 500 丢失整批结果）。
+  let processed = 0
+  let failed = 0
 
-  // 统一落库：缓存命中 + AI 新分类，一次性 VALUES + UPDATE FROM
-  const updates: { name: string; category: string; translation: string | null; danbooru_name: string | null }[] = []
-  for (const t of allTags) {
-    const c = results.get(t.name)
-    if (c) updates.push({ name: t.name, category: c.category, translation: c.translation || null, danbooru_name: c.danbooru_name || null })
-  }
-  if (updates.length) {
+  async function syncResultsToTags() {
+    const updates: { name: string; category: string; translation: string | null; danbooru_name: string | null }[] = []
+    for (const t of allTags) {
+      if (t.aiProcessedAt) continue  // 已处理过的不重复更新
+      const c = results.get(t.name)
+      if (c) updates.push({ name: t.name, category: c.category, translation: c.translation || null, danbooru_name: c.danbooru_name || null })
+    }
+    if (!updates.length) return
     const values = updates.map(c =>
-      sql`(${c.name}::text, ${c.category}::text, ${c.translation}::text, ${c.danbooru_name}::text)`,
+      sql`(${c.name}::text, ${c.category}::tag_category_enum, ${c.translation}::text, ${c.danbooru_name}::text)`,
     )
     await db.execute(sql`
       UPDATE tags SET
@@ -109,22 +102,41 @@ export async function reprocessTags(mode: 'unprocessed' | 'all'): Promise<{ proc
         danbooru_name = v.danbooru_name,
         ai_processed_at = NOW()
       FROM (VALUES ${sql.join(values, sql`, `)}) AS v(name, category, translation, danbooru_name)
-      WHERE tags.name = v.name
+      WHERE tags.name = v.name AND tags.ai_processed_at IS NULL AND tags.category != 'artist'
     `)
   }
 
-  // agent 自学习闭环 —— 知识库↔标签表 双向对齐：
-  //   (a) 人工纠偏（source='manual'）是最高权威：tags 以 knowledge 为准
-  //       （管理员在后台改过分类/翻译，必须回写 tags，否则展示与记忆漂移）。
-  //   (b) AI 分类（source='ai'）仅当 tags 尚未处理时才回写（避免覆盖人工结果）。
-  //   这样 knowledge 成为"共享记忆"，tags 成为"当前事实"，两者持续收敛。
+  // 缓存命中的先同步（避免缓存有但 tags 未标记）
+  await syncResultsToTags().catch(e => console.error('[ai] reprocessTags sync cached failed:', e))
+
+  const pendingRows = allTags.filter(t => !cached.has(t.name))
+  for (const batch of chunk(pendingRows, 50)) {
+    try {
+      const batchNames = batch.map(t => t.name)
+      // ponytail: classifyTags 内部已按 25 分片 + 60s 超时兜底；这里每 50 一批
+      const classifications = await classifyTags(batchNames)
+      if (classifications.length) {
+        await upsertTagKnowledge(classifications)
+        for (const c of classifications) results.set(c.name, c)
+        await syncResultsToTags()
+      }
+      processed += classifications.length
+      failed += Math.max(0, batch.length - classifications.length)
+    } catch (e) {
+      console.error('[ai] reprocessTags batch failed:', e)
+      // 单个批次失败不影响整体——分类失败的标签计为失败，不中断后续
+      failed += batch.length
+    }
+  }
+
+  // agent 自学习闭环 —— 人工纠偏（source='manual'）是最高权威：tags 以 knowledge 为准
   try {
     const manualRows = await db.select()
       .from(tagKnowledge)
       .where(eq(tagKnowledge.source, 'manual'))
     if (manualRows.length) {
       const mValues = manualRows.map(k =>
-        sql`(${k.name}::text, ${k.type}::text, ${k.translation}::text, ${k.danbooruName}::text)`,
+        sql`(${k.name}::text, ${k.type}::tag_category_enum, ${k.translation}::text, ${k.danbooruName}::text)`,
       )
       await db.execute(sql`
         UPDATE tags SET
@@ -140,7 +152,5 @@ export async function reprocessTags(mode: 'unprocessed' | 'all'): Promise<{ proc
     console.error('[ai] reprocessTags manual alignment failed:', e)
   }
 
-  const processed = updates.length
-  const failed = allTags.length - updates.length
   return { processed, failed }
 }
