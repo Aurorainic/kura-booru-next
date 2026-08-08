@@ -5,7 +5,10 @@ export default defineAdminHandler({
   doc: { method: 'get', path: '/api/tasks/web-import/stream', summary: 'SSE stream for web-import task progress' },
   handler: async ({ event }) => {
     const query = getQuery(event)
-    const taskIds = (query.task_ids as string || '').split(',').filter(Boolean).slice(0, 50)
+    const rawTaskIds = query.task_ids
+    const taskIds = (Array.isArray(rawTaskIds) ? rawTaskIds : [rawTaskIds])
+      .flatMap(v => String(v || '').split(',').filter(Boolean))
+      .slice(0, 50)
     if (!taskIds.length) throw new AppError('VALIDATION_FAILED', 400, 'task_ids required')
 
     const stream = new ReadableStream({

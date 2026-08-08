@@ -17,6 +17,7 @@ import { classifyTags } from '../lib/ai/classify'
 import { suggestMerges } from '../lib/ai/merges'
 import { suggestRatings } from '../lib/ai/ratings'
 import { updateAiJobProgress, completeAiJob } from '../lib/ai/jobs'
+import { isAiEnabled, onAiConfigChanged } from '../lib/ai/config'
 
 let _boss: PgBoss | null = null
 
@@ -30,8 +31,19 @@ export async function getBoss(): Promise<PgBoss> {
   return _boss
 }
 
-export async function registerJobs(boss: PgBoss) {
-  // ── AI jobs (with DLQ) ──
+// ── AI worker 动态注册/注销 ──
+// 按需启用原则：AI 关闭时不注册任何 AI worker（work() 每个队列都会常驻轮询，
+// 占用 DB 连接与 CPU）。启用时注册，关闭时 offWork 释放。isAiEnabled() 的
+// 快照在 admin 增删改 Provider / 切换全局开关后由 refreshAiConfig 更新，
+// 并通过 onAiConfigChanged 钩子触发这里同步。
+let aiWorkersRegistered = false
+
+const AI_WORKER_QUEUES = ['ai-classify', 'ai-merges', 'ai-ratings'] as const
+
+async function registerAiWorkers(boss: PgBoss) {
+  if (aiWorkersRegistered) return
+
+  // DLQ 必须先建：createQueue(name, { deadLetter }) 要求死信队列已存在
   await boss.createQueue('ai-dlq')
   await boss.createQueue('ai-classify', { deadLetter: 'ai-dlq' })
   await boss.createQueue('ai-merges', { deadLetter: 'ai-dlq' })
@@ -93,6 +105,33 @@ export async function registerJobs(boss: PgBoss) {
     }
     await completeAiJob(jobId, { suggestions: results }, errors.length > 0)
   })
+
+  aiWorkersRegistered = true
+  console.log('[pg-boss] ai workers registered (ai enabled)')
+}
+
+async function unregisterAiWorkers(boss: PgBoss) {
+  if (!aiWorkersRegistered) return
+  for (const q of AI_WORKER_QUEUES) {
+    try { await boss.offWork(q) } catch (err) {
+      console.warn(`[pg-boss] offWork ${q} failed (non-fatal):`, err)
+    }
+  }
+  aiWorkersRegistered = false
+  console.log('[pg-boss] ai workers unregistered (ai disabled)')
+}
+
+/** 按当前 AI 启用状态对齐 worker 注册（启动 + AI 配置热刷新时调用）。 */
+export async function syncAiWorkers(): Promise<void> {
+  const boss = await getBoss()
+  if (isAiEnabled()) await registerAiWorkers(boss)
+  else await unregisterAiWorkers(boss)
+}
+
+export async function registerJobs(boss: PgBoss) {
+  // ── AI jobs (with DLQ) ── 仅在 AI 启用时注册 worker；配置变化时同步。
+  await syncAiWorkers()
+  onAiConfigChanged(() => syncAiWorkers())
 
   // ── Scheduled jobs (setInterval → boss.schedule) ──
   // createQueue 必须先于 schedule：schedule 有 FK 约束，队列不存在会抛 Queue X not found

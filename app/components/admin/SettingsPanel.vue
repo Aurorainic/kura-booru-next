@@ -23,7 +23,7 @@ const items = computed(() => data.value?.items || [])
 const draft = reactive<Record<string, string>>({})
 const secretDirty = reactive<Record<string, boolean>>({})
 // 测试按钮状态
-const testStates = reactive<Record<string, { testing: boolean; result: { ok?: boolean; error?: string; username?: string; id?: number; bucket?: string; region?: string; endpoint?: string } | null }>>({})
+const testStates = reactive<Record<string, { testing: boolean; result: { ok?: boolean; error?: string; username?: string; id?: number; bucket?: string; region?: string; endpoint?: string; via?: string; status?: number } | null }>>({})
 
 function itemsOf(cat: string): SettingItem[] {
   return items.value.filter(i => i.category === cat)
@@ -103,6 +103,12 @@ function testBot() {
     token: draft.bot_token || undefined,
     proxyType: draft.bot_proxy_type || undefined,
     proxyUrl: draft.bot_proxy_url || undefined,
+  }))
+}
+function testDlProxy() {
+  runTest('dl_proxy_test', () => testDownloadProxyConnection({
+    proxyType: draft.dl_proxy_type || undefined,
+    proxyUrl: draft.dl_proxy_url || undefined,
   }))
 }
 
@@ -270,6 +276,19 @@ function fieldSpan(item: SettingItem): string {
               {{ testState('bot_test').result!.ok
                 ? `✓ 连接成功 — @${testState('bot_test').result!.username}`
                 : `✗ ${testState('bot_test').result!.error}` }}
+            </span>
+          </div>
+          <div v-if="cat.key === 'integrations'" class="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t border-[var(--border-color)]">
+            <button @click="testDlProxy" :disabled="testState('dl_proxy_test').testing || !draft.dl_proxy_url || !draft.dl_proxy_type"
+              class="btn-ghost !text-xs !px-4 !py-2 !border !border-[var(--border-color)] !rounded-xl disabled:opacity-40">
+              {{ testState('dl_proxy_test').testing ? '测试中…' : '测试下载代理连接' }}
+            </button>
+            <span v-if="testState('dl_proxy_test').result" class="text-xs font-medium"
+              :class="testState('dl_proxy_test').result!.ok ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'">
+              {{ testState('dl_proxy_test').result!.ok ? '✓ 下载代理可用' : `✗ ${testState('dl_proxy_test').result!.error}` }}
+              <span v-if="testState('dl_proxy_test').result!.ok && testState('dl_proxy_test').result!.status" class="text-[var(--text-muted)]">
+                — HTTP {{ testState('dl_proxy_test').result!.status }}
+              </span>
             </span>
           </div>
         </div>

@@ -73,7 +73,7 @@ const emit = defineEmits<{
         <button
           v-if="isAdmin"
           type="button"
-          class="btn-ghost !border !border-[var(--color-danger)]/40 !text-[var(--color-danger)] hover:!bg-[var(--color-danger)]/10"
+          class="btn-danger !text-xs !px-3 !py-1.5"
           :disabled="deleting"
           @click="emit('delete')"
         >

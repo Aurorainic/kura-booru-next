@@ -12,6 +12,10 @@
  * 注：undici 必须用 7.x（8.x 与 Node 24 内置 undici 不兼容：
  *     "invalid onRequestStart method"）。
  */
+import { ProxyAgent, Agent } from 'undici'
+import { SocksProxyAgent } from 'socks-proxy-agent'
+import { EventEmitter } from 'node:events'
+
 export function buildBotClient(
   proxyType: string,
   proxyUrl: string,
@@ -20,16 +24,12 @@ export function buildBotClient(
   const url = proxyUrl.replace(/\/+$/, '')
 
   if (proxyType === 'http') {
-    const { ProxyAgent } = require('undici') as typeof import('undici')
     return { baseFetchConfig: { dispatcher: new ProxyAgent(url) } }
   }
 
   if (proxyType === 'socks') {
-    const { Agent } = require('undici') as typeof import('undici')
-    const { SocksProxyAgent } = require('socks-proxy-agent') as typeof import('socks-proxy-agent')
-    const { EventEmitter } = require('node:events')
     const socks = new SocksProxyAgent(url)
-    const fakeReq = new EventEmitter()
+    const fakeReq = new EventEmitter() as any
     const dispatcher = new Agent({
       connect: (options: any, callback: any) => {
         socks.connect(fakeReq, {

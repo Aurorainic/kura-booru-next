@@ -52,9 +52,13 @@ export default defineExtHandler({
 
     const results = await Promise.all(body.urls.slice(0, 50).map(async (url) => {
       try {
-        let host: string
-        try { host = new URL(url).hostname }
+        let parsed: URL
+        try { parsed = new URL(url) }
         catch { return { status: 'error', url, error: 'invalid URL' } }
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          return { status: 'error', url, error: 'unsupported protocol' }
+        }
+        const host = parsed.hostname
         if (await isPrivateHost(host)) return { status: 'error', url, error: 'private/reserved host' }
 
         // ponytail: per-URL rejection when key lacks force_rating cap. UI can

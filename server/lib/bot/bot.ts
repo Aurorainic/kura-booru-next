@@ -74,9 +74,72 @@ async function buildBot(): Promise<Bot<BotContext>> {
   return new Bot<BotContext>(cfg.token || 'unset', opts)
 }
 
+/**
+ * 根据当前配置对齐 Telegram webhook（幂等，供启动与设置热刷新调用）：
+ *   - enabled + token + siteUrl → setWebhook + setMyCommands
+ *   - disabled 或 token 为空   → deleteWebhook（释放后台，停止 Telegram 推送）
+ * 用一个独立于单例的 Bot 实例调用 API，避免与 disabled 状态/懒构建耦合。
+ */
+export async function syncBotWebhook(): Promise<void> {
+  const cfg = await getBotConfigLazy()
+  const token = cfg.token
+
+  if (!cfg.enabled || !token) {
+    // 尝试删除 webhook：让 Telegram 立即停止向本服务推送更新。
+    if (token) {
+      try {
+        const temp = await buildBot()
+        await temp.api.deleteWebhook()
+        console.log('[bot-setup] webhook removed (bot disabled)')
+      } catch (err) {
+        console.warn('[bot-setup] deleteWebhook failed (non-fatal):', err)
+      }
+    } else {
+      console.log('[bot-setup] bot_token not set, bot inactive')
+    }
+    return
+  }
+
+  if (!cfg.siteUrl) {
+    console.warn('[bot-setup] site_url not set, skipping webhook registration')
+    return
+  }
+
+  // ponytail: production webhook without webhook secret = unauthenticated
+  // surface that anyone who can reach /bot/webhook can hit. Refuse to register
+  // rather than warn-and-continue (matches the SESSION_SECRET guard in auth.ts).
+  if (process.env.NODE_ENV === 'production' && !cfg.webhookSecret) {
+    throw new Error('bot_webhook_secret must be set in production — refusing to register an unauthenticated Telegram webhook')
+  }
+
+  const b = await buildBot()
+  const webhookUrl = `${cfg.siteUrl.replace(/\/+$/, '')}/bot/webhook`
+  await b.api.setWebhook(webhookUrl, {
+    secret_token: cfg.webhookSecret || undefined,
+    drop_pending_updates: true,
+    allowed_updates: ['message', 'callback_query'],
+  })
+  await b.api.setMyCommands([
+    { command: 'save', description: '保存图片 / Save image' },
+    { command: 'info', description: '查询作品信息 / Post info' },
+    { command: 'search', description: '搜索作品 / Search' },
+    { command: 'random', description: '随机作品 / Random' },
+    { command: 'stats', description: '站点统计 / Stats' },
+    { command: 'autopass', description: '自动评级开关 / Toggle autopass' },
+    { command: 'aitags', description: 'AI 标签处理 / AI tag processing' },
+    { command: 'ai', description: 'AI 助手 / AI assistant' },
+    { command: 'lang', description: '切换语言 / Switch language' },
+    { command: 'start', description: '开始使用 / Start' },
+  ], { scope: { type: 'all_private_chats' } })
+  console.log('[bot-setup] webhook registered:', webhookUrl, cfg.proxyUrl ? `(via ${cfg.proxyUrl})` : '')
+}
+
 /** 获取（惰性构建）Bot 实例；首次构建时注册全部 handler。
- *  in-flight promise guard: 并发调用共享同一个 build，避免 orphan Bot 泄漏。 */
+ *  in-flight promise guard: 并发调用共享同一个 build，避免 orphan Bot 泄漏。
+ *  bot_enabled=false 时抛出——由 webhook auth 层先转为 404。 */
 export async function getBot(): Promise<Bot<BotContext>> {
+  const cfg = await getBotConfigLazy()
+  if (!cfg.enabled) throw new Error('Telegram bot is disabled (bot_enabled=false)')
   if (_botInstance) return _botInstance
   if (_buildPromise) return _buildPromise
   _buildPromise = (async () => {
@@ -94,10 +157,13 @@ export async function getBot(): Promise<Bot<BotContext>> {
   }
 }
 
-/** settings 热刷新：构建新实例后原子替换（不先 null）。 */
+/** settings 热刷新：构建新实例后原子替换（不先 null）。bot 禁用时不构建。 */
 export async function rebuildBot() {
   _botInstance = null  // ponytail: null so getBot builds fresh; old instance GC'd
   _buildPromise = null
+  _botReady = null
+  const cfg = await getBotConfigLazy()
+  if (!cfg.enabled) return  // 禁用态：webhook 对齐由 syncBotWebhook 处理
   await getBot()
 }
 
@@ -122,7 +188,7 @@ async function getSiteUrlLazy(): Promise<string> {
 
 export async function ensureBotReady(): Promise<void> {
   const cfg = await getBotConfigLazy()
-  if (!cfg.token) return
+  if (!cfg.token || !cfg.enabled) return
   const b = await getBot()
   if (!_botReady) _botReady = b.init()
   await _botReady

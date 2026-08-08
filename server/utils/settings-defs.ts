@@ -29,6 +29,8 @@ export interface SettingDef {
   public?: boolean
   /** 敏感值：后台掩码、保存后不回显明文 */
   secret?: boolean
+  /** 是否渲染在后台「站点设置」卡片中（默认 true；AI 开关由「AI 设置」面板专用，隐藏避免双入口） */
+  adminPanel?: boolean
   /** 默认值（DB 无记录时使用） */
   default?: string
   /** 由 env 迁移时的初始值（seed 时优先于 default） */
@@ -52,6 +54,11 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'announcement', category: 'site', type: 'textarea', label: '公告内容', description: '支持 Markdown。多行轮播，溢出水平滚动。', public: true, default: '' },
   { key: 'head_inject', category: 'site', type: 'textarea', label: 'Head 注入', description: '注入到 <head> 的 HTML（如分析脚本）。', public: true, default: '' },
   { key: 'maintenance_mode', category: 'site', type: 'boolean', label: '维护模式', description: '开启后非管理员将被重定向到维护页面。', public: true, default: 'false' },
+  // ponytail: AI 全局开关加入注册表（site 分类）。此前该 key 只被
+  // toggle.put 通过 updateSettings 写入，但 updateSettings 只接受注册表内的 key，
+  // 导致 AI 开关永远写不进 DB（刷新后仍保持旧值）。加入后 toggle 才能真正落库，
+  // 并随热刷新联动 worker 注册。「AI 设置」面板与「站点设置」卡片均可维护同一值。
+  { key: 'ai_tag_processing_enabled', category: 'site', type: 'boolean', label: '启用 AI 标签处理', description: '全局 AI 开关，由「AI 设置」面板维护。', default: 'false', adminPanel: false },
   { key: 'safe_mode_enabled', category: 'site', type: 'boolean', label: '安全模式', description: '开启后列表/随机接口仅返回 safe 评级，搜索/详情返回全部评级但追加 is_blurred。', public: false, default: 'false' },
   { key: 'safe_mode_in_intranet', category: 'site', type: 'boolean', label: '内网模式下启用安全模式', description: '运行模式为 intranet 时强制启用安全模式。', public: false, default: 'false' },
 
@@ -69,6 +76,7 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 's3_external_url', category: 'storage', type: 'text', label: 'S3 对外 URL', description: '对象存储的公网访问前缀（CDN 域名），图片经此直出；留空则走站内 /i/ 代理。', default: '', env: 'S3_EXTERNAL_URL', placeholder: 'https://cdn.example.com' },
 
   // ── 机器人 ──
+  { key: 'bot_enabled', category: 'bot', type: 'boolean', label: '启用 Telegram Bot', description: '关闭后删除 webhook、停止处理消息与占用后台；需要时再开启即可。', default: 'true', env: 'BOT_ENABLED' },
   { key: 'bot_token', category: 'bot', type: 'secret', label: 'Bot Token', description: 'Telegram Bot token（BotFather 获取）。留空则机器人禁用。', default: '', env: 'BOT_TOKEN' },
   { key: 'bot_webhook_secret', category: 'bot', type: 'secret', label: 'Webhook Secret', description: 'webhook 校验密钥（x-telegram-bot-api-secret-token）。', default: '', env: 'BOT_WEBHOOK_SECRET' },
   { key: 'bot_admin_ids', category: 'bot', type: 'text', label: '管理员 ID（逗号分隔）', description: '允许使用机器人的 Telegram 用户 ID，多个用英文逗号分隔。', default: '', env: 'BOT_ADMIN_IDS', placeholder: '123456789,987654321' },

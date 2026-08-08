@@ -1,9 +1,16 @@
 import { defineAdminHandler } from '../../../../platform/http/auth'
+import { AppError } from '../../../../platform/errors'
 import { getBoss } from '../../../../platform/jobs'
+import { isAiEnabled } from '../../../../lib/ai/config'
 
 export default defineAdminHandler({
   doc: { method: 'post', path: '/api/admin/ai/suggest-ratings', summary: 'AI rating suggestions' },
   handler: async ({ event }) => {
+    // 按需启用原则：AI 关闭时拒绝入队（worker 未注册，job 会积压）。
+    if (!isAiEnabled()) {
+      throw new AppError('FEATURE_DISABLED', 409, 'AI 功能未启用')
+    }
+
     const body = await readBody<{ scope: 'unrated' | 'all' | { rating: string }; limit?: number }>(event)
     const scope = body?.scope || 'unrated'
     const limit = Math.min(body?.limit || 50, 100)

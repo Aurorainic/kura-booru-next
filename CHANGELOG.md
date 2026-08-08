@@ -7,6 +7,9 @@
 > 未完工进度：v0.10.0 进行中，以下变更尚未全部验收，可能随开发调整。
 
 ### 新增
+- **Telegram Bot 模块开关** — 后台「机器人」卡片新增「启用 Telegram Bot」开关（`bot_enabled`）。关闭后：`syncBotWebhook` 调 `deleteWebhook` 让 Telegram 停止推送、不注册命令、不构建 Bot 实例，`/bot/webhook` 返回 404（模块隐藏），后台资源完全释放；重新开启即恢复注册。热刷新生效，无需重启。
+- **AI 按需启用 worker** — AI 关闭（全局开关关 / 无可启用 Provider）时不再注册 `ai-classify` / `ai-merges` / `ai-ratings` 三个 pg-boss worker（每个 `work()` 都会常驻轮询，占用 DB 连接与 CPU）；启用时 `work()` 注册、关闭时 `offWork()` 注销，通过 `refreshAiConfig` + `onAiConfigChanged` 钩子联动。三个 AI 入队端点（classify-tags / suggest-merges / suggest-ratings）在 AI 关闭时返回 409 `FEATURE_DISABLED`，避免 job 积压无人处理。
+- **下载代理连通测试** — 后台「集成」卡片新增「测试下载代理连接」按钮（`POST /api/admin/settings/test-dl-proxy`，契约已冻结），按所选类型实测代理连通性并返回 HTTP 状态码。
 - **全站设置迁移至数据库（7 类后台卡片）** — 站点标题/URL/公告/head 注入/维护模式、图片尺寸（缩略图/预览/上传上限）、S3 存储六项、Telegram Bot（token/webhook secret/管理员 ID/中转）、Pixiv 凭证与 Backend API Key 全部迁入 `settings` 表；后台「设置」页按 7 类卡片分区管理，保存即热刷新生效。`.env` 仅保留启动必需配置（`DATABASE_URL` / `REDIS_URL` / `SECRET_KEY` / `SESSION_SECRET` / `POSTGRES_*` / `PORT` 等），业务配置不再依赖环境变量。
 - **设置热刷新机制** — 新增 `server/utils/settings-defs.ts` 注册表（键/分类/类型/掩码/默认值）+ `server/plugins/07-settings-hot-reload.ts` 刷新钩子：S3 客户端自动重建、Telegram Bot 实例重建（token/管理员/中转变更即时生效）、Pixiv 凭证与上传上限经 Redis 同步到 sidecar（`kura:pixiv:*` / `kura:max_image_size`）。
 - **Telegram Bot 境内中转支持** — 后台「机器人」卡片新增「中转类型」下拉（HTTP(S) 代理 / SOCKS5 代理 / MTProto 反代 apiRoot / 直连）与「测试 Bot 连接 (getMe)」按钮（按所选类型实测连通，返回用户名或错误详情）。实现依赖：undici `ProxyAgent`（http）、socks-proxy-agent + undici `Agent({connect})` 包装（socks，`secureEndpoint: true`）、grammy `apiRoot`（mtproto）。
@@ -19,6 +22,9 @@
 
 ### 变更
 - **包管理器 npm → pnpm** — 项目迁移至 pnpm（`packageManager: pnpm@11.3.0` + `pnpm-workspace.yaml`）；`Dockerfile` / CI / 文档中全部 npm 命令改为 pnpm。依赖新增 `undici@^7.29.0`（**必须 7.x**：8.x 与 Node 24 内置 undici 不兼容，dispatcher 报 `invalid onRequestStart method`）、`socks-proxy-agent@^10.1.0`。
+- **组件自动导入改为按文件名注册（`pathPrefix: false`）** — Nuxt 默认 `pathPrefix: true` 会给子目录组件加目录前缀（`ui/ConfirmDialog.vue` → `UiConfirmDialog`），而模板用的是无前缀名，导致共享 UI 组件全部解析失败（详见修复「全站删除按钮无响应」）。改为按文件名注册，无 basename 冲突，admin 面板本就显式 import 不受影响。
+- **web-import 入队前协议校验** — `/api/tasks/web-import` 与 `/api/tasks` 在入队前校验 URL 必须为 http/https（并在既有的私网地址校验之前），`ftp://` 等协议直接在入口拒绝，不再进入 sidecar 下载环节白跑一趟。
+- **批量导入面板错误文案** — ImportPanel 将服务端/扩展返回的原始英文错误（`unsupported protocol`、`Forbidden URL scheme: ftp`、`DNS resolution failed` 等）映射为中文友好提示；提交前做客户端 URL 协议预检，非法链接即时标错不入队。
 - **机器人配置读取** — `server/lib/bot/bot.ts` 改为 DB settings 优先 + env 回退的惰性构建（`getBot()` / `rebuildBot()`），代理/中转连接统一封装于 `server/utils/bot-proxy.ts`（`buildBotClient`，bot 与测试端点共用）。
 - **S3 客户端** — `server/utils/s3.ts` 改为按 settings 惰性构建 + 可重建（`resetS3Client`），配置变更后自动生效。
 - **管理端点契约** — `/api/admin/settings` GET 返回 `{ categories, items }`（含 type/label/description/options/masked 元数据）而非扁平 `{ key: value }`；PUT 收 `{ settings }` 且仅接受注册表内键。
@@ -28,6 +34,9 @@
 - **自动导入冲突清理** — `parseCookies` 重命名为 `parseCookieHeader`、移除 `SettingCategory` 重复 re-export，消除 typecheck/build 中的 duplicate import 警告。
 
 ### 修复
+- **全站删除按钮无响应** — Nuxt 组件自动导入默认 `pathPrefix: true`，`ui/ConfirmDialog.vue` 等被注册为 `UiConfirmDialog`（带目录前缀），而模板写的是 `<ConfirmDialog>`（无前缀），共享 UI 组件（ConfirmDialog / ToastContainer / PageHeader / EmptyState / LoadingCard / TagIdTooltip）全部解析失败 → 确认弹窗从不渲染 → 所有删除按钮点击后静默无响应。`nuxt.config.ts` 设 `components: { dirs: [{ path: '~/components', pathPrefix: false }] }` 修复，同时消除 SSR hydration mismatch。
+- **删除按钮样式不统一** — 详情页 PostInfoPanel 用 `btn-ghost`+红描边、PostsPanel 桌面表格删除按钮默认 40% 透明度（hover 才显示）、AutoRatingPanel 字号不一致；统一为 `btn-danger` 小尺寸样式，桌面表格删除图标常显。
+- **AI 全局开关写不进 DB** — `ai_tag_processing_enabled` 不在 `SETTING_DEFS` 注册表，`updateSettings()` 白名单过滤后静默丢弃，AI 开关永远关不掉（刷新后仍是旧值）。已加入注册表（`adminPanel: false` 避免在「站点设置」卡片重复渲染，由「AI 设置」面板维护）。
 - **后台登录入口在 intranet 模式误显** — 登录/退出入口现在由 `intranetMode` 统一控制（`default.vue` / `BottomTabBar.vue` / `login.vue`），内网模式完全隐藏。
 - **`defineAsyncComponent` 类型错误** — 移除 Vue 3.5 不存在的 `name` 选项（`admin/index.vue`），KeepAlive 匹配改由 SFC `defineOptions` 驱动。
 - **worker 健康检查误报** — alpine 镜像无 `pgrep`，compose healthcheck 改查 `/proc/1/cmdline`。

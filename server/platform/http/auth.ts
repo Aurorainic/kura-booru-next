@@ -137,7 +137,14 @@ export function defineTelegramHandler<S extends HandlerSchemas | undefined = und
   return defineWrappedHandler({
     authKind: 'telegram',
     authenticate: async (event) => {
-      // Verify bot is configured
+      // Verify bot is configured & enabled. Disabled → 404 (module hidden),
+      // consistent with the content-rating existence-hiding model.
+      const { getBotConfig } = await import('../../utils/settings')
+      const botCfg = await getBotConfig()
+      if (!botCfg.enabled) {
+        throw new AppError('NOT_FOUND', 404, 'Bot disabled')
+      }
+
       const { getBot, ensureBotReady } = await import('../../utils/bot')
       const bot = await getBot()
       if (!bot.token || bot.token === 'unset') {
@@ -146,8 +153,7 @@ export function defineTelegramHandler<S extends HandlerSchemas | undefined = und
 
       // Verify webhook secret token
       const secret = getHeader(event, 'x-telegram-bot-api-secret-token')
-      const { getBotConfig } = await import('../../utils/settings')
-      const expectedSecret = (await getBotConfig()).webhookSecret
+      const expectedSecret = botCfg.webhookSecret
 
       if (process.env.NODE_ENV === 'production' && !expectedSecret) {
         throw new AppError('INTERNAL', 500, 'Webhook secret not configured')

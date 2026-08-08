@@ -125,7 +125,7 @@ onUnmounted(() => {
               <span class="text-[0.625rem] px-2 py-1 rounded-md font-semibold" :class="getRatingColorClass(rule.target_rating)">{{ getRatingLabel(rule.target_rating) }}</span>
             </td>
             <td class="px-4 py-2.5 text-right">
-              <button @click="removeRule(rule.id, rule.tag_name, rule.target_rating)" class="btn-danger !text-[0.625rem] !px-2.5 !py-1">删除</button>
+              <button @click="removeRule(rule.id, rule.tag_name, rule.target_rating)" class="btn-danger !text-xs !px-2.5 !py-1.5">删除</button>
             </td>
           </tr>
         </tbody>

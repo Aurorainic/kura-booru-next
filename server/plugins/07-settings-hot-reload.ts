@@ -37,8 +37,13 @@ export default defineNitroPlugin(async () => {
   onSettingsChanged(async () => {
     const { resetS3Client } = await import('../utils/s3')
     resetS3Client()
-    const { rebuildBot } = await import('../utils/bot')
+    const { rebuildBot, syncBotWebhook } = await import('../utils/bot')
     await rebuildBot()
+    // 对齐 webhook：启用 → 注册，禁用 → 删除（让 Telegram 停止推送）
+    await syncBotWebhook()
+    // AI 开关可能经设置 API 变更：刷新快照并按需启停 AI worker
+    const { refreshAiConfig } = await import('../lib/ai/config')
+    await refreshAiConfig()
     await syncPixivToRedis()
   })
 

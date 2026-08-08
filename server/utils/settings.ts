@@ -72,7 +72,9 @@ export async function isSafeModeActive(event: H3Event): Promise<boolean> {
  */
 export async function getAdminSettings() {
   const all = await getSettings()
-  const items = SETTING_DEFS.map((def) => {
+  const items = SETTING_DEFS
+    .filter(def => def.adminPanel !== false)  // 隐藏专用面板维护的项（如 AI 开关）
+    .map((def) => {
     const raw = all[def.key] ?? def.default ?? ''
     if (def.type === 'readonly') {
       const envVal = def.env ? process.env[def.env] : undefined
@@ -197,6 +199,7 @@ export async function getS3Config() {
 export async function getBotConfig() {
   const all = await getSettings()
   return {
+    enabled: (all.bot_enabled ?? process.env.BOT_ENABLED ?? 'true') !== 'false',
     token: all.bot_token || process.env.BOT_TOKEN || '',
     webhookSecret: all.bot_webhook_secret || process.env.BOT_WEBHOOK_SECRET || '',
     adminIds: (all.bot_admin_ids || process.env.BOT_ADMIN_IDS || '').split(',').map(Number).filter(Boolean),

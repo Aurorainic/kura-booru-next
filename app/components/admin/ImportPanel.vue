@@ -6,47 +6,103 @@
 defineOptions({ name: 'ImportPanel' })
 
 const IMPORT_ICON = 'M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5'
+const MAX_BATCH = 50
+
+// ponytail: server/extension surface raw English error strings (unsupported
+// protocol, Forbidden URL scheme: ftp, DNS resolution failed...) — translate
+// the known ones into friendly zh-CN copy so the panel row tells the user what
+// actually went wrong. Unknown short strings pass through; empties and noise
+// fall back to a generic message.
+function describeImportError(raw?: string): string {
+  const e = (raw || '').trim()
+  if (!e) return '下载失败'
+  const lower = e.toLowerCase()
+  if (lower.includes('invalid url') || lower.includes('no hostname')) return '链接格式无效'
+  if (lower.includes('unsupported protocol') || lower.includes('forbidden url scheme')) return '不支持的链接协议（仅支持 http/https）'
+  if (lower.includes('private/reserved host') || lower.includes('blocked ip range')) return '链接指向内网或保留地址，已拦截'
+  if (lower.includes('dns resolution failed')) return '域名解析失败，请检查链接'
+  if (lower.includes('downloaded no files') || lower.includes('no extractor')) return '无法从该链接获取图片'
+  if (lower.includes('key_not_authorized_for_force_rating')) return '该密钥无权限覆盖评级'
+  if (e.length > 40) return '下载失败'
+  return e
+}
+
+// Client-side pre-check so malformed / non-http(s) URLs are rejected instantly
+// instead of round-tripping to the server only to be refused.
+function validateUrl(url: string): string | null {
+  let parsed: URL
+  try { parsed = new URL(url) } catch { return '链接格式无效' }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '仅支持 http/https 链接'
+  return null
+}
 
 const urls = ref('')
 const importing = ref(false)
 const progress = ref<{ task_id: string; url: string; status: string; detail: string }[]>([])
 const summary = ref<{ total: number; succeeded: number; failed: number; too_large: number; timed_out: number } | null>(null)
 let eventSource: EventSource | null = null
+const toast = useToast()
 
 onUnmounted(() => eventSource?.close())
 
 async function startImport() {
-  const urlList = urls.value.split('\n').map(u => u.trim()).filter(Boolean)
+  const allUrls = urls.value.split('\n').map(u => u.trim()).filter(Boolean)
+  const urlList = allUrls.slice(0, MAX_BATCH)
   if (!urlList.length) return
 
-  const toast = useToast()
   const urlMap: Record<string, string> = {}
+  let enqueueFailed = 0
+
+  // Client-side pre-check: split into valid (http/https) vs instantly rejected.
+  const validUrls: string[] = []
+  const rejected: { url: string; reason: string }[] = []
+  urlList.forEach((url) => {
+    const reason = validateUrl(url)
+    if (reason) rejected.push({ url, reason })
+    else validUrls.push(url)
+  })
 
   importing.value = true
   summary.value = null
-  progress.value = urlList.map(url => ({ task_id: '', url, status: 'queued', detail: '排队中…' }))
+  // progress[0..validUrls.length) index-aligns with validUrls, so the server
+  // response (in validUrls order) can update rows by index below.
+  progress.value = [
+    ...validUrls.map(url => ({ task_id: '', url, status: 'queued', detail: '排队中…' })),
+    ...rejected.map(({ url, reason }) => ({ task_id: '', url, status: 'error', detail: reason })),
+  ]
+  enqueueFailed = rejected.length
+  if (allUrls.length > MAX_BATCH) toast.info(`仅导入前 ${MAX_BATCH} 条`)
+
+  if (!validUrls.length) {
+    importing.value = false
+    summary.value = { total: urlList.length, succeeded: 0, failed: enqueueFailed, too_large: 0, timed_out: 0 }
+    toast.error('没有可导入的链接（仅支持 http/https）')
+    return
+  }
 
   try {
     const resp = await fetchApi<{ results: { task_id: string; status: string; url?: string; error?: string }[] }>('/tasks/web-import', undefined, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ urls: urlList }),
+      body: JSON.stringify({ urls: validUrls }),
     })
 
     const taskIds: string[] = []
     resp.results.forEach((r, i) => {
-      const url = r.url || urlList[i] || ''
+      const url = r.url || validUrls[i] || ''
       if (r.task_id) {
         urlMap[r.task_id] = url
         taskIds.push(r.task_id)
         progress.value[i] = { task_id: r.task_id, url, status: 'queued', detail: '已入队' }
       } else {
-        progress.value[i] = { task_id: '', url, status: 'error', detail: r.error || '入队失败' }
+        progress.value[i] = { task_id: '', url, status: 'error', detail: describeImportError(r.error) }
+        enqueueFailed++
       }
     })
 
     if (!taskIds.length) {
       importing.value = false
+      summary.value = { total: urlList.length, succeeded: 0, failed: enqueueFailed, too_large: 0, timed_out: 0 }
       toast.error('所有 URL 入队失败')
       return
     }
@@ -62,7 +118,7 @@ async function startImport() {
             task_id: data.task_id,
             url: urlMap[data.task_id] || (progress.value[idx]?.url ?? ''),
             status: data.status,
-            detail: data.detail,
+            detail: describeImportError(data.detail),
           }
         }
       } catch { /* malformed SSE frame — skip */ }
@@ -70,7 +126,20 @@ async function startImport() {
 
     eventSource.addEventListener('done', (e) => {
       try {
-        summary.value = JSON.parse((e as MessageEvent).data)
+        const data = JSON.parse((e as MessageEvent).data)
+        summary.value = {
+          ...data,
+          total: data.total + enqueueFailed,
+          failed: data.failed + enqueueFailed,
+        }
+        if (data.timed_out > 0) {
+          progress.value.forEach((item) => {
+            if (item.status === 'queued') {
+              item.status = 'timed_out'
+              item.detail = '超时'
+            }
+          })
+        }
       } catch {
         toast.error('导入结果解析失败')
       }
@@ -96,6 +165,8 @@ const statusIcon: Record<string, string> = {
   duplicate: '♻️',
   failed: '❌',
   too_large: '⚠️',
+  timed_out: '⏰',
+  error: '❌',
   queued: '⏳',
 }
 </script>
@@ -148,8 +219,9 @@ const statusIcon: Record<string, string> = {
       </div>
 
       <p class="text-[0.6875rem] text-[var(--text-muted)] leading-relaxed">
-        支持 Pixiv、Twitter/X、Danbooru 等来源。下载代理可在「设置 → 集成」卡片配置（HTTP/SOCKS5），
-        无需配置 Telegram Bot 即可使用。每个 URL 限制最多 5 张图片。
+        支持 Pixiv、Twitter/X、Danbooru 等来源，仅接受 http/https 链接（其他协议会被拒绝）。
+        下载代理可在「设置 → 集成」卡片配置（HTTP/SOCKS5），
+        无需配置 Telegram Bot 即可使用。单次最多 50 条，每个 URL 限制最多 5 张图片。
       </p>
     </div>
   </div>

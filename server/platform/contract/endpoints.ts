@@ -74,11 +74,12 @@ export const ENDPOINT_CONTRACTS: EndpointContract[] = [
   { method: 'GET', path: '/api/admin/extension-keys', file: 'api/admin/extension-keys/index.get.ts', auth: 'session' },
   { method: 'POST', path: '/api/admin/extension-keys', file: 'api/admin/extension-keys/index.post.ts', auth: 'session' },
   { method: 'DELETE', path: '/api/admin/extension-keys/:id', file: 'api/admin/extension-keys/[id].delete.ts', auth: 'session' },
-  // admin/settings (4)
+  // admin/settings (5)
   { method: 'GET', path: '/api/admin/settings', file: 'api/admin/settings/index.get.ts', auth: 'session' },
   { method: 'PUT', path: '/api/admin/settings', file: 'api/admin/settings/index.put.ts', auth: 'session' },
   { method: 'POST', path: '/api/admin/settings/test-s3', file: 'api/admin/settings/test-s3.post.ts', auth: 'session' },
   { method: 'POST', path: '/api/admin/settings/test-bot', file: 'api/admin/settings/test-bot.post.ts', auth: 'session' },
+  { method: 'POST', path: '/api/admin/settings/test-dl-proxy', file: 'api/admin/settings/test-dl-proxy.post.ts', auth: 'session' },
   // auth (4)
   { method: 'POST', path: '/api/auth/login', file: 'api/auth/login.post.ts', auth: 'public' },
   { method: 'POST', path: '/api/auth/logout', file: 'api/auth/logout.post.ts', auth: 'session' },

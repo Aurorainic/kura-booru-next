@@ -172,7 +172,7 @@ function goPage(p: number) {
               <td class="py-1.5 px-3 text-right">
                 <button
                   @click="deletePostAction(post)"
-                  class="btn-danger !w-8 !h-8 !px-0 !py-0 !justify-center opacity-40 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                  class="btn-danger !w-8 !h-8 !px-0 !py-0 !justify-center"
                   :disabled="deleting.has(post.id)"
                   :title="deleting.has(post.id) ? '删除中…' : '删除'"
                 >

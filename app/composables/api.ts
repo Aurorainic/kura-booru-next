@@ -360,6 +360,14 @@ export async function testBotConnection(body: { token?: string; proxyType?: stri
   })
 }
 
+export async function testDownloadProxyConnection(body: { proxyType?: string; proxyUrl?: string } = {}): Promise<{ ok: boolean; error?: string; via?: string; status?: number }> {
+  return fetchApi('/admin/settings/test-dl-proxy', undefined, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 // ── System Status ──
 
 export async function fetchSystemStatus(): Promise<{ queue_depth: number }> {

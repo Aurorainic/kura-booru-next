@@ -38,8 +38,9 @@ const ExtensionKeysPanel = defineAsyncComponent(() => import('~/components/admin
 const SettingsPanel = defineAsyncComponent(() => import('~/components/admin/SettingsPanel.vue'))
 const PasswordPanel = defineAsyncComponent(() => import('~/components/admin/PasswordPanel.vue'))
 
-// ponytail: component lookup for keep-alive include list — panel SFCs declare
-// their own name via defineOptions so KeepAlive include matching works.
+// ponytail: all admin panels stay cached with max=tabs.length; panel SFCs
+// declare names via defineOptions so an explicit KeepAlive include list can
+// be added later without renaming components.
 const panelMap: Record<string, ReturnType<typeof defineAsyncComponent>> = {
   import: ImportPanel,
   dashboard: DashboardPanel,
@@ -79,7 +80,7 @@ const panelMap: Record<string, ReturnType<typeof defineAsyncComponent>> = {
 
     <!-- Tab content — keep-alive preserves panel state across tab switches -->
     <div>
-      <KeepAlive :max="3">
+      <KeepAlive :max="tabs.length">
         <component :is="panelMap[currentTab] || panelMap.dashboard" />
       </KeepAlive>
     </div>
