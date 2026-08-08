@@ -1,5 +1,5 @@
 /**
- * 59 端点契约冻结清单（v0.9.0 规划 阶段 2；后端审计附录 A——规划与审计文档已随仓库清理移除，见 git 历史）。
+ * 61 路由文件 / 62 端点契约冻结清单（v0.9.0 规划 阶段 2；后端审计附录 A——规划与审计文档已随仓库清理移除，见 git 历史）。
  *
  * 这是契约的静态真源：路由文件增减/改名必须与这里同步，check.mjs 负责双向漂移守护。
  * frozen 标注三类不可变契约（源自后端审计 §6 结论）：
@@ -33,6 +33,8 @@ export const ENDPOINT_CONTRACTS: EndpointContract[] = [
   { method: 'PUT', path: '/api/posts/:id/tags', file: 'api/posts/[id]/tags.put.ts', auth: 'session' },
   { method: 'GET', path: '/api/posts/random', file: 'api/posts/random.get.ts', auth: 'public' },
   { method: 'GET', path: '/api/posts/by-source', file: 'api/posts/by-source.get.ts', auth: 'public' },
+  // admin/posts (1)
+  { method: 'PATCH', path: '/api/admin/posts/:id/source', file: 'api/admin/posts/[id]/source.patch.ts', auth: 'session' },
   // search (1)
   { method: 'GET', path: '/api/search', file: 'api/search/index.get.ts', auth: 'public' },
   // tags (3 — index.get.ts 一个文件服务两条路径)

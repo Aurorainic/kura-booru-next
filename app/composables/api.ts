@@ -1,4 +1,4 @@
-import type { Post, PostsResponse, Tag, PaginatedResponse, Rating, TagCategory, AutoRatingRule, SiteSettings, DashboardStats } from '~/types'
+import type { Post, PostsResponse, Tag, PaginatedResponse, Rating, TagCategory, AutoRatingRule, SiteSettings, DashboardStats, SourceSite } from '~/types'
 
 function getBaseUrl(): string {
   if (import.meta.server) {
@@ -92,6 +92,14 @@ export async function updatePostRating(id: string, rating: Rating): Promise<Post
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ rating }),
+  })
+}
+
+export async function updatePostSource(id: string, sourceSite: SourceSite): Promise<Post> {
+  return fetchApi<Post>(`/admin/posts/${id}/source`, undefined, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source_site: sourceSite }),
   })
 }
 

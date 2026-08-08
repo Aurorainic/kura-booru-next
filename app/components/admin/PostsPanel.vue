@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Post, Rating } from '~/types'
+import type { Post, Rating, SourceSite } from '~/types'
 
 const { ssrCookie } = useSsrContext()
 const route = useRoute()
@@ -13,6 +13,12 @@ const ratings: { value: string; label: string; rating?: Rating }[] = [
   { value: 'safe', label: '公开', rating: 'safe' },
   { value: 'questionable', label: '敏感', rating: 'questionable' },
   { value: 'explicit', label: '限制', rating: 'explicit' },
+]
+const sourceSites: { value: SourceSite; label: string }[] = [
+  { value: 'pixiv', label: 'Pixiv' },
+  { value: 'twitter', label: 'Twitter/X' },
+  { value: 'danbooru', label: 'Danbooru' },
+  { value: 'other', label: '其他' },
 ]
 
 // Pagination
@@ -58,6 +64,21 @@ async function updateRating(post: Post, newRating: string) {
     toast.error('评级更新失败')
   } finally {
     saving.value.delete(post.id)
+  }
+}
+
+const savingSource = ref<Set<string>>(new Set())
+async function updateSource(post: Post, newSource: string) {
+  if (newSource === post.source_site) return
+  savingSource.value.add(post.id)
+  try {
+    await updatePostSource(post.id, newSource as SourceSite)
+    post.source_site = newSource as SourceSite
+    toast.success('来源已更新')
+  } catch {
+    toast.error('来源更新失败')
+  } finally {
+    savingSource.value.delete(post.id)
   }
 }
 
@@ -151,7 +172,15 @@ function goPage(p: number) {
                 <div class="max-w-[180px] truncate" :title="post.title || ''">{{ post.title || '(无标题)' }}</div>
               </td>
               <td class="py-1.5 px-3">
-                <span class="text-[0.6875rem] px-2 py-0.5 rounded-md font-semibold" style="background: var(--accent-color); color: var(--bg-primary);">{{ post.source_site }}</span>
+                <select
+                  :value="post.source_site"
+                  @change="updateSource(post, ($event.target as HTMLSelectElement).value)"
+                  class="text-xs px-2 py-1 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] cursor-pointer focus:outline-none focus:border-[var(--accent-color)]"
+                  :disabled="savingSource.has(post.id)"
+                  :title="savingSource.has(post.id) ? '来源更新中…' : '修改来源'"
+                >
+                  <option v-for="s in sourceSites" :key="s.value" :value="s.value">{{ s.label }}</option>
+                </select>
               </td>
               <td class="py-1.5 px-3">
                 <select
@@ -194,7 +223,14 @@ function goPage(p: number) {
           <div class="flex-1 min-w-0 space-y-1">
             <div class="text-sm font-medium truncate text-[var(--text-primary)]">{{ post.title || '(无标题)' }}</div>
             <div class="flex items-center gap-2 text-[0.625rem] text-[var(--text-muted)]">
-              <span class="px-1.5 py-0.5 rounded text-[0.5625rem] font-semibold" style="background: var(--accent-color); color: var(--bg-primary);">{{ post.source_site }}</span>
+              <select
+                :value="post.source_site"
+                @change="updateSource(post, ($event.target as HTMLSelectElement).value)"
+                class="text-[0.625rem] px-1.5 py-0.5 rounded border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)]"
+                :disabled="savingSource.has(post.id)"
+              >
+                <option v-for="s in sourceSites" :key="s.value" :value="s.value">{{ s.label }}</option>
+              </select>
               <span>{{ post.width }}×{{ post.height }}</span>
             </div>
             <div class="flex items-center gap-2">

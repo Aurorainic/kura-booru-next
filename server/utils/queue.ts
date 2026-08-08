@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import { redis } from './redis'
+import { identifySource, resolveSourceOrOther } from './url-patterns'
 
 export interface SidecarJob {
   id: string
@@ -64,7 +65,17 @@ export interface PipelineResult {
 
 export async function enqueueJob(job: Omit<SidecarJob, 'id'>): Promise<string> {
   const id = crypto.randomUUID()
-  await (redis as any).lpush('kura:jobs', JSON.stringify({ id, ...job }))
+  // Sidecar records source_site/source_id directly into metadata. Callers that
+  // only have a URL (web import, extension, future integrations) must not fall
+  // through to "other" just because they omitted the explicit source fields.
+  const detected = identifySource(job.url) || resolveSourceOrOther(job.url)
+  const payload = {
+    id,
+    ...job,
+    source_site: job.source_site || detected.site,
+    source_id: job.source_id || detected.id,
+  }
+  await (redis as any).lpush('kura:jobs', JSON.stringify(payload))
   // ponytail: persist optional job-level metadata (force_rating) so the
   // pipeline worker can pick it up when processing the sidecar result.
   // Sidecar only sees { url, source_site, source_id } — extra fields would

@@ -63,6 +63,18 @@ const enableAi = computed(() => settings.value?.ai_enabled === 'true')
 // Site-wide import entry: public mode → logged-in admins only; intranet mode → everyone.
 const showImport = computed(() => isAdmin.value || intranetMode.value)
 
+// The requested nav behavior is keyed to desktop-class user agents, not just
+// viewport width: mobile UAs keep the current icon-only controls without the
+// hover-expanded labels.
+const MOBILE_UA_RE = /(?:Mobi|iPhone|iPod|iPad|Windows Phone|BlackBerry|Opera Mini|IEMobile|Android(?=.*Mobile))/i
+const isNonMobileUA = ref(true)
+if (import.meta.server) {
+  const headers = useRequestHeaders(['user-agent'])
+  isNonMobileUA.value = !MOBILE_UA_RE.test(headers['user-agent'] || '')
+} else {
+  isNonMobileUA.value = !MOBILE_UA_RE.test(navigator.userAgent)
+}
+
 // Accent hue from cookie (SSR anti-flash)
 const accentCookie = useCookie('kura-accent-hue')
 let accentHue = parseInt(accentCookie.value || '', 10)
@@ -162,18 +174,40 @@ useHead(headInjectEntries)
 
           <!-- Theme controls -->
           <div class="flex items-center gap-1 flex-shrink-0">
-            <AccentPicker />
-            <ThemeToggle />
-            <!-- Import (site-wide entry; public: logged-in admins only, intranet: everyone) -->
-            <NuxtLink
-              v-if="showImport"
-              to="/admin?tab=import"
-              class="h-9 px-3 rounded-[var(--radius-sm)] inline-flex items-center gap-1.5 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--accent-color)] hover:bg-[var(--accent-subtle)] transition-all active:scale-90"
-              aria-label="批量导入"
-            >
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
-              <span>导入</span>
-            </NuxtLink>
+            <template v-if="isNonMobileUA">
+              <div class="relative nav-expand-action" data-accent-picker>
+                <AccentPicker />
+                <span class="nav-expand-label">色调</span>
+              </div>
+              <div class="relative nav-expand-action">
+                <ThemeToggle :compact="true" />
+                <span class="nav-expand-label">明暗</span>
+              </div>
+              <!-- Import (site-wide entry; public: logged-in admins only, intranet: everyone) -->
+              <div v-if="showImport" class="relative nav-expand-action">
+                <NuxtLink
+                  to="/admin?tab=import"
+                  class="h-9 w-9 rounded-[var(--radius-sm)] inline-flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--accent-color)] hover:bg-[var(--accent-subtle)] transition-all active:scale-90"
+                  aria-label="批量导入"
+                >
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
+                </NuxtLink>
+                <span class="nav-expand-label">导入</span>
+              </div>
+            </template>
+            <template v-else>
+              <AccentPicker />
+              <ThemeToggle />
+              <NuxtLink
+                v-if="showImport"
+                to="/admin?tab=import"
+                class="h-9 px-3 rounded-[var(--radius-sm)] inline-flex items-center gap-1.5 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--accent-color)] hover:bg-[var(--accent-subtle)] transition-all active:scale-90"
+                aria-label="批量导入"
+              >
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
+                <span>导入</span>
+              </NuxtLink>
+            </template>
             <!-- Overflow menu ("..."): secondary nav entries -->
             <div class="relative" data-nav-menu>
               <button
@@ -247,6 +281,38 @@ useHead(headInjectEntries)
 </template>
 
 <style scoped>
+.nav-expand-action {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.nav-expand-label {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translate(-4px, -50%);
+  z-index: 60;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s var(--ease-out), transform 0.16s var(--ease-out);
+}
+
+.nav-expand-action:hover .nav-expand-label,
+.nav-expand-action:focus-within .nav-expand-label {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
 .nav-menu-enter-active, .nav-menu-leave-active {
   transition: all 0.2s var(--ease-out);
 }

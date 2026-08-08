@@ -441,7 +441,7 @@ async def process_job(r: aioredis.Redis, job: dict):
                     "description": shared.get("description", ""),
                     "source_url": url,
                     "source_site": job.get("source_site", ""),
-                    "source_id": shared.get("source_id", job.get("source_id", "")),
+                    "source_id": shared.get("source_id") or job.get("source_id", ""),
                     "tag_names": shared.get("tag_names", []),
                     "artist_name": shared.get("artist_name"),
                 },
@@ -454,7 +454,7 @@ async def process_job(r: aioredis.Redis, job: dict):
                 "description": shared.get("description", ""),
                 "source_url": url,
                 "source_site": job.get("source_site", ""),
-                "source_id": shared.get("source_id", job.get("source_id", "")),
+                "source_id": shared.get("source_id") or job.get("source_id", ""),
                 "tag_names": shared.get("tag_names", []),
                 "artist_name": shared.get("artist_name"),
             }

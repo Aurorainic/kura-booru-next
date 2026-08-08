@@ -7,6 +7,9 @@
 > 未完工进度：v0.10.0 进行中，以下变更尚未全部验收，可能随开发调整。
 
 ### 新增
+- **分页页码跳转** — 首页及共用分页组件底部新增「跳转 [页码] 页」输入，直接跳到指定页。
+- **搜索候选点击跳转** — 搜索框候选标签点击后不再只回填输入框，而是直接提交并跳转到对应搜索结果。
+- **桌面导航图标悬停展开** — 非手机端 UA 下，首页菜单栏的色调、明暗切换、导入入口收敛为单图标；光标悬停或键盘聚焦时在图标右侧展开功能文字，手机端保持原有布局。
 - **AI agent 化：记忆驱动的标签分类** — AI 从无状态调用升级为「有记忆、会积累、可纠偏」的代理：
   - 记忆优先：`classifyTags` 命中 `tag_knowledge` 缓存直接返回，人工纠偏（`source: manual`）为硬约束，AI 不翻案
   - 动态 few-shot：prompt 采样本图库已确认分类作「记忆锚点」（manual 优先），减少分类漂移
@@ -42,6 +45,9 @@
 - **自动导入冲突清理** — `parseCookies` 重命名为 `parseCookieHeader`、移除 `SettingCategory` 重复 re-export，消除 typecheck/build 中的 duplicate import 警告。
 
 ### 修复
+- **搜索首字符无候选** — 自动补全改为输入第 1 个字符即开始联想，防抖从 250ms 缩短到 150ms，避免前几次按键看起来没有反应。
+- **网页批量导入来源误判为其他** — `enqueueJob` 统一对 URL 做来源识别，网页/扩展/API 入队不再漏传 `source_site`/`source_id`；流水线对旧队列任务按 `source_url` 兜底识别，Pixiv/Twitter/Danbooru 链接不再落入 `other`。
+- **后台可修改图片来源分类** — 新增 `PATCH /api/admin/posts/:id/source`（管理员会话），「图片管理」桌面与移动列表加入来源下拉，可直接把已入库的 `other` 修正为 `pixiv`/`twitter`/`danbooru`；多图系列会整组同步，`source_id` 在来源 URL 可识别时自动补齐。
 - **全站删除按钮无响应** — Nuxt 组件自动导入默认 `pathPrefix: true`，`ui/ConfirmDialog.vue` 等被注册为 `UiConfirmDialog`（带目录前缀），而模板写的是 `<ConfirmDialog>`（无前缀），共享 UI 组件（ConfirmDialog / ToastContainer / PageHeader / EmptyState / LoadingCard / TagIdTooltip）全部解析失败 → 确认弹窗从不渲染 → 所有删除按钮点击后静默无响应。`nuxt.config.ts` 设 `components: { dirs: [{ path: '~/components', pathPrefix: false }] }` 修复，同时消除 SSR hydration mismatch。
 - **删除按钮样式不统一** — 详情页 PostInfoPanel 用 `btn-ghost`+红描边、PostsPanel 桌面表格删除按钮默认 40% 透明度（hover 才显示）、AutoRatingPanel 字号不一致；统一为 `btn-danger` 小尺寸样式，桌面表格删除图标常显。
 - **AI 全局开关写不进 DB** — `ai_tag_processing_enabled` 不在 `SETTING_DEFS` 注册表，`updateSettings()` 白名单过滤后静默丢弃，AI 开关永远关不掉（刷新后仍是旧值）。已加入注册表（`adminPanel: false` 避免在「站点设置」卡片重复渲染，由「AI 设置」面板维护）。
@@ -50,16 +56,18 @@
 - **worker 健康检查误报** — alpine 镜像无 `pgrep`，compose healthcheck 改查 `/proc/1/cmdline`。
 - **SSRF TOCTOU 竞争** — 下载 URL 校验与请求之间可被 DNS 重绑定利用；HTTPAdapter 层加 socket 级 IP 复核，扩展 SSRF 测试覆盖重绑定场景。
 - **S3 反代路径遍历**（`/i/[...].ts`）— 路径未防护 `..`/`.` 组件；加 key 校验拒绝遍历，并封堵百分号编码、反斜杠、绝对路径与控制字符绕过。
-- **`v-html` 渲染外部描述**（PostInfoPanel）— 作品描述来自外部源（Pixiv/Twitter），改纯文本渲染。
+- **外部描述 HTML 泄漏**（PostInfoPanel）— Pixiv/Twitter 描述存原始 HTML（`<br>`/`<a>`），前端文本插值导致标签字面量泄漏到界面；sanitize 序列化时剥离为纯文本（保留换行）+ `whitespace-pre-line` 渲染。
 - **登录信息泄露**（login.vue）— 错误提示区分「用户不存在」与「密码错误」，改为统一文案。
 - **容器以 root 运行**（Dockerfile + sidecar/Dockerfile）— 补非 root 用户（appgroup/appuser）；sidecar `adduser` 语法适配 debian-slim（`-S` → `--system --ingroup`）。
 - **webhook 认证缺口**（webhook.post.ts）— `x-telegram-bot-api-secret-token` 校验补 `NODE_ENV=production` 强制 + bot 未配置 503。
 - **`settings/index.put.ts` 裸 select 泄露** — 改为走 `getSettings()`（投影白名单），杜绝未来新增敏感列被管理接口顺带返回。
 - **AI provider toggle 竞态** — 单活跃语义改为事务内更新，防并发写入出现双活跃。
+- **AI reprocess 鲁棒性** — client 超时 30s→60s（DeepSeek 25 标签 JSON 批次常超 30s 导致整批 abort）；reprocess `VALUES` 更新补 `tag_category_enum` 显式 cast（text→enum 隐式转换失败会丢弃 tags 表写入）；结果按批次同步而非最后一次性 bulk update（中途中断不再导致 knowledge 与 tags 分叉）。
 - **posts `[id].patch.ts` 绕过 Zod** — 补 schema 校验层；tags.put 重构拆分职责。
 - **bot.ts 显式 import 合规** — 移除大面积 auto-import 依赖（lib/ 不被 Nitro auto-import）。
 - **过时构建脚本清理** — 删 `infra/scripts/build.sh`（完全过时），migrate-db.sh 适配 pnpm。
 - **前端组件修复** — PhotoCard/Pagination/ImageModal/ThemeToggle/AdminStatusBar/DashboardPanel/PostsPanel 等样式与逻辑问题（vue-a11y、焦点、空态、aria）。
+- **设置开关项描述换行挤压**（SettingsPanel）— 布尔字段的复选框/标签/描述原先同处一行，xl 双列布局下字段格约 250px 宽，长描述把标签挤成竖排单字；描述改为下行缩进对齐，与其他字段类型一致。
 - **Dockerfile 修复** — pnpm 构建阶段补全局安装（corepack/enable + pnpm@10.9.0），生产镜像 CMD 修正。
 - **extension 修复** — service-worker 后台任务兜底、popup 测试补齐 43 行。
 - **run_mode 默认值安全加固** — 默认从 intranet 改为 public（登录墙+评级限制），内网模式需手动选择；避免全新公网部署因默认内网模式被匿名接管。

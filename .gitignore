@@ -25,13 +25,11 @@ package-lock.json
 # Serena memories (local only)
 .serena/
 
-# Claude Code (local only)
+# Coding Agents (local only)
 .claude/
-
-# Mimocode (local only)
 .mimocode/
-
-# Local agent memory/state
+.codex/
+.kimi/
 .remember/
 .mimo/
 AGENTS.md
