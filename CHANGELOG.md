@@ -7,6 +7,13 @@
 > 未完工进度：v0.10.0 进行中，以下变更尚未全部验收，可能随开发调整。
 
 ### 新增
+- **AI agent 化：记忆驱动的标签分类** — AI 从无状态调用升级为「有记忆、会积累、可纠偏」的代理：
+  - 记忆优先：`classifyTags` 命中 `tag_knowledge` 缓存直接返回，人工纠偏（`source: manual`）为硬约束，AI 不翻案
+  - 动态 few-shot：prompt 采样本图库已确认分类作「记忆锚点」（manual 优先），减少分类漂移
+  - 置信度门槛：AI 结果 <0.6 不写回经验库，防低质量污染；人工编辑恒持久化
+  - source 优先级读取（manual > ai）；`reprocessTags` 双向对齐 knowledge ↔ tags
+  - 中文 prompt（classify/ratings/merges）+ 稳健 JSON 提取（剥 markdown 围栏/平衡括号）+ 低温度确定性分类
+- **`artist:` 前缀标签剥离** — 导入时 gallery-dl 返回的 `artist:xxx` 前缀标签并入画师字段，不再成为独立 general 标签；存量 19 条前缀标签已合并进 clean 同名标签（迁移 106 条关联）。
 - **Telegram Bot 模块开关** — 后台「机器人」卡片新增「启用 Telegram Bot」开关（`bot_enabled`）。关闭后：`syncBotWebhook` 调 `deleteWebhook` 让 Telegram 停止推送、不注册命令、不构建 Bot 实例，`/bot/webhook` 返回 404（模块隐藏），后台资源完全释放；重新开启即恢复注册。热刷新生效，无需重启。
 - **AI 按需启用 worker** — AI 关闭（全局开关关 / 无可启用 Provider）时不再注册 `ai-classify` / `ai-merges` / `ai-ratings` 三个 pg-boss worker（每个 `work()` 都会常驻轮询，占用 DB 连接与 CPU）；启用时 `work()` 注册、关闭时 `offWork()` 注销，通过 `refreshAiConfig` + `onAiConfigChanged` 钩子联动。三个 AI 入队端点（classify-tags / suggest-merges / suggest-ratings）在 AI 关闭时返回 409 `FEATURE_DISABLED`，避免 job 积压无人处理。
 - **下载代理连通测试** — 后台「集成」卡片新增「测试下载代理连接」按钮（`POST /api/admin/settings/test-dl-proxy`，契约已冻结），按所选类型实测代理连通性并返回 HTTP 状态码。
