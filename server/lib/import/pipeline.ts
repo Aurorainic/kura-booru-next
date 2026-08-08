@@ -97,9 +97,10 @@ export async function processResult(result: SidecarResult, forceRating?: 'safe' 
 
     // ── 6. Create Post + tag upserts + post_tag associations in transaction ──
     let postId: string
+    let tagIds: string[] = []
 
     await db.transaction(async (tx: any) => {
-      const tagIds = await upsertTags(tx, tagNames, artistName)
+      tagIds = await upsertTags(tx, tagNames, artistName)
 
       const [post] = await tx
         .insert(posts)
@@ -129,7 +130,7 @@ export async function processResult(result: SidecarResult, forceRating?: 'safe' 
 
     // ── 7. AI tag processing (non-blocking) ──
     if (isAiEnabled()) {
-      try { await aiProcessTagsForPost(postId!, []) }
+      try { await aiProcessTagsForPost(postId!, tagIds) }
       catch (e) { console.warn('[pipeline] AI tag processing failed (non-blocking):', e) }
     }
 
@@ -361,8 +362,9 @@ async function insertOnePage(args: {
   // ── Insert Post (or adopt legacy row). seriesId is a pre-generated UUID,
   //    never null — no read-back race. ──
   let postId: string
+  let tagIds: string[] = []
   await db.transaction(async (tx: any) => {
-    const tagIds = await upsertTags(tx, tagNames, artistName)
+    tagIds = await upsertTags(tx, tagNames, artistName)
 
     if (adoptLegacyId && pageIndex === 1) {
       // Legacy single-image row of the same source exists (page_index IS
@@ -423,7 +425,7 @@ async function insertOnePage(args: {
   })
 
   if (isAiEnabled()) {
-    try { await aiProcessTagsForPost(postId!, []) }
+    try { await aiProcessTagsForPost(postId!, tagIds) }
     catch (e) { console.warn('[pipeline] AI tag processing failed (non-blocking):', e) }
   }
 

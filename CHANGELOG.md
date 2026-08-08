@@ -81,9 +81,60 @@
 - **任务状态接口多图数据泄漏** — `/api/tasks/:id` 原实现只剥离顶层 `image_bytes_b64` / `phash`，多图结果的 `metadata.pages[]` 仍会返回原始图片与感知哈希；改为递归剥离全部层级。
 - **详情页安全模式遮罩回归** — 详情图片区无条件套用 `PostBlurOverlay`，导致所有作品默认被隐藏；改为仅在 `is_blurred === true` 时遮挡，并按作品 id 重置展开状态。
 - **web-import 入参校验** — `urls` 必须为非空字符串数组，异常请求体不再落入后续 `.map()` 导致 500。
+- **pipeline AI 分类从未触发（C1）** — `aiProcessTagsForPost(postId, [])` 传空数组导致导入后 `tag.category` 永远停在 `general`、`tag_knowledge` 永不写入；单图与多图路径均改为透传事务内 upsert 出的 `tagIds`，AI 记忆闭环在自动导入路径恢复。
+- **rebuildBot 原子替换名不副实（C2）** — 实现仍是「先 null 再重建」，webhook 窗口期命中无 handler 占位 Bot；改为构建新实例到局部变量、ready 后原子赋值。
+- **webhook drop_pending_updates 每次热刷新都丢消息（H7）** — `syncBotWebhook` 每次 `setWebhook` 都传 `drop_pending_updates: true`；改为模块级 `webhookInitialized` 标记，仅首次启动 true，热刷新不再丢弃 Telegram pending 队列。
+- **SSE 客户端断开后服务端仍轮询 5 分钟（H1）** — web-import 流 `ReadableStream` 无 `cancel()`；补 `cancel()` + AbortController 中断循环，`enqueue` 抛错时清理退出，不再无主轮询 Redis。
+- **EventSource 多次开始导入泄漏旧流（H2）** — ImportPanel 每次赋值前 `eventSource?.close()`，不再栈式累积连接。
+- **pollJobResult 竞态 + Redis 泄漏（H3）** — 读到 `status=done` 而 result 暂空时 100ms×3 重试；超时与 error 路径同时清理 `kura:results:*` 与 `kura:job_status:*`。
+- **Bot 评级倒计时每秒 edit 撞 Telegram 限流（H4）** — 10s 倒计时只在 5/3/1 秒编辑消息（3 次/倒计时），3 个并发评级不再撞 30/sec 全局限流。
+- **bot 代理未知类型静默当 apiRoot（H5）** — `bot_proxy_type` 拼错（如 `htp`）会把 bot token + 回调发往攻击者 URL；未识别类型一律直连（仅 `mtproto` 与空值保留 apiRoot 语义）。
+- **AI provider endpoint 无 SSRF 校验（H6）** — 新增 `validateEndpointHost`：endpoint 指向私网/回环地址（含云元数据 169.254.169.254）时拒绝保存，杜绝 Bearer 凭据被 POST 到内网。
+- **设置热刷新钩子无隔离（H8）** — `refreshSettings` 改 `Promise.allSettled` 并行执行，单个 hook 失败不再中断 S3/Bot/Pixiv/AI 其余刷新。
+- **SettingsPanel 草稿丢失（H13）** — `watch(items)` 在保存后刷新时把所有未保存的 secret 明文清空；改为仅在 `secretDirty[key] === false` 时重置。
+- **TagsPanel/PostsPanel 不刷新（H13）** — TagsPanel 的 `page` 改响应式 computed、`useAsyncData` key 含全部筛选参数、双向 watch 路由 query；PostsPanel watch 补 `perPage`（切 20/40/100 条/页即时刷新）。
+- **admin settings PUT 无类型校验（H9）** — 按 `SETTING_DEFS` 注册表类型逐键校验（boolean/number/select 枚举/长度上限），`run_mode: '<script>'` 等脏值不再落库。
+- **aiProcessTagsForPost 每标签单行 UPDATE（H11）** — 100 标签 = 100 次往返改为单条 `VALUES` 批量 UPDATE（含 `tag_category_enum` cast，与 reprocessTags 同模式）。
+- **fix-artist-categories 循环 N×2 次 count（H12）** — 预取 clean 对照（一次 `IN` 查询）+ 用 UPDATE 受影响行数替代 2 次 count 聚合扫描。
+- **02-cache-control 重复 getIsAdmin（H14）** — 01-ssr-context 现在为 /api/ 路径也预计算 `event.context.isAdmin`，缓存中间件优先复用，不再每条 API 请求重复认证计算。
+- **SSR HTML s-maxage=300 与 Set-Cookie 并存（H15）** — 检测响应含 `set-cookie` 时降级 `private, no-store`，防止 CDN 把登录响应分发给其它访客。
+- **/i/ Range header 未校验（H16）** — 服务端解析并重写 `bytes=start-end`（end = min(请求 end, fileSize-1)，fileSize 经 HEAD 缓存）；非法语法丢弃 Range。
+- **列表/搜索排序无 tiebreaker（H17）** — `listPosts`/`searchPosts` 排序改 `created_at DESC, id DESC`，配套复合索引迁移（0009），同秒级 createdAt 翻页不再重复/遗漏。
+- **suggestMerges 单 prompt 塞 200 标签（H18）** — 按 50 分块多次调用 AI 并合并去重，小模型不再截断丢末尾。
+- **registerAiWorkers 并发竞态（M1）** — in-flight promise 互斥，配置热刷新并发不再重复注册 worker。
+- **sync-tasks 全表 UPDATE 写锁风险（M2）** — 相关子查询版改为单条 `UPDATE ... FROM (GROUP BY)` join，一次聚合扫描。
+- **changeAdminPassword Redis 故障下旧 session 复活窗口（M3）** — epoch 写入失败时回滚 DB 更新，DB 与 Redis 保持原子一致。
+- **login.vue 两种错误文案（M4）** — 「登录失败」与「用户名或密码错误」统一为「用户名或密码错误」，user-enumeration 修干净。
+- **限流 IP 信任 XFF（M5）** — 登录锁定与 API key 限流改读 `X-Real-IP`（反代设置）或直连 socket 地址，忽略可伪造的 `X-Forwarded-For`。
+- **test-dl-proxy 缺 SSRF 校验（M7）** — 代理地址指向私网/回环时拒绝，与 test-bot 一致。
+- **adminCache 淘汰 O(N log N)（M9）** — Map 插入序 FIFO 淘汰，O(1)。
+- **posts tags.put 无长度上限（M12）** — add_tags / remove_tag_ids 各限 100 个。
+- **chatSemaphores 永不 delete（M13）** — 上限 500 chat 真 LRU 淘汰（命中刷新插入序），重建仍不丢信号量状态。
+- **/aitags 同步阻塞 chat（M14）** — 立即回复「处理中」，后台执行完编辑结果消息，不再排队阻塞该 chat 5+ 分钟。
+- **/search 无节流（M15）** — per-chat 3s 节流，防误连发触发 N 次 PG 查询。
+- **dashboard breakdown 全表 GROUP BY（M16）** — source/rating 分布并入 `mv_dashboard_stats`（jsonb 列，迁移 0008），dashboard 请求不再全表聚合。
+- **搜索 EXISTS 缺复合索引（M17）** — `(tag_id, post_id)` 复合索引（迁移 0009）。
+- **admin/tags 前缀查询走不了 trgm（M19）** — `(name) text_pattern_ops` B-tree 索引（迁移 0009）。
 - **批量导入 SSE 清理修复** — `ImportPanel` 的 `onUnmounted` 从事件处理器移到 setup 顶层，离开后台 tab 时正确关闭 EventSource，避免连接泄漏。
 - **Extension 导入错误展示** — content script 直接展示服务端返回的 `error` 文案，不再一律显示「失败」；对应 37 条扩展测试全部通过。
 - **Sidecar SSRF 黑名单补齐** — 增加 CGNAT、文档/基准/保留段、组播、IPv6 文档/组播等私网与保留地址范围，并补充回归测试。
+
+### 性能（单人/低并发部署资源削版）
+
+> 核心精神：别套云端 25% 法则 — 单人用单人配置，削比堆更对。
+> 容器层内存上限合计 ~2GB（8GB 本机可稳跑）。
+
+- **PostgreSQL 自定义 `postgresql.conf`**（`infra/postgres/`）— `shared_buffers=32MB`、`max_connections=20`、`work_mem=2MB`、`autovacuum_max_workers=1`、日志 50MB 轮转封顶；容器 `mem_limit: 384m`、`pids_limit: 50`。
+- **Redis `maxmemory=64mb` + `allkeys-lru`** — 硬上限防 AOF 涨满；关 RDB snapshot（`--save ""`），AOF rewrite 限流；容器 `mem_limit: 128m`。
+- **Web 容器 `mem_limit: 1g` + V8 `--max-old-space-size=512`** — V8 默认 ~4GB 上限无意义，512MB 给 sharp 大图 + pg-boss 余量；sharp/libvips 需要 `shm_size: 256m`。
+- **`sharp.concurrency(1)` + `sharp.cache(false)`** — 默认 N_cores（本机 8 worker × 300MB = 2.4GB 突发）削为 1 worker；50MB 内部 LRU 关掉（pipeline 每张图一次性）。`SHARP_CONCURRENCY` 可调。
+- **postgres-js `max: 8` + `idle_timeout: 30`** — 削自 20 连接，单人常态并发 4-5 个。
+- **pipeline BRPOP timeout 5s → 30s** — 空转 wakeup -83%。
+- **adminCache 1000 → 50** — 单人 admin 1 个会话 cookie，消除无界增长。
+- **sidecar `SIDECAR_WORKERS=1`** — 模块级 ThreadPoolExecutor 显式 1 worker（默认 min(32, cpu+4) 线程浪费内存）；`PILLOW_MAX_IMAGE_PIXELS=50000000` 防 zip bomb；容器 `mem_limit: 512m`。
+- **admin KeepAlive 选择性** — 10 个面板全缓存 → 仅缓存 AiAssistantPanel / TagsPanel（编辑态），其余切 tab 卸载，浏览器内存 -50-150MB。
+- **AdminStatusBar 5s → 30s 轮询** — 队列深度请求 -83%。
+- **dashboard 走 MV** — source/rating breakdown 并入 `mv_dashboard_stats`（jsonb 列，迁移 0008），请求从全表 GROUP BY（~50ms）变为读物化视图（~2ms）。
 
 ## [0.9.0] - 2026-07-20
 

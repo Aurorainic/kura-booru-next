@@ -46,5 +46,12 @@ export function buildBotClient(
   }
 
   // mtproto（及历史遗留：无类型时当 apiRoot 用）
-  return { apiRoot: url }
+  if (proxyType === 'mtproto' || proxyType === '') {
+    return { apiRoot: url }
+  }
+
+  // H5: 未知类型（typo 如 'htp'）一律直连 — 不把 typo URL 当 apiRoot，
+  // 否则 bot token + 全部回调会发往攻击者服务器。
+  console.warn(`[bot-proxy] unknown proxy_type "${proxyType}", falling back to direct connection`)
+  return undefined
 }

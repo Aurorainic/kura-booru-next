@@ -50,6 +50,17 @@ async function requireAdmin(event: H3Event): Promise<AdminAuth> {
   throw new AppError('ADMIN_REQUIRED', 401, 'Admin required')
 }
 
+/**
+ * M5: 限流取客户端 IP — 只信任反向代理设置的 X-Real-IP，忽略
+ * X-Forwarded-For（攻击者可伪造 XFF 轮换绕过登录锁定/API 限流）。
+ * 无代理时取直连 socket 地址。
+ */
+export function getClientIp(event: H3Event): string {
+  const realIp = getHeader(event, 'x-real-ip')
+  if (realIp) return realIp
+  return getRequestIP(event) || 'unknown'
+}
+
 export function defineAdminHandler<S extends HandlerSchemas | undefined = undefined>(
   opts: CommonOptions<S> & { handler: (ctx: Ctx<AdminAuth, S>) => unknown | Promise<unknown> },
 ) {
@@ -69,7 +80,7 @@ function requireAdminOrApiKey(auditAction: string) {
       throw new AppError('UNAUTHORIZED', 401, 'Unauthorized')
     }
     // API-key callers get rate-limited + audit-logged; admin sessions skip both.
-    const ip = getRequestIP(event, { xForwardedFor: true }) || 'unknown'
+    const ip = getClientIp(event)
     const rlKey = `apikey:rate:${ip}`
     const count = await redis.incr(rlKey)
     if (count === 1) await redis.expire(rlKey, API_KEY_RATE_WINDOW_SEC)

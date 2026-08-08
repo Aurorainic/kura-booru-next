@@ -95,7 +95,17 @@ export async function pollJobResult(jobId: string, timeoutMs = 300_000): Promise
   while (Date.now() - start < timeoutMs) {
     const status = await redis.get(`kura:job_status:${jobId}`)
     if (status === 'done') {
-      const raw = await redis.get(`kura:results:${jobId}`)
+      // H3: worker 先写 results 再写 status，但 TTL 竞态/复制延迟下 status
+      // 可能先可见。读到 done 而 result 暂空时短等重试（共 ~300ms），
+      // 而非直接跳过本轮继续长轮询。
+      let raw: string | null = null
+      for (let retry = 0; retry < 3; retry++) {
+        raw = await redis.get(`kura:results:${jobId}`)
+        if (raw) break
+        const { promise, resolve } = Promise.withResolvers<void>()
+        setTimeout(resolve, 100)
+        await promise
+      }
       if (raw) {
         await redis.del(`kura:results:${jobId}`)
         await redis.del(`kura:job_status:${jobId}`)
@@ -104,10 +114,13 @@ export async function pollJobResult(jobId: string, timeoutMs = 300_000): Promise
     }
     if (status === 'error') {
       await redis.del(`kura:job_status:${jobId}`)
+      await redis.del(`kura:results:${jobId}`)
       return { status: 'failed', error: 'Job failed' }
     }
     await new Promise(r => setTimeout(r, pollInterval))
   }
+  // 超时：status + result 两个 key 都清掉，避免 Redis 泄漏
   await redis.del(`kura:job_status:${jobId}`)
+  await redis.del(`kura:results:${jobId}`)
   return null
 }

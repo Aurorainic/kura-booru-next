@@ -132,3 +132,41 @@ export function maskSecret(value: string): string {
   if (value.length <= 8) return '••••••••'
   return `${value.slice(0, 4)}${'•'.repeat(Math.min(12, value.length - 4))}`
 }
+
+/**
+ * H9: 按注册表类型校验单个设置值（后台 PUT 落库前调用）。
+ * 抛 Error 表示不合法；返回规范化后的字符串值。
+ * secret 空串 = 保持原值、'__CLEAR__' = 吊销（由 updateSettings 语义处理）。
+ */
+export function validateSettingValue(def: SettingDef, rawValue: string): string {
+  const v = String(rawValue)
+  switch (def.type) {
+    case 'readonly':
+      throw new Error('readonly 项不可写入')
+    case 'boolean':
+      if (v !== 'true' && v !== 'false') throw new Error('必须为 true 或 false')
+      return v
+    case 'number': {
+      if (v.trim() === '') throw new Error('不能为空')
+      const n = Number(v)
+      if (!Number.isFinite(n) || n < 0) throw new Error('必须为非负数字')
+      return String(Math.trunc(n))
+    }
+    case 'select':
+      if (!def.options?.some(o => o.value === v)) {
+        const allowed = def.options?.map(o => o.value).join(' / ') || '(空)'
+        throw new Error(`必须为 ${allowed} 之一`)
+      }
+      return v
+    case 'textarea':
+      if (v.length > 10000) throw new Error('超过 10000 字符上限')
+      return v
+    case 'secret':
+      if (v === '' || v === '__CLEAR__') return v
+      if (v.length > 2048) throw new Error('超过 2048 字符上限')
+      return v
+    default: // text
+      if (v.length > 512) throw new Error('超过 512 字符上限')
+      return v
+  }
+}

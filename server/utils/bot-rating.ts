@@ -49,7 +49,10 @@ export function startCountdown(
       const rating = autoRating || 'safe'
       const label = autoRating ? `（${lb('autoRule', lang)}）` : `（${lb('default', lang)}）`
       await confirmRating(api, chatId, messageId, postId, rating, lang, label)
-    } else {
+    } else if (remaining <= 5 && remaining % 2 === 1) {
+      // H4: 只在 remaining 5/3/1 三次编辑 — 每秒 edit 撞 Telegram 30/sec
+      // 全局限流（3 个并发评级 = 9-30 次/秒），429 被静默吞掉后倒计时
+      // 形同虚设。降频后最多 3 次编辑/倒计时。
       try {
         await api.editMessageText(
           chatId, messageId,

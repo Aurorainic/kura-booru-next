@@ -13,6 +13,14 @@ export default defineAdminHandler({
 
     const body = await readBody<{ add_tags?: string[]; remove_tag_ids?: string[] }>(event)
 
+    // M12: 长度上限 — 防 authorized admin 传 1000 个触发 1000 个 upsert（DoS）
+    if ((body?.add_tags?.length ?? 0) > 100) {
+      throw new AppError('VALIDATION_FAILED', 400, 'add_tags 最多 100 个')
+    }
+    if ((body?.remove_tag_ids?.length ?? 0) > 100) {
+      throw new AppError('VALIDATION_FAILED', 400, 'remove_tag_ids 最多 100 个')
+    }
+
     // Both remove and add ops run inside a single transaction for atomicity.
     await db.transaction(async (tx) => {
       // Remove tags (bulk): single DELETE for all tagIds, then single UPDATE to decrement counts

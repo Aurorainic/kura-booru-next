@@ -30,6 +30,11 @@ services:
     image: ${KURA_IMAGE_REGISTRY:-ghcr.io/aurorainic}/kura-booru-web:${KURA_IMAGE_TAG:-latest}
     container_name: kura-web
     restart: unless-stopped
+    # ponytail: 单人部署硬上限 — V8 heap 512MB + sharp 峰值 ~300MB，1g 足够
+    mem_limit: 1g
+    memswap_limit: 1g
+    shm_size: 256m
+    pids_limit: 256
     # Linux Docker 无内置 host.docker.internal — 让容器能访问宿主机代理（127.0.0.1:19823）
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -59,6 +64,12 @@ services:
     image: ${KURA_IMAGE_REGISTRY:-ghcr.io/aurorainic}/kura-booru-worker:${KURA_IMAGE_TAG:-latest}
     container_name: kura-worker
     restart: unless-stopped
+    # ponytail: 单人部署 — Pillow 解码峰值 ~150MB，512m 足够
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 100
+    environment:
+      SIDECAR_WORKERS: "1"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     env_file:
@@ -83,12 +94,19 @@ services:
     image: postgres:18-alpine
     container_name: kura-postgres
     restart: unless-stopped
+    # ponytail: 单人/低并发部署 — 容器硬上限 + 精简配置（见 postgresql.conf）
+    mem_limit: 384m
+    memswap_limit: 384m
+    shm_size: 64m
+    pids_limit: 50
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-kurabooru}
       POSTGRES_USER: ${POSTGRES_USER:-kura}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kura_password}
     volumes:
       - /data/postgres:/var/lib/postgresql
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
     networks:
       - kura-internal
     healthcheck:
@@ -105,9 +123,20 @@ services:
     image: redis:8-alpine
     container_name: kura-redis
     restart: unless-stopped
+    # ponytail: 单人数据 < 64MB（峰值在导入大图时）；超额 LRU 淘汰而非 OOM。
+    # 关 RDB snapshot（--save ""）— AOF 已足够，单人项目 fork dump 纯浪费。
+    mem_limit: 128m
+    memswap_limit: 128m
+    pids_limit: 50
     command: >
       redis-server
       --appendonly yes
+      --maxmemory 64mb
+      --maxmemory-policy allkeys-lru
+      --maxmemory-samples 5
+      --save ""
+      --auto-aof-rewrite-percentage 50
+      --auto-aof-rewrite-min-size 32mb
     volumes:
       - /data/redis:/data
     networks:

@@ -171,10 +171,12 @@ export function onSettingsChanged(hook: RefreshHook) {
 }
 
 export async function refreshSettings() {
-  for (const hook of refreshHooks) {
+  // H8: 每个 hook 独立 try/catch + 并行执行 — 一个失败（如 rebuildBot 抛错）
+  // 不再中断 S3/Pixiv/AI 等其他钩子。
+  await Promise.allSettled(refreshHooks.map(async (hook) => {
     try { await hook() }
     catch (err) { console.error('[settings] refresh hook failed:', err) }
-  }
+  }))
 }
 
 // ── 类型化配置读取（供各消费方使用，均带 env 回退） ──

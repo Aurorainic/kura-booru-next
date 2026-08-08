@@ -11,6 +11,10 @@ const aiStatus = ref<AiStatus | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let alive = true
 
+// H2: 单人 admin 看队列深度 5s 与 30s 几乎无差别 — 5s = 17,280 次/天，
+// 30s = 2,880 次/天（-83%）。
+const POLL_INTERVAL = 30_000
+
 const aiEnabled = computed(() => aiStatus.value?.enabled && aiStatus.value?.endpoint && aiStatus.value?.model)
 
 // Share AI status via useState so sibling panels (e.g. AiAssistantPanel)
@@ -31,7 +35,7 @@ onMounted(() => {
   pollTimer = setInterval(async () => {
     if (!alive || document.visibilityState !== 'visible') return
     try { systemStatus.value = await fetchSystemStatus() } catch { /* ignore */ }
-  }, 5000)
+  }, POLL_INTERVAL)
 })
 
 onUnmounted(() => {

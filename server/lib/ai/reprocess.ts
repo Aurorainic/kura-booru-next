@@ -42,16 +42,33 @@ export async function aiProcessTagsForPost(postId: string, tagIds: string[]): Pr
     allClassifications.set(c.name, c)
   }
 
-  // Update tags table with classification results
+  // H11: 批量更新 tags — 100 标签 = 1 次 VALUES UPDATE（原实现 100 次单行往返）。
+  // 与 reprocessTags 的 syncResultsToTags 同一模式（含 tag_category_enum cast）。
+  const pendingUpdates: Array<{ name: string; category: TagClassification['category']; translation: string | null; danbooru_name: string | null }> = []
   for (const tagRow of generalTagRows) {
     const cls = allClassifications.get(tagRow.name)
     if (!cls) continue
-    await db.update(tags).set({
+    pendingUpdates.push({
+      name: tagRow.name,
       category: cls.category,
       translation: cls.translation || null,
-      danbooruName: cls.danbooru_name || null,
-      aiProcessedAt: new Date(),
-    }).where(eq(tags.id, tagRow.id))
+      danbooru_name: cls.danbooru_name || null,
+    })
+  }
+
+  if (pendingUpdates.length) {
+    const values = pendingUpdates.map(c =>
+      sql`(${c.name}::text, ${c.category}::tag_category_enum, ${c.translation}::text, ${c.danbooru_name}::text)`,
+    )
+    await db.execute(sql`
+      UPDATE tags SET
+        category = v.category,
+        translation = v.translation,
+        danbooru_name = v.danbooru_name,
+        ai_processed_at = NOW()
+      FROM (VALUES ${sql.join(values, sql`, `)}) AS v(name, category, translation, danbooru_name)
+      WHERE tags.name = v.name
+    `)
   }
 
   // Mark post as AI-processed

@@ -29,7 +29,7 @@ const perPage = ref(40)
 const { data, refresh, pending } = await useAsyncData(
   () => `admin-posts-${page.value}-${perPage.value}-${ratingFilter.value}`,
   () => fetchAdminPosts({ page: page.value, per_page: perPage.value, rating: ratingFilter.value || undefined }, ssrCookie.value),
-  { watch: [page, ratingFilter] },
+  { watch: [page, perPage, ratingFilter] },
 )
 
 const posts = computed(() => data.value?.items || [])

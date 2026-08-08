@@ -21,6 +21,7 @@ import os
 import socket
 import sys
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 
 import imagehash
@@ -118,6 +119,10 @@ log = logging.getLogger(__name__)
 
 # gallery-dl config: set at startup from env vars
 GALLERY_DL_CONFIG = {}
+
+# ponytail: 单人 = 一次导入一张图（多图 series 内部已按页处理），
+# max_workers=1 完全够；默认 ThreadPoolExecutor 会开 min(32, cpu+4) 线程浪费内存。
+_EXECUTOR = ThreadPoolExecutor(max_workers=int(os.environ.get("SIDECAR_WORKERS", "1")))
 
 
 async def load_pixiv_credentials(r) -> tuple[str, str]:
@@ -357,7 +362,7 @@ async def process_job(r: aioredis.Redis, job: dict):
         # Load download proxy from Redis (server-synced; hot-reload friendly).
         dl_proxy = await load_dl_proxy(r)
         downloaded, illust_type = await loop.run_in_executor(
-            None, download_with_gallery_dl, url, pixiv, dl_proxy
+            _EXECUTOR, download_with_gallery_dl, url, pixiv, dl_proxy
         )
 
         is_ugoira = illust_type == "ugoira"
@@ -406,7 +411,7 @@ async def process_job(r: aioredis.Redis, job: dict):
         for i, (image_bytes, gdl_metadata) in enumerate(downloaded, start=1):
             # Open Image once, share between _process_page and any consumer
             img = Image.open(BytesIO(image_bytes))
-            page = await loop.run_in_executor(None, _process_page, img, image_bytes, gdl_metadata, i)
+            page = await loop.run_in_executor(_EXECUTOR, _process_page, img, image_bytes, gdl_metadata, i)
             if page is None:
                 # Over-size: skip the page but keep counting toward page_count
                 # so page_index stays consistent with what gallery-dl emitted.

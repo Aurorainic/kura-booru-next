@@ -55,6 +55,9 @@ EXPOSE 3000
 ENV HOST=0.0.0.0
 ENV PORT=3000
 ENV NODE_ENV=production
+# ponytail: 单人部署 — V8 默认 ~4GB old-space 上限无意义；512MB 给
+# sharp 大图 + pg-boss 异步任务留足余量，配合容器 mem_limit 1g 防突发吃光本机。
+ENV NODE_OPTIONS="--max-old-space-size=512 --max-semi-space-size=32"
 ARG KURA_VERSION
 ENV KURA_VERSION=${KURA_VERSION}
 USER appuser

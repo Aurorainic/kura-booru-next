@@ -29,17 +29,21 @@ export default defineEventHandler(async (event) => {
       return
     }
 
-    // Check admin status. 01-ssr-context skips /api/ paths, so
-    // event.context.isAdmin is not set here — compute fresh.
+    // Check admin status. H14: 01-ssr-context 已为所有路径（含 /api/）预计算
+    // isAdmin 写入 event.context — 优先复用，避免重复 getIsAdmin。
+    // 01-ssr-context 未运行（直接命中 handler 的异常路径）时 fallback 现算。
     // On auth failure, fail-CLOSED for cache: skip CDN caching entirely
     // (s-maxage=0) instead of treating the visitor as admin
     // — over-private would silently bypass CDN and hammer the origin during
     // a Redis outage, but a wrong-content-cache leak is worse.
-    const cookie = getRequestHeader(event, 'cookie') || ''
-    let isAdmin = false
+    const ctxIsAdmin = (event.context as { isAdmin?: boolean }).isAdmin
+    let isAdmin = ctxIsAdmin === true
     let authOk = true
-    try { isAdmin = await getIsAdmin(cookie) } catch {
-      authOk = false
+    if (ctxIsAdmin === undefined) {
+      const cookie = getRequestHeader(event, 'cookie') || ''
+      try { isAdmin = await getIsAdmin(cookie) } catch {
+        authOk = false
+      }
     }
 
     if (isAdmin) {
@@ -83,12 +87,19 @@ export default defineEventHandler(async (event) => {
       response.setHeader('Cache-Control', 'private, no-store')
       return
     }
+    // H15: 响应带 Set-Cookie（登录等）绝不能进 CDN 缓存 — CDN 会把该响应
+    // 当成「该 URL 通用响应」分发给其它访客。检测到即降级 private, no-store。
+    if (response.getHeader('set-cookie')) {
+      response.setHeader('Cache-Control', 'private, no-store')
+      return
+    }
     // Reuse isAdmin from 01-ssr-context middleware which already computed it.
     // Avoids duplicate getIsAdmin call (one Redis round-trip per SSR request).
     // If isAdmin is false, fall back to getIsAdmin to detect fail-closed auth.
-    let isAdmin = (event.context as any)?.isAdmin === true
+    const ctxIsAdmin = (event.context as { isAdmin?: boolean }).isAdmin
+    let isAdmin = ctxIsAdmin === true
     let authOk = true
-    if (!isAdmin) {
+    if (ctxIsAdmin === undefined) {
       try {
         isAdmin = await getIsAdmin(getRequestHeader(event, 'cookie') || '')
       } catch {

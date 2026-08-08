@@ -34,13 +34,31 @@ let _botInstance: Bot<BotContext> | null = null
 let _buildPromise: Promise<Bot<BotContext>> | null = null
 let _botReady: Promise<void> | null = null
 
+// H7: drop_pending_updates 只允许首次启动时 true。热刷新（改 token/管理员/
+// 中转）会触发 syncBotWebhook，若每次都丢弃 pending 队列，用户在队列里的
+// 消息会全丢。模块级布尔跨 rebuild 保留。
+let webhookInitialized = false
+
 // ── Per-chat concurrency semaphore (module-level: survives rebuildBot) ──
 const chatSemaphores = new Map<string, { count: number; max: number; queue: (() => void)[] }>()
+// M13/G5: Map 永不 delete 会随长期运行 + 群聊数增长 — 上限 500 个 chat，
+// 超限淘汰最久未用（Map 保插入序，first key = 最旧）。重建不丢信号量状态
+// （CLAUDE.md rule #5），所以只在 get 时做 LRU 淘汰。
 function getSemaphore(chatId: string, max = 3) {
-  if (!chatSemaphores.has(chatId)) {
-    chatSemaphores.set(chatId, { count: 0, max, queue: [] })
+  let sem = chatSemaphores.get(chatId)
+  if (!sem) {
+    if (chatSemaphores.size >= 500) {
+      const oldest = chatSemaphores.keys().next().value
+      if (oldest !== undefined) chatSemaphores.delete(oldest)
+    }
+    sem = { count: 0, max, queue: [] }
+    chatSemaphores.set(chatId, sem)
+  } else {
+    // 命中时刷新插入序（真 LRU）
+    chatSemaphores.delete(chatId)
+    chatSemaphores.set(chatId, sem)
   }
-  return chatSemaphores.get(chatId)!
+  return sem
 }
 async function acquireSemaphore(chatId: string): Promise<void> {
   const sem = getSemaphore(chatId)
@@ -115,9 +133,10 @@ export async function syncBotWebhook(): Promise<void> {
   const webhookUrl = `${cfg.siteUrl.replace(/\/+$/, '')}/bot/webhook`
   await b.api.setWebhook(webhookUrl, {
     secret_token: cfg.webhookSecret || undefined,
-    drop_pending_updates: true,
+    drop_pending_updates: !webhookInitialized,
     allowed_updates: ['message', 'callback_query'],
   })
+  webhookInitialized = true
   await b.api.setMyCommands([
     { command: 'save', description: '保存图片 / Save image' },
     { command: 'info', description: '查询作品信息 / Post info' },
@@ -155,14 +174,17 @@ export async function getBot(): Promise<Bot<BotContext>> {
   }
 }
 
-/** settings 热刷新：构建新实例后原子替换（不先 null）。bot 禁用时不构建。 */
+/** settings 热刷新：构建新实例后原子替换（不先 null）。bot 禁用时不构建。
+ *  旧实例保持存活直到新实例 ready，webhook 窗口期不会命中无 handler 的占位 Bot。 */
 export async function rebuildBot() {
-  _botInstance = null  // ponytail: null so getBot builds fresh; old instance GC'd
-  _buildPromise = null
-  _botReady = null
   const cfg = await getBotConfigLazy()
   if (!cfg.enabled) return  // 禁用态：webhook 对齐由 syncBotWebhook 处理
-  await getBot()
+  const b = await buildBot()
+  await syncSiteUrl()
+  registerHandlers(b)
+  _botInstance = b  // atomic swap — old instance stays live until new one is ready
+  _botReady = null
+  _buildPromise = null
 }
 
 async function getS3ExternalUrlLazy(): Promise<string> {
@@ -296,6 +318,21 @@ function t(key: string, lang: string, ...args: any[]): string {
   return typeof val === 'function' ? val(...args) : (val || key)
 }
 
+// M15: /search 高频命令 per-chat 节流（1 条/3s）— 防误连发触发 N 次 PG 查询。
+// 内存 Map + LRU 上限，chat 维度（管理员单人使用足够）。
+const searchThrottle = new Map<string, number>()
+function isSearchThrottled(chatId: string): boolean {
+  const now = Date.now()
+  const last = searchThrottle.get(chatId)
+  if (last !== undefined && now - last < 3000) return true
+  if (searchThrottle.size >= 500) {
+    const oldest = searchThrottle.keys().next().value
+    if (oldest !== undefined) searchThrottle.delete(oldest)
+  }
+  searchThrottle.set(chatId, now)
+  return false
+}
+
 function registerHandlers(b: Bot<BotContext>) {
 
 // ── Auth middleware (T-P0-4: reject non-admins) ──
@@ -354,6 +391,8 @@ b.command('search', async (ctx) => {
   try {
     const query = ctx.message?.text?.split(' ').slice(1).join(' ')
     if (!query) { await ctx.reply(t('usageSearch', ctx.config.lang)).catch(() => {}); return }
+    const chatId = String(ctx.chat?.id ?? '')
+    if (isSearchThrottled(chatId)) return // 3s 节流 — 静默丢弃连发
 
     const results = await searchPosts(query, { perPage: 5, isAdmin: true })
     if (!results.items.length) { await ctx.reply(t('noResults', ctx.config.lang)).catch(() => {}); return }
@@ -556,16 +595,28 @@ b.command('aitags', async (ctx) => {
       await ctx.reply(lang === 'zh' ? 'AI 处理未启用' : 'AI processing not enabled').catch(() => {})
       return
     }
+    // M14: 同步 reprocessTags 可达 5+ 分钟，期间同 chat 所有消息排队 —
+    // 改为立即回复「处理中」，后台执行完再编辑该消息。handler 返回后
+    // grammy 继续处理该 chat 的新消息。
     const processingMsg = await ctx.reply('⏳ AI 标签处理中…').catch(() => {})
-    const result = await reprocessTags(mode)
-    const text = lang === 'zh'
-      ? `✅ 处理完成: ${result.processed} 成功, ${result.failed} 失败`
-      : `✅ Done: ${result.processed} processed, ${result.failed} failed`
-    if (processingMsg) {
-      await ctx.api.editMessageText(ctx.chat!.id, processingMsg.message_id, text).catch(() => {})
-    } else {
-      await ctx.reply(text).catch(() => {})
-    }
+    const chatId = ctx.chat?.id
+    const messageId = processingMsg?.message_id
+
+    reprocessTags(mode)
+      .then((result) => {
+        const text = lang === 'zh'
+          ? `✅ 处理完成: ${result.processed} 成功, ${result.failed} 失败`
+          : `✅ Done: ${result.processed} processed, ${result.failed} failed`
+        if (chatId !== undefined && messageId !== undefined) {
+          ctx.api.editMessageText(chatId, messageId, text).catch(() => {})
+        }
+      })
+      .catch((err) => {
+        console.error('[bot] /aitags error:', err)
+        if (chatId !== undefined && messageId !== undefined) {
+          ctx.api.editMessageText(chatId, messageId, lang === 'zh' ? '❌ AI 处理失败' : '❌ AI processing failed').catch(() => {})
+        }
+      })
   } catch (err) { console.error('[bot] /aitags error:', err) }
 })
 

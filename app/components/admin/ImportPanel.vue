@@ -107,6 +107,8 @@ async function startImport() {
       return
     }
 
+    // H2: 连续点击「开始导入」先关闭旧流，避免 EventSource 栈式累积泄漏
+    eventSource?.close()
     eventSource = new EventSource(`/api/tasks/web-import/stream?task_ids=${taskIds.join(',')}`)
 
     eventSource.addEventListener('progress', (e) => {

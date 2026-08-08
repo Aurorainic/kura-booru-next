@@ -78,9 +78,10 @@ const panelMap: Record<string, ReturnType<typeof defineAsyncComponent>> = {
       </button>
     </div>
 
-    <!-- Tab content — keep-alive preserves panel state across tab switches -->
+    <!-- Tab content — 仅缓存需要保留编辑态的面板（AI 分类结果批量操作、标签搜索框），
+         其余面板切 tab 即卸载，下次进入重新拉数据（单人 admin 浏览器内存 -50-150MB） -->
     <div>
-      <KeepAlive :max="tabs.length">
+      <KeepAlive :include="['AiAssistantPanel', 'TagsPanel']" :max="2">
         <component :is="panelMap[currentTab] || panelMap.dashboard" />
       </KeepAlive>
     </div>

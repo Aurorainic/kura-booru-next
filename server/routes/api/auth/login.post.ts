@@ -1,4 +1,4 @@
-import { definePublicHandler } from '../../../platform/http/auth'
+import { definePublicHandler, getClientIp } from '../../../platform/http/auth'
 import { AppError } from '../../../platform/errors'
 
 export default definePublicHandler({
@@ -13,7 +13,7 @@ export default definePublicHandler({
     // Key is independent of password so leaked DBs still can't bypass the gate.
     // ponytail: lock is single-bucket per (ip,user) — fine for one admin site;
     // multi-account attacks would need a wider IP-only bucket.
-    const ip = getRequestIP(event, { xForwardedFor: true }) || 'unknown'
+    const ip = getClientIp(event)
     const failKey = `login:fail:${ip}:${body.username}`
     const lockKey = `login:lock:${ip}:${body.username}`
 

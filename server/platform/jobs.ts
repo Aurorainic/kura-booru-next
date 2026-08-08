@@ -37,77 +37,89 @@ export async function getBoss(): Promise<PgBoss> {
 // 快照在 admin 增删改 Provider / 切换全局开关后由 refreshAiConfig 更新，
 // 并通过 onAiConfigChanged 钩子触发这里同步。
 let aiWorkersRegistered = false
+// M1: 并发 syncAiWorkers（启动 + 配置热刷新竞态）可能重复注册 worker —
+// in-flight promise 互斥，第二次调用等待第一次完成
+let aiWorkersRegistering: Promise<void> | null = null
 
 const AI_WORKER_QUEUES = ['ai-classify', 'ai-merges', 'ai-ratings'] as const
 
 async function registerAiWorkers(boss: PgBoss) {
   if (aiWorkersRegistered) return
+  if (aiWorkersRegistering) return aiWorkersRegistering
 
-  // DLQ 必须先建：createQueue(name, { deadLetter }) 要求死信队列已存在
-  await boss.createQueue('ai-dlq')
-  await boss.createQueue('ai-classify', { deadLetter: 'ai-dlq' })
-  await boss.createQueue('ai-merges', { deadLetter: 'ai-dlq' })
-  await boss.createQueue('ai-ratings', { deadLetter: 'ai-dlq' })
+  aiWorkersRegistering = (async () => {
+    if (aiWorkersRegistered) return
 
-  await boss.work('ai-classify', async ([job]) => {
-    if (!job) return
-    const { jobId, tagNames } = job.data as { jobId: string; tagNames: string[] }
-    const errors: string[] = []
-    let classifications: Awaited<ReturnType<typeof classifyTags>> = []
-    const batchSize = 25
-    for (let i = 0; i < tagNames.length; i += batchSize) {
-      try {
-        const batch = tagNames.slice(i, i + batchSize)
-        const partial = await classifyTags(batch)
-        classifications.push(...partial)
-      } catch (e: any) {
-        errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${e?.message || String(e)}`)
+    // DLQ 必须先建：createQueue(name, { deadLetter }) 要求死信队列已存在
+    await boss.createQueue('ai-dlq')
+    await boss.createQueue('ai-classify', { deadLetter: 'ai-dlq' })
+    await boss.createQueue('ai-merges', { deadLetter: 'ai-dlq' })
+    await boss.createQueue('ai-ratings', { deadLetter: 'ai-dlq' })
+
+    await boss.work('ai-classify', async ([job]) => {
+      if (!job) return
+      const { jobId, tagNames } = job.data as { jobId: string; tagNames: string[] }
+      const errors: string[] = []
+      let classifications: Awaited<ReturnType<typeof classifyTags>> = []
+      const batchSize = 25
+      for (let i = 0; i < tagNames.length; i += batchSize) {
+        try {
+          const batch = tagNames.slice(i, i + batchSize)
+          const partial = await classifyTags(batch)
+          classifications.push(...partial)
+        } catch (e: any) {
+          errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${e?.message || String(e)}`)
+        }
+        await updateAiJobProgress(jobId, {
+          done: Math.min(i + batchSize, tagNames.length),
+          errors: errors.length ? errors : undefined,
+        })
       }
-      await updateAiJobProgress(jobId, {
-        done: Math.min(i + batchSize, tagNames.length),
-        errors: errors.length ? errors : undefined,
-      })
-    }
-    const suggestions = classifications.map(c => ({
-      tag_name: c.name, category: c.category, translation: c.translation,
-      danbooru_name: c.danbooru_name, confidence: c.confidence,
-    }))
-    await completeAiJob(jobId, { suggestions }, errors.length > 0)
+      const suggestions = classifications.map(c => ({
+        tag_name: c.name, category: c.category, translation: c.translation,
+        danbooru_name: c.danbooru_name, confidence: c.confidence,
+      }))
+      await completeAiJob(jobId, { suggestions }, errors.length > 0)
+    })
+
+    await boss.work('ai-merges', async ([job]) => {
+      if (!job) return
+      const { jobId, scope } = job.data as { jobId: string; scope: any }
+      const errors: string[] = []
+      let groups: Awaited<ReturnType<typeof suggestMerges>> = []
+      try {
+        groups = await suggestMerges(scope)
+        await updateAiJobProgress(jobId, { done: 1 })
+      } catch (e: any) {
+        errors.push(e?.message || String(e))
+        await updateAiJobProgress(jobId, { errors })
+      }
+      await completeAiJob(jobId, { suggestions: groups }, errors.length > 0)
+    })
+
+    await boss.work('ai-ratings', async ([job]) => {
+      if (!job) return
+      const { jobId, scope, limit } = job.data as { jobId: string; scope: any; limit: number }
+      const errors: string[] = []
+      let results: Awaited<ReturnType<typeof suggestRatings>> = []
+      try {
+        results = await suggestRatings(scope, limit, (examined, total) => {
+          updateAiJobProgress(jobId, { done: examined, total })
+        })
+      } catch (e: any) {
+        errors.push(e?.message || String(e))
+        await updateAiJobProgress(jobId, { errors })
+      }
+      await completeAiJob(jobId, { suggestions: results }, errors.length > 0)
+    })
+
+    aiWorkersRegistered = true
+    console.log('[pg-boss] ai workers registered (ai enabled)')
+  })().finally(() => {
+    aiWorkersRegistering = null
   })
 
-  await boss.work('ai-merges', async ([job]) => {
-    if (!job) return
-    const { jobId, scope } = job.data as { jobId: string; scope: any }
-    const errors: string[] = []
-    let groups: Awaited<ReturnType<typeof suggestMerges>> = []
-    try {
-      groups = await suggestMerges(scope)
-      await updateAiJobProgress(jobId, { done: 1 })
-    } catch (e: any) {
-      errors.push(e?.message || String(e))
-      await updateAiJobProgress(jobId, { errors })
-    }
-    await completeAiJob(jobId, { suggestions: groups }, errors.length > 0)
-  })
-
-  await boss.work('ai-ratings', async ([job]) => {
-    if (!job) return
-    const { jobId, scope, limit } = job.data as { jobId: string; scope: any; limit: number }
-    const errors: string[] = []
-    let results: Awaited<ReturnType<typeof suggestRatings>> = []
-    try {
-      results = await suggestRatings(scope, limit, (examined, total) => {
-        updateAiJobProgress(jobId, { done: examined, total })
-      })
-    } catch (e: any) {
-      errors.push(e?.message || String(e))
-      await updateAiJobProgress(jobId, { errors })
-    }
-    await completeAiJob(jobId, { suggestions: results }, errors.length > 0)
-  })
-
-  aiWorkersRegistered = true
-  console.log('[pg-boss] ai workers registered (ai enabled)')
+  return aiWorkersRegistering
 }
 
 async function unregisterAiWorkers(boss: PgBoss) {
@@ -149,10 +161,12 @@ export async function registerJobs(boss: PgBoss) {
   await boss.schedule('sync-tasks', '0 * * * *')
   await boss.work('sync-tasks', async () => {
     try {
+      // M2: 单条 UPDATE + GROUP BY join — 一次聚合扫描全表对齐，
+      // 相关子查询版本会对每行重复求值（N 次扫描）。
       await db.execute(sql`
-        UPDATE tags SET post_count = (
-          SELECT COUNT(*) FROM post_tags WHERE post_tags.tag_id = tags.id
-        )
+        UPDATE tags t SET post_count = sub.c
+        FROM (SELECT tag_id, COUNT(*) AS c FROM post_tags GROUP BY tag_id) sub
+        WHERE t.id = sub.id
       `)
       console.log('[sync] tag post_count reconciled')
     } catch (err) {

@@ -5,6 +5,9 @@ import AiMergesPanel from '~/components/admin/ai/AiMergesPanel.vue'
 import AiRatingsPanel from '~/components/admin/ai/AiRatingsPanel.vue'
 import AiStatusBar from '~/components/admin/ai/AiStatusBar.vue'
 
+// KeepAlive include 按组件名匹配（admin/index.vue 只缓存本面板与 TagsPanel）
+defineOptions({ name: 'AiAssistantPanel' })
+
 const { ssrCookie } = useSsrContext()
 const route = useRoute()
 

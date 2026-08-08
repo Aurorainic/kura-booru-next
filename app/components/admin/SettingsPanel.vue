@@ -31,9 +31,13 @@ function itemsOf(cat: string): SettingItem[] {
 
 watch(items, (list) => {
   for (const it of list) {
+    // H13: refreshNuxtData('admin-settings') 触发本 watch 时，用户正在输入
+    // 未保存的 secret 明文（secretDirty=true）不能被重置为空。
     if (it.secret) {
-      draft[it.key] = ''
-      secretDirty[it.key] = false
+      if (!secretDirty[it.key]) {
+        draft[it.key] = ''
+        secretDirty[it.key] = false
+      }
     } else {
       draft[it.key] = it.value
     }

@@ -31,7 +31,9 @@ export async function listPosts(opts: {
       sourceUrl: posts.sourceUrl, sourceSite: posts.sourceSite, sourceId: posts.sourceId,
       width: posts.width, height: posts.height, fileSize: posts.fileSize, mimeType: posts.mimeType,
       title: posts.title, description: posts.description, rating: posts.rating, createdAt: posts.createdAt,
-    }).from(posts).where(where).orderBy(desc(posts.createdAt)).limit(perPage).offset(offset),
+    }).from(posts).where(where)
+      .orderBy(sql`${posts.createdAt} DESC, ${posts.id} DESC`)
+      .limit(perPage).offset(offset),
   ])
 
   const total = Number(countResult[0]?.count || 0)
@@ -218,7 +220,9 @@ export async function searchPosts(q: string, opts: {
 
   const [countResult, items] = await Promise.all([
     db.select({ count: sql<number>`count(*)` }).from(posts).where(where),
-    db.select().from(posts).where(where).orderBy(desc(posts.createdAt)).limit(perPage).offset(offset),
+    db.select().from(posts).where(where)
+      .orderBy(sql`${posts.createdAt} DESC, ${posts.id} DESC`)
+      .limit(perPage).offset(offset),
   ])
 
   // Fetch tags for all items

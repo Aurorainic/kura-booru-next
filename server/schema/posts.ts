@@ -38,7 +38,9 @@ export const posts = pgTable('posts', {
   seriesSourceIdx: uniqueIndex('ix_posts_source_site_id_page')
     .on(t.sourceSite, t.sourceId, t.pageIndex),
   seriesIdIdx: index('ix_posts_series_id').on(t.seriesId),
-  createdAtIdx: index('ix_posts_created_at').on(t.createdAt),
+  // H17: 列表/搜索翻页的排序是 (created_at DESC, id DESC) — 复合索引匹配
+  // 该排序，同秒级 createdAt 不再导致 OFFSET/LIMIT 重复或遗漏
+  createdAtIdx: index('ix_posts_created_at_id').on(sql`${t.createdAt} DESC, ${t.id} DESC`),
   ratingIdx: index('ix_posts_rating').on(t.rating),
   phashIdx: index('ix_posts_phash').on(t.phash),
   titleTrgmIdx: index('ix_posts_title_trgm').using('gin', sql`${t.title} gin_trgm_ops`),
