@@ -184,14 +184,16 @@ function fieldSpan(item: SettingItem): string {
                 </div>
               </template>
 
-              <!-- boolean -->
-              <label v-else-if="item.type === 'boolean'" class="flex items-center gap-3 py-1 cursor-pointer">
-                <input type="checkbox" class="w-4 h-4 rounded accent-[var(--accent-color)]"
-                  :checked="draft[item.key] === 'true'"
-                  @change="draft[item.key] = ($event.target as HTMLInputElement).checked ? 'true' : 'false'" />
-                <span class="text-sm text-[var(--text-primary)]">{{ item.label }}</span>
-                <span v-if="item.description" class="text-xs text-[var(--text-muted)]">{{ item.description }}</span>
-              </label>
+              <!-- boolean：描述独占一行（缩进对齐标签），避免与标签在同一 flex 行里互相挤压 -->
+              <div v-else-if="item.type === 'boolean'">
+                <label class="flex items-center gap-2.5 py-1 cursor-pointer">
+                  <input type="checkbox" class="w-4 h-4 rounded accent-[var(--accent-color)] flex-shrink-0"
+                    :checked="draft[item.key] === 'true'"
+                    @change="draft[item.key] = ($event.target as HTMLInputElement).checked ? 'true' : 'false'" />
+                  <span class="text-sm text-[var(--text-primary)]">{{ item.label }}</span>
+                </label>
+                <p v-if="item.description" class="text-[0.625rem] text-[var(--text-muted)] mt-1 pl-[1.625rem]">{{ item.description }}</p>
+              </div>
 
               <!-- secret：掩码 + 留空保持原值 -->
               <template v-else-if="item.type === 'secret'">
