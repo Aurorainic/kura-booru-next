@@ -8,7 +8,9 @@ const route = useRoute()
 // so we need watch to re-fetch when the URL changes.
 const page = computed(() => Math.max(1, parseInt(route.query.page as string || '1')))
 const ratingParam = computed(() => route.query.rating as Rating | null)
-const rating = computed(() => isAdmin.value && ratingParam.value ? ratingParam.value : undefined)
+// intranet mode: every visitor is admin (handled by middleware), so rating
+// filters apply without the admin check; non-admin still get no rating filter.
+const rating = computed<Rating | undefined>(() => isAdmin.value ? (ratingParam.value ?? undefined) : undefined)
 
 const perPageCookie = useCookie('kura-per-page', { sameSite: 'lax' })
 const perPage = computed(() => {
@@ -33,15 +35,6 @@ const { data, error } = await useAsyncData(
 const posts = computed(() => data.value?.items || [])
 const total = computed(() => data.value?.total || 0)
 const totalPages = computed(() => data.value?.total_pages || 0)
-
-const quickSearch = ref('')
-
-function onQuickSearchKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter') {
-    const q = quickSearch.value.trim()
-    if (q) navigateTo(`/search?q=${encodeURIComponent(q)}`)
-  }
-}
 
 const ratingFilters = [
   { value: '', label: '全部' },
@@ -84,20 +77,6 @@ useKeyboardShortcuts({ onGoTags: () => navigateTo('/tags'), onPrevPage: () => go
       </div>
     </div>
 
-    <!-- Quick search -->
-    <div class="relative max-w-sm mb-6">
-      <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-      </svg>
-      <input
-        v-model="quickSearch"
-        type="search"
-        placeholder="搜索标签...(用 + 组合，用 - 排除)"
-        class="w-full py-1.5 pl-9 pr-8 rounded-[var(--radius-full)] border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] text-[0.875rem] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-color)] focus:ring-2 focus:ring-[var(--accent-subtle)] transition-all"
-        @keydown="onQuickSearchKeydown"
-      />
-    </div>
-
     <!-- Masonry grid -->
     <PhotoGrid v-if="posts.length > 0" :posts="posts" :is-admin="isAdmin" :current-page="page" />
 
@@ -107,7 +86,11 @@ useKeyboardShortcuts({ onGoTags: () => navigateTo('/tags'), onPrevPage: () => go
         <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z" />
       </svg>
       <p class="text-lg font-semibold mb-1">暂无插画</p>
-      <p class="text-sm">通过 Telegram 机器人发送图片来开始</p>
+      <p class="text-sm mb-4">使用批量导入添加图片，或通过 Telegram 机器人发送链接</p>
+      <NuxtLink v-if="isAdmin" to="/admin?tab=import" class="btn-primary !px-5 !py-2.5 !text-sm inline-flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
+        批量导入
+      </NuxtLink>
     </div>
 
     <!-- Pagination -->

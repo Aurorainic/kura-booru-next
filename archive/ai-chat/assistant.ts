@@ -1,3 +1,5 @@
+// ARCHIVED (v0.10.0): AI 对话模块（admin assistant chat）已归档，不再参与构建。
+// 原位置: server/lib/ai/assistant.ts。如需恢复，git 历史可查。
 // v0.9.0 R2.5: split from server/utils/ai.ts. Admin assistant chat (capability ④ + ⑧).
 
 import { eq, sql, isNull } from 'drizzle-orm'

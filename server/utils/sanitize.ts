@@ -5,6 +5,11 @@
  *
  * Allowed: basic text formatting, headings, lists, code, blockquote, links.
  * Anchors get http(s)-only href + rel hardening.
+ *
+ * Output is PLAIN TEXT (never rendered as HTML anywhere in the frontend —
+ * CLAUDE.md "Hard-Won Rule #14: external artwork descriptions are plain text"):
+ * block/line tags are converted to line breaks, remaining tags stripped, and
+ * readable multi-line text instead of leaking literal markup.
  */
 import DOMPurify from 'isomorphic-dompurify'
 
@@ -18,9 +23,27 @@ const ALLOWED_ATTR = ['href']
 
 export function sanitizeDescriptionHtml(html: string): string {
   if (!html) return ''
-  return DOMPurify.sanitize(html, {
+  const clean = DOMPurify.sanitize(html, {
     ALLOWED_TAGS,
     ALLOWED_ATTR,
     ALLOWED_URI_REGEXP: /^https?:\/\//i,
   })
+  return htmlToText(clean)
+}
+
+/** Sanitized HTML → readable plain text: line breaks preserved, tags stripped, entities decoded. */
+function htmlToText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6]|blockquote|pre|ul|ol)>/gi, '\n')
+    .replace(/<\/?(tr|td|th)>/gi, '\t')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;/gi, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }

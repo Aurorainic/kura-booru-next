@@ -21,6 +21,7 @@ import os
 import socket
 import sys
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 
 import imagehash
@@ -33,12 +34,23 @@ from requests.adapters import HTTPAdapter
 # ── SSRF Protection ──
 ALLOWED_SCHEMES = {"http", "https"}
 BLOCKED_NETWORKS = [
+    ipaddress.ip_network("0.0.0.0/8"),
     ipaddress.ip_network("127.0.0.0/8"),
     ipaddress.ip_network("10.0.0.0/8"),
     ipaddress.ip_network("172.16.0.0/12"),
     ipaddress.ip_network("192.168.0.0/16"),
     ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("192.0.0.0/24"),
+    ipaddress.ip_network("192.0.2.0/24"),
+    ipaddress.ip_network("198.18.0.0/15"),
+    ipaddress.ip_network("198.51.100.0/24"),
+    ipaddress.ip_network("203.0.113.0/24"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("240.0.0.0/4"),
     ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("2001:db8::/32"),
+    ipaddress.ip_network("ff00::/8"),
     ipaddress.ip_network("fc00::/7"),
 ]
 
@@ -108,6 +120,77 @@ log = logging.getLogger(__name__)
 # gallery-dl config: set at startup from env vars
 GALLERY_DL_CONFIG = {}
 
+# ponytail: 单人 = 一次导入一张图（多图 series 内部已按页处理），
+# max_workers=1 完全够；默认 ThreadPoolExecutor 会开 min(32, cpu+4) 线程浪费内存。
+_EXECUTOR = ThreadPoolExecutor(max_workers=int(os.environ.get("SIDECAR_WORKERS", "1")))
+
+
+async def load_pixiv_credentials(r) -> tuple[str, str]:
+    """Load Pixiv credentials: Redis (server-synced, hot-reload) → env fallback.
+
+    Server writes kura:pixiv:refresh_token / kura:pixiv:phpsessid on settings
+    change (see server/plugins/07-settings-hot-reload.ts). Redis values of ""
+    mean explicitly unset — fall back to env only when key is missing.
+    """
+    try:
+        refresh = await r.get("kura:pixiv:refresh_token")
+        phpsessid = await r.get("kura:pixiv:phpsessid")
+    except Exception:
+        refresh = phpsessid = None
+    if refresh is None:
+        refresh = os.environ.get("PIXIV_REFRESH_TOKEN", "")
+    if phpsessid is None:
+        phpsessid = os.environ.get("PIXIV_PHPSESSID", "")
+    return refresh or "", phpsessid or ""
+
+
+def apply_pixiv_config(refresh: str, phpsessid: str):
+    """Apply Pixiv auth into gallery-dl config (idempotent)."""
+    if not (refresh and phpsessid):
+        return
+    GALLERY_DL_CONFIG["extractor"] = {
+        "pixiv": {
+            "refresh-token": refresh,
+            "cookies": {"PHPSESSID": phpsessid},
+        },
+    }
+    from gallery_dl import config
+
+    config.set(("extractor",), "pixiv", {
+        "refresh-token": refresh,
+        "cookies": {"PHPSESSID": phpsessid},
+    })
+
+
+async def load_dl_proxy(r) -> str:
+    """Load download proxy from Redis (server-synced, hot-reload) → env fallback.
+
+    Server writes kura:dl_proxy_type / kura:dl_proxy_url on settings change.
+    gallery-dl accepts proxy URLs via config.set(("extractor",), "proxy", url).
+    http:// and socks5:// schemes are supported by requests/urllib3.
+    """
+    try:
+        proxy_type = await r.get("kura:dl_proxy_type") or ""
+        proxy_url = await r.get("kura:dl_proxy_url") or ""
+    except Exception:
+        proxy_type = ""
+        proxy_url = ""
+    if not proxy_url:
+        return ""
+    if proxy_type == "socks" and not proxy_url.startswith("socks"):
+        proxy_url = f"socks5://{proxy_url.split('://')[-1]}" if "://" in proxy_url else f"socks5://{proxy_url}"
+    return proxy_url
+
+
+def apply_dl_proxy(proxy_url: str):
+    """Apply proxy to gallery-dl global config (idempotent)."""
+    from gallery_dl import config
+    if proxy_url:
+        config.set(("extractor",), "proxy", proxy_url)
+        log.info(f"[sidecar] download proxy set: {proxy_url}")
+    else:
+        config.set(("extractor",), "proxy", None)
+
 
 def setup_gallery_dl():
     """Configure gallery-dl global settings from env vars."""
@@ -127,22 +210,14 @@ def setup_gallery_dl():
     # vector. Legitimate single-hop 301/302 still works; chained hops are blocked.
     config.set((), "max-redirects", 1)
 
+    # Startup: env-only (Redis may not be reachable yet); per-job override in
+    # process_job via load_pixiv_credentials + apply_pixiv_config.
     pixiv_refresh = os.environ.get("PIXIV_REFRESH_TOKEN", "")
     pixiv_phpsessid = os.environ.get("PIXIV_PHPSESSID", "")
-    if pixiv_refresh and pixiv_phpsessid:
-        GALLERY_DL_CONFIG["extractor"] = {
-            "pixiv": {
-                "refresh-token": pixiv_refresh,
-                "cookies": {"PHPSESSID": pixiv_phpsessid},
-            }
-        }
-        config.set(("extractor",), "pixiv", {
-            "refresh-token": pixiv_refresh,
-            "cookies": {"PHPSESSID": pixiv_phpsessid},
-        })
+    apply_pixiv_config(pixiv_refresh, pixiv_phpsessid)
 
 
-def download_with_gallery_dl(url: str) -> tuple[list[tuple[bytes, dict]], str | None]:
+def download_with_gallery_dl(url: str, pixiv: tuple[str, str] | None = None, proxy: str = "") -> tuple[list[tuple[bytes, dict]], str | None]:
     """Download images using gallery-dl as a library.
 
     Returns (pages, illust_type):
@@ -159,14 +234,18 @@ def download_with_gallery_dl(url: str) -> tuple[list[tuple[bytes, dict]], str | 
     validate_url(url)
     from gallery_dl import config
 
-    # Re-apply Pixiv auth (gallery-dl sessions may reset config)
-    pixiv_refresh = os.environ.get("PIXIV_REFRESH_TOKEN", "")
-    pixiv_phpsessid = os.environ.get("PIXIV_PHPSESSID", "")
-    if pixiv_refresh and pixiv_phpsessid:
-        config.set(("extractor",), "pixiv", {
-            "refresh-token": pixiv_refresh,
-            "cookies": {"PHPSESSID": pixiv_phpsessid},
-        })
+    # Re-apply Pixiv auth (gallery-dl sessions may reset config).
+    # Per-job creds come from Redis (server-synced); fall back to env.
+    if pixiv:
+        apply_pixiv_config(*pixiv)
+    else:
+        apply_pixiv_config(
+            os.environ.get("PIXIV_REFRESH_TOKEN", ""),
+            os.environ.get("PIXIV_PHPSESSID", ""),
+        )
+
+    # Apply download proxy (gallery-dl uses requests internally).
+    apply_dl_proxy(proxy)
 
     import tempfile
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -278,8 +357,12 @@ async def process_job(r: aioredis.Redis, job: dict):
         # the download path, so we collapse to first-frame here before
         # building the result.
         loop = asyncio.get_event_loop()
+        # Load Pixiv creds from Redis (server-synced; hot-reload friendly).
+        pixiv = await load_pixiv_credentials(r)
+        # Load download proxy from Redis (server-synced; hot-reload friendly).
+        dl_proxy = await load_dl_proxy(r)
         downloaded, illust_type = await loop.run_in_executor(
-            None, download_with_gallery_dl, url
+            _EXECUTOR, download_with_gallery_dl, url, pixiv, dl_proxy
         )
 
         is_ugoira = illust_type == "ugoira"
@@ -287,7 +370,13 @@ async def process_job(r: aioredis.Redis, job: dict):
             log.info(f"Job {job_id} detected as Ugoira — collapsing to first frame")
             downloaded = downloaded[:1]
 
-        max_size = int(os.environ.get("MAX_IMAGE_SIZE", "0"))
+        # MAX_IMAGE_SIZE: Redis (server-synced) → env fallback. Server syncs
+        # kura:max_image_size on settings change (07-settings-hot-reload.ts).
+        try:
+            _redis_max = await r.get("kura:max_image_size")
+            max_size = int(_redis_max) if _redis_max is not None else int(os.environ.get("MAX_IMAGE_SIZE", "0"))
+        except Exception:
+            max_size = int(os.environ.get("MAX_IMAGE_SIZE", "0"))
         page_count = len(downloaded)
         pages: list[dict] = []
 
@@ -322,7 +411,7 @@ async def process_job(r: aioredis.Redis, job: dict):
         for i, (image_bytes, gdl_metadata) in enumerate(downloaded, start=1):
             # Open Image once, share between _process_page and any consumer
             img = Image.open(BytesIO(image_bytes))
-            page = await loop.run_in_executor(None, _process_page, img, image_bytes, gdl_metadata, i)
+            page = await loop.run_in_executor(_EXECUTOR, _process_page, img, image_bytes, gdl_metadata, i)
             if page is None:
                 # Over-size: skip the page but keep counting toward page_count
                 # so page_index stays consistent with what gallery-dl emitted.
@@ -357,7 +446,7 @@ async def process_job(r: aioredis.Redis, job: dict):
                     "description": shared.get("description", ""),
                     "source_url": url,
                     "source_site": job.get("source_site", ""),
-                    "source_id": shared.get("source_id", job.get("source_id", "")),
+                    "source_id": shared.get("source_id") or job.get("source_id", ""),
                     "tag_names": shared.get("tag_names", []),
                     "artist_name": shared.get("artist_name"),
                 },
@@ -370,7 +459,7 @@ async def process_job(r: aioredis.Redis, job: dict):
                 "description": shared.get("description", ""),
                 "source_url": url,
                 "source_site": job.get("source_site", ""),
-                "source_id": shared.get("source_id", job.get("source_id", "")),
+                "source_id": shared.get("source_id") or job.get("source_id", ""),
                 "tag_names": shared.get("tag_names", []),
                 "artist_name": shared.get("artist_name"),
             }

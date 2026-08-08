@@ -1,5 +1,18 @@
 import { defineApiKeyHandler } from '../../../platform/http/auth'
 
+function stripTaskSecrets(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripTaskSecrets)
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [key, item] of Object.entries(value)) {
+      if (key === 'image_bytes_b64' || key === 'phash') continue
+      out[key] = stripTaskSecrets(item)
+    }
+    return out
+  }
+  return value
+}
+
 export default defineApiKeyHandler({
   auditAction: 'task status read',
   doc: { method: 'get', path: '/api/tasks/:id', summary: 'Get task status (frozen: status literals + phash strip)' },
@@ -22,10 +35,10 @@ export default defineApiKeyHandler({
 
     const parsed = JSON.parse(raw)
 
-    // Security: strip image_bytes_b64 and phash from public response. phash lives
-    // at the top level of SidecarResult (server/utils/queue.ts), not on metadata —
-    // a metadata.phash destructure would silently no-op.
-    const { image_bytes_b64, phash, ...safeResult } = parsed
+    // Security: strip image_bytes_b64 and phash recursively. Multi-image
+    // results carry both fields inside metadata.pages, so a top-level
+    // destructure alone would still leak the raw artwork and perceptual hash.
+    const safeResult = stripTaskSecrets(parsed)
 
     const statusMap: Record<string, string> = {
       ok: 'complete',

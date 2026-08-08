@@ -3,9 +3,13 @@
 // non-http(s) and private-host URLs at the entry point so we never enqueue
 // work we know will be rejected downstream.
 async function assertSafeUrl(url: string) {
-  let host: string
-  try { host = new URL(url).hostname }
+  let parsed: URL
+  try { parsed = new URL(url) }
   catch { throw new AppError('VALIDATION_FAILED', 400, 'source_url is not a valid URL') }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new AppError('VALIDATION_FAILED', 400, 'source_url must use http or https')
+  }
+  const host = parsed.hostname
   if (await isPrivateHost(host)) {
     throw new AppError('VALIDATION_FAILED', 400, 'source_url points to a private or reserved address')
   }

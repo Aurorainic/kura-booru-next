@@ -32,6 +32,23 @@ function envSnapshot(): AiConfig {
 let snapshot: AiConfig = envSnapshot()
 let seededFromEnv = false
 
+// 启用状态变化时通知依赖方（jobs.ts 据此注册/注销 AI worker）。用回调而非
+// 反向 import platform/jobs，避免 config → jobs → ratings → config 循环依赖。
+type AiConfigHook = () => void | Promise<void>
+const aiConfigHooks: AiConfigHook[] = []
+
+export function onAiConfigChanged(hook: AiConfigHook) {
+  aiConfigHooks.push(hook)
+}
+
+async function fireAiConfigHooks() {
+  for (const hook of aiConfigHooks) {
+    try { await hook() } catch (err) {
+      console.warn('[ai-config] change hook failed (non-fatal):', err)
+    }
+  }
+}
+
 export function getAiConfig(): AiConfig {
   return snapshot
 }
@@ -84,6 +101,8 @@ export async function refreshAiConfig(): Promise<AiConfig> {
     // e.g. migration 0007 not applied yet — env snapshot stays active.
     console.warn('[ai-config] refresh failed, keeping previous snapshot:', e)
   }
+  // 无论成功失败都触发钩子：失败时钩子按旧 snapshot 幂等（不重复注册/注销）。
+  await fireAiConfigHooks()
   return snapshot
 }
 

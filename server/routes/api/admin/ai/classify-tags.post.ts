@@ -1,12 +1,19 @@
 import { inArray, isNull, and, sql } from 'drizzle-orm'
 import { defineAdminHandler } from '../../../../platform/http/auth'
+import { AppError } from '../../../../platform/errors'
 import { getBoss } from '../../../../platform/jobs'
+import { isAiEnabled } from '../../../../lib/ai/config'
 
 export default defineAdminHandler({
   doc: { method: 'post', path: '/api/admin/ai/classify-tags', summary: 'AI tag classification' },
   handler: async ({ event }) => {
     const body = await readBody<{ mode: 'unprocessed' | 'all' | 'specific'; tag_ids?: string[] }>(event)
     const mode = body?.mode || 'unprocessed'
+
+    // 按需启用原则：AI 关闭时 worker 未注册，入队只会积压无人处理，直接拒绝。
+    if (!isAiEnabled()) {
+      throw new AppError('FEATURE_DISABLED', 409, 'AI 功能未启用')
+    }
 
     // ponytail: specific mode is short (≤ tag_ids.length) — keep synchronous,
     // return suggestions directly. unprocessed/all can hit 100 tags → run async.

@@ -12,6 +12,11 @@ const props = withDefaults(defineProps<{
 const PER_PAGE_OPTIONS = [20, 40, 100]
 const PER_PAGE_COOKIE_KEY = 'kura-per-page'
 const perPageCookie = useCookie(PER_PAGE_COOKIE_KEY, { sameSite: 'lax' })
+const jumpPage = ref(props.currentPage)
+
+watch(() => props.currentPage, (value) => {
+  jumpPage.value = value
+})
 
 const pages = computed(() => {
   const total = props.totalPages
@@ -65,10 +70,20 @@ function changePerPage(value: number) {
     navigateTo(url.pathname + '?' + url.searchParams.toString())
   }
 }
+
+function goToJumpPage() {
+  const target = Math.floor(Number(jumpPage.value))
+  if (!Number.isFinite(target)) return
+  const clamped = Math.min(Math.max(target, 1), props.totalPages)
+  jumpPage.value = clamped
+  if (clamped !== props.currentPage) {
+    navigateTo(pageUrl(clamped))
+  }
+}
 </script>
 
 <template>
-  <nav class="flex items-center justify-between gap-4 mt-8 pt-6 border-t border-[var(--border-color)]">
+  <nav class="flex flex-wrap items-center justify-between gap-4 mt-8 pt-6 border-t border-[var(--border-color)]">
     <!-- Page navigation -->
     <div v-if="totalPages > 1" class="flex items-center gap-1">
       <!-- Previous -->
@@ -113,8 +128,34 @@ function changePerPage(value: number) {
       </span>
     </div>
 
+    <!-- Jump to page -->
+    <form
+      v-if="totalPages > 1"
+      class="flex items-center gap-1.5"
+      @submit.prevent="goToJumpPage"
+    >
+      <label for="pagination-jump" class="text-xs text-[var(--text-muted)] flex-shrink-0">跳转</label>
+      <input
+        id="pagination-jump"
+        v-model.number="jumpPage"
+        type="number"
+        min="1"
+        :max="totalPages"
+        class="w-16 h-8 px-2 text-center text-sm rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-color)]"
+        aria-label="跳转到第几页"
+      />
+      <button
+        type="submit"
+        class="h-8 px-2 rounded-[var(--radius-sm)] inline-flex items-center gap-1 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--accent-color)] hover:bg-[var(--accent-subtle)] transition-colors"
+        aria-label="跳转"
+      >
+        <span>页</span>
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+      </button>
+    </form>
+
     <!-- Per-page selector -->
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2 flex-shrink-0">
       <svg class="w-4 h-4 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
       <select
         :value="perPage"

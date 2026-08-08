@@ -18,6 +18,15 @@ function validateEndpoint(endpoint: string): string {
   return trimmed
 }
 
+/** H6: AI 调用会把 Bearer 凭据 POST 到 endpoint — 私网/保留地址 = 凭据泄漏通道。 */
+async function validateEndpointHost(endpoint: string): Promise<void> {
+  const { isPrivateHost } = await import('../../../../../utils/settings')
+  const hostname = new URL(endpoint).hostname
+  if (!hostname || await isPrivateHost(hostname)) {
+    throw new AppError('INVALID_ENDPOINT', 400, 'AI provider endpoint 不能指向私网/回环地址')
+  }
+}
+
 export default defineAdminHandler({
   doc: { method: 'post', path: '/api/admin/ai/providers', summary: 'Create AI provider' },
   handler: async ({ event }) => {
@@ -30,6 +39,7 @@ export default defineAdminHandler({
       throw new AppError('VALIDATION_FAILED', 400, 'name required (1-64 chars)')
     }
     const endpoint = validateEndpoint(String(body?.endpoint || ''))
+    await validateEndpointHost(endpoint)
     const model = String(body?.model || '').trim()
     if (!model || model.length > 128) {
       throw new AppError('VALIDATION_FAILED', 400, 'model required (1-128 chars)')

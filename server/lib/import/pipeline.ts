@@ -22,6 +22,29 @@ import { computeRating } from './steps/rating'
 import { upsertTags, associateTags } from './steps/tags'
 import { isAiEnabled } from '../ai/config'
 import { aiProcessTagsForPost } from '../ai/reprocess'
+import { identifySource, resolveSourceOrOther } from '../../utils/url-patterns'
+
+const SOURCE_SITES = ['pixiv', 'twitter', 'danbooru', 'other'] as const
+type SourceSite = typeof SOURCE_SITES[number]
+
+function resolveSourceSite(meta: {
+  source_url: string
+  source_site?: string
+  source_id?: string
+}): { site: SourceSite; id: string } {
+  const declared = SOURCE_SITES.includes(meta.source_site as SourceSite)
+    ? meta.source_site as SourceSite
+    : null
+  if (declared) {
+    return { site: declared, id: meta.source_id || 'unknown' }
+  }
+
+  // Jobs queued before source detection was centralized still arrive with an
+  // empty source_site. Recover it from the original URL before falling back to
+  // "other", otherwise Pixiv/Twitter/Danbooru imports get misclassified.
+  const detected = identifySource(meta.source_url) || resolveSourceOrOther(meta.source_url)
+  return { site: detected.site as SourceSite, id: detected.id }
+}
 
 export async function processResult(result: SidecarResult, forceRating?: 'safe' | 'questionable' | 'explicit'): Promise<PipelineResult> {
   if (result.status === 'error') {
@@ -43,22 +66,20 @@ export async function processResult(result: SidecarResult, forceRating?: 'safe' 
 
   const imageBuffer = Buffer.from(result.image_bytes_b64, 'base64')
   const meta = result.metadata
+  const source = resolveSourceSite(meta)
 
-  // ── MAX_IMAGE_SIZE check ──
-  const maxSize = parseInt(process.env.MAX_IMAGE_SIZE || '0', 10)
+  // ── MAX_IMAGE_SIZE check（DB settings，热刷新） ──
+  const { getImageSizes } = await import('../../utils/settings')
+  const maxSize = (await getImageSizes()).maxImageSize
   if (maxSize > 0 && imageBuffer.length > maxSize) {
-    return { status: 'too_large', source_site: meta.source_site, source_id: meta.source_id }
+    return { status: 'too_large', source_site: source.site, source_id: source.id }
   }
-
-  // Validate source site against enum
-  const VALID_SOURCES = new Set(['pixiv', 'twitter', 'danbooru', 'other'])
-  const sourceSite = VALID_SOURCES.has(meta.source_site) ? meta.source_site as any : 'other' as any
 
   try {
     // ── 1. phash dedup ──
     const dupId = await checkDuplicate(result.phash || '')
     if (dupId) {
-      return { status: 'duplicate', existing_post_id: dupId, source_site: meta.source_site, source_id: meta.source_id }
+      return { status: 'duplicate', existing_post_id: dupId, source_site: source.site, source_id: source.id }
     }
 
     // ── 2. Generate thumbnails (sharp) + probe metadata ──
@@ -76,9 +97,10 @@ export async function processResult(result: SidecarResult, forceRating?: 'safe' 
 
     // ── 6. Create Post + tag upserts + post_tag associations in transaction ──
     let postId: string
+    let tagIds: string[] = []
 
     await db.transaction(async (tx: any) => {
-      const tagIds = await upsertTags(tx, tagNames, artistName)
+      tagIds = await upsertTags(tx, tagNames, artistName)
 
       const [post] = await tx
         .insert(posts)
@@ -87,8 +109,8 @@ export async function processResult(result: SidecarResult, forceRating?: 'safe' 
           thumbKey: upload.thumbKey || upload.imageKey,
           previewKey: upload.previewKey || upload.imageKey,
           sourceUrl: meta.source_url,
-          sourceSite,
-          sourceId: meta.source_id,
+          sourceSite: source.site,
+          sourceId: source.id,
           width: thumbs.width ?? 0,
           height: thumbs.height ?? 0,
           fileSize: meta.file_size,
@@ -108,15 +130,15 @@ export async function processResult(result: SidecarResult, forceRating?: 'safe' 
 
     // ── 7. AI tag processing (non-blocking) ──
     if (isAiEnabled()) {
-      try { await aiProcessTagsForPost(postId!, []) }
+      try { await aiProcessTagsForPost(postId!, tagIds) }
       catch (e) { console.warn('[pipeline] AI tag processing failed (non-blocking):', e) }
     }
 
     return {
       status: 'success',
       post_id: postId!,
-      source_site: meta.source_site,
-      source_id: meta.source_id,
+      source_site: source.site,
+      source_id: source.id,
       auto_rating: autoRating || undefined,
     }
   } catch (err: any) {
@@ -147,8 +169,8 @@ async function processMultiImageResult(
   const pages = meta.pages ?? []
   if (!pages.length) return { status: 'failed', error: 'Multi-image result with zero pages' }
 
-  const VALID_SOURCES = new Set(['pixiv', 'twitter', 'danbooru', 'other'])
-  const sourceSite = VALID_SOURCES.has(meta.source_site) ? meta.source_site as any : 'other' as any
+  const source = resolveSourceSite(meta)
+  const sourceSite = source.site
   const declaredPageCount = meta.page_count ?? pages.length
 
   // Sort pages by page_index so we always insert the series anchor (page_index=1) first.
@@ -168,7 +190,7 @@ async function processMultiImageResult(
   const existingAnchor = await db
     .select({ id: posts.id, seriesId: posts.seriesId })
     .from(posts)
-    .where(sql`${posts.sourceSite} = ${sourceSite} AND ${posts.sourceId} = ${meta.source_id} AND (${posts.pageIndex} = 1 OR ${posts.pageIndex} IS NULL)`)
+    .where(sql`${posts.sourceSite} = ${sourceSite} AND ${posts.sourceId} = ${source.id} AND (${posts.pageIndex} = 1 OR ${posts.pageIndex} IS NULL)`)
     .orderBy(sql`CASE WHEN ${posts.pageIndex} = 1 THEN 0 ELSE 1 END`)
     .limit(1)
 
@@ -201,8 +223,9 @@ async function processMultiImageResult(
     const imageBuffer = Buffer.from(page.image_bytes_b64, 'base64')
 
     // Per-page MAX_IMAGE_SIZE check (sidecar already filtered too-larges, but
-    // belt-and-suspenders in case env changes between sidecar and pipeline).
-    const maxSize = parseInt(process.env.MAX_IMAGE_SIZE || '0', 10)
+    // belt-and-suspenders in case settings change between sidecar and pipeline).
+    const { getImageSizes } = await import('../../utils/settings')
+    const maxSize = (await getImageSizes()).maxImageSize
     if (maxSize > 0 && imageBuffer.length > maxSize) {
       pageResults.push({ page_index: page.page_index, status: 'failed', error: 'too_large' })
       continue
@@ -218,6 +241,7 @@ async function processMultiImageResult(
         pageCount: declaredPageCount,
         forceRating,
         sourceSite,
+        sourceId: source.id,
         adoptLegacyId: page.page_index === 1 ? adoptLegacyId : null,
       })
 
@@ -230,7 +254,7 @@ async function processMultiImageResult(
         const winner = await db
           .select({ id: posts.id, seriesId: posts.seriesId })
           .from(posts)
-          .where(sql`${posts.sourceSite} = ${sourceSite} AND ${posts.sourceId} = ${meta.source_id} AND ${posts.pageIndex} = ${page.page_index}`)
+          .where(sql`${posts.sourceSite} = ${sourceSite} AND ${posts.sourceId} = ${source.id} AND ${posts.pageIndex} = ${page.page_index}`)
           .limit(1)
         const winnerId = winner[0]?.id
         const winnerSeriesId = winner[0]?.seriesId
@@ -272,14 +296,14 @@ async function processMultiImageResult(
 
   const anchorPage = pageResults.find(r => r.page_index === 1)
   if (!anchorPage?.post_id) {
-    return { status: 'failed', error: 'series anchor (page_index=1) did not insert', source_site: meta.source_site, source_id: meta.source_id }
+    return { status: 'failed', error: 'series anchor (page_index=1) did not insert', source_site: source.site, source_id: source.id }
   }
 
   return {
     status: 'success',
     post_id: anchorPage.post_id,
-    source_site: meta.source_site,
-    source_id: meta.source_id,
+    source_site: source.site,
+    source_id: source.id,
   }
 }
 
@@ -306,10 +330,11 @@ async function insertOnePage(args: {
   pageIndex: number
   pageCount: number
   forceRating?: 'safe' | 'questionable' | 'explicit'
-  sourceSite: 'pixiv' | 'twitter' | 'danbooru' | 'other'
+  sourceSite: SourceSite
+  sourceId: string
   adoptLegacyId?: string | null
 }): Promise<string> {
-  const { imageBuffer, meta, page, seriesId, pageIndex, pageCount, forceRating, sourceSite, adoptLegacyId } = args
+  const { imageBuffer, meta, page, seriesId, pageIndex, pageCount, forceRating, sourceSite, sourceId, adoptLegacyId } = args
 
   // ── phash dedup (per page) ──
   const dupId = await checkDuplicate(page.phash || '')
@@ -337,8 +362,9 @@ async function insertOnePage(args: {
   // ── Insert Post (or adopt legacy row). seriesId is a pre-generated UUID,
   //    never null — no read-back race. ──
   let postId: string
+  let tagIds: string[] = []
   await db.transaction(async (tx: any) => {
-    const tagIds = await upsertTags(tx, tagNames, artistName)
+    tagIds = await upsertTags(tx, tagNames, artistName)
 
     if (adoptLegacyId && pageIndex === 1) {
       // Legacy single-image row of the same source exists (page_index IS
@@ -352,7 +378,7 @@ async function insertOnePage(args: {
           previewKey: upload.previewKey || upload.imageKey,
           sourceUrl: meta.source_url,
           sourceSite,
-          sourceId: meta.source_id,
+          sourceId,
           width: thumbs.width ?? 0,
           height: thumbs.height ?? 0,
           fileSize: page.file_size,
@@ -377,7 +403,7 @@ async function insertOnePage(args: {
           previewKey: upload.previewKey || upload.imageKey,
           sourceUrl: meta.source_url,
           sourceSite,
-          sourceId: meta.source_id,
+          sourceId,
           width: thumbs.width ?? 0,
           height: thumbs.height ?? 0,
           fileSize: page.file_size,
@@ -399,7 +425,7 @@ async function insertOnePage(args: {
   })
 
   if (isAiEnabled()) {
-    try { await aiProcessTagsForPost(postId!, []) }
+    try { await aiProcessTagsForPost(postId!, tagIds) }
     catch (e) { console.warn('[pipeline] AI tag processing failed (non-blocking):', e) }
   }
 

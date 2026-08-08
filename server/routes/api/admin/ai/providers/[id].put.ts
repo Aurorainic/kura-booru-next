@@ -38,6 +38,11 @@ export default defineAdminHandler({
       if (url.protocol !== 'http:' && url.protocol !== 'https:') {
         throw new AppError('VALIDATION_FAILED', 400, 'endpoint 必须是 http(s) URL')
       }
+      // H6: AI 调用会把 Bearer 凭据 POST 到 endpoint — 私网/保留地址 = 凭据泄漏通道
+      const { isPrivateHost } = await import('../../../../../utils/settings')
+      if (!url.hostname || await isPrivateHost(url.hostname)) {
+        throw new AppError('INVALID_ENDPOINT', 400, 'AI provider endpoint 不能指向私网/回环地址')
+      }
       updates.endpoint = endpoint
     }
     if (body?.model !== undefined) {

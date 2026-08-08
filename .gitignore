@@ -12,6 +12,10 @@ node_modules
 # Logs
 logs
 *.log
+pnpm-debug.log*
+
+# npm lockfile (project uses pnpm)
+package-lock.json
 
 # Misc
 .DS_Store
@@ -21,13 +25,11 @@ logs
 # Serena memories (local only)
 .serena/
 
-# Claude Code (local only)
+# Coding Agents (local only)
 .claude/
-
-# Mimocode (local only)
 .mimocode/
-
-# Local agent memory/state
+.codex/
+.kimi/
 .remember/
 .mimo/
 
@@ -35,3 +37,6 @@ logs
 .env
 .env.*
 !.env.example
+
+# Local temp files
+tmp/

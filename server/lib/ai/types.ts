@@ -15,6 +15,8 @@ export interface TagClassification {
   translation: string
   danbooru_name: string
   confidence: number
+  /** 来源标记（manual=人工纠偏 / ai=AI 分类），用于知识合并优先级，非持久化字段 */
+  _source?: string
 }
 
 export interface AiJobStatus {
@@ -39,15 +41,4 @@ export interface RatingSuggestion {
   rating: Rating
   confidence: number
   reason: string
-}
-
-export interface AssistantSuggestion {
-  label: string
-  callback_data: string
-  action?: { type: string; payload: any }
-}
-
-export interface AssistantReply {
-  text: string
-  suggestions?: AssistantSuggestion[]
 }

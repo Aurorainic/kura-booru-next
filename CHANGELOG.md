@@ -2,16 +2,166 @@
 
 本文件记录项目的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased] (v0.9.0)
+## [0.10.0] - 2026-08-08
 
 ### 新增
-- **AI Provider 配置迁移至管理后台** — 新增 `ai_providers` 表（迁移 `0007_ai_providers.sql`）与新管理标签页「AI 设置」：Provider 可增删改、启停（同时最多一个生效）、测试连接（显示延迟/错误），并提供全局「AI 标签处理」开关（settings KV `ai_tag_processing_enabled`）。变更即时生效，无需重启。首次启动时若表为空且 `AI_PROVIDER_*` 环境变量已设置，会自动导入为一条 Provider 记录；环境变量降级为可选的 seed/fallback。
-- **管理 API**：`GET/POST /api/admin/ai/providers`、`PUT/DELETE /api/admin/ai/providers/:id`、`POST /api/admin/ai/providers/test`、`PUT /api/admin/ai/toggle`。API Key 在任何 GET 响应中只返回掩码（前 4 + 后 4），编辑时留空表示保持不变。
+- **分页页码跳转** — 首页及共用分页组件底部新增「跳转 [页码] 页」输入，直接跳到指定页。
+- **搜索候选点击跳转** — 搜索框候选标签点击后不再只回填输入框，而是直接提交并跳转到对应搜索结果。
+- **桌面导航图标悬停展开** — 非手机端 UA 下，首页菜单栏的色调、明暗切换、导入入口收敛为单图标；光标悬停或键盘聚焦时在图标右侧展开功能文字，手机端保持原有布局。
+- **AI agent 化：记忆驱动的标签分类** — AI 从无状态调用升级为「有记忆、会积累、可纠偏」的代理：
+  - 记忆优先：`classifyTags` 命中 `tag_knowledge` 缓存直接返回，人工纠偏（`source: manual`）为硬约束，AI 不翻案
+  - 动态 few-shot：prompt 采样本图库已确认分类作「记忆锚点」（manual 优先），减少分类漂移
+  - 置信度门槛：AI 结果 <0.6 不写回经验库，防低质量污染；人工编辑恒持久化
+  - source 优先级读取（manual > ai）；`reprocessTags` 双向对齐 knowledge ↔ tags
+  - 中文 prompt（classify/ratings/merges）+ 稳健 JSON 提取（剥 markdown 围栏/平衡括号）+ 低温度确定性分类
+- **`artist:` 前缀标签剥离** — 导入时 gallery-dl 返回的 `artist:xxx` 前缀标签并入画师字段，不再成为独立 general 标签；存量 19 条前缀标签已合并进 clean 同名标签（迁移 106 条关联）。
+- **Telegram Bot 模块开关** — 后台「机器人」卡片新增「启用 Telegram Bot」开关（`bot_enabled`）。关闭后：`syncBotWebhook` 调 `deleteWebhook` 让 Telegram 停止推送、不注册命令、不构建 Bot 实例，`/bot/webhook` 返回 404（模块隐藏），后台资源完全释放；重新开启即恢复注册。热刷新生效，无需重启。
+- **AI 按需启用 worker** — AI 关闭（全局开关关 / 无可启用 Provider）时不再注册 `ai-classify` / `ai-merges` / `ai-ratings` 三个 pg-boss worker（每个 `work()` 都会常驻轮询，占用 DB 连接与 CPU）；启用时 `work()` 注册、关闭时 `offWork()` 注销，通过 `refreshAiConfig` + `onAiConfigChanged` 钩子联动。三个 AI 入队端点（classify-tags / suggest-merges / suggest-ratings）在 AI 关闭时返回 409 `FEATURE_DISABLED`，避免 job 积压无人处理。
+- **下载代理连通测试** — 后台「集成」卡片新增「测试下载代理连接」按钮（`POST /api/admin/settings/test-dl-proxy`，契约已冻结），按所选类型实测代理连通性并返回 HTTP 状态码。
+- **全站设置迁移至数据库（7 类后台卡片）** — 站点标题/URL/公告/head 注入/维护模式、图片尺寸（缩略图/预览/上传上限）、S3 存储六项、Telegram Bot（token/webhook secret/管理员 ID/中转）、Pixiv 凭证与 Backend API Key 全部迁入 `settings` 表；后台「设置」页按 7 类卡片分区管理，保存即热刷新生效。`.env` 仅保留启动必需配置（`DATABASE_URL` / `REDIS_URL` / `SECRET_KEY` / `SESSION_SECRET` / `POSTGRES_*` / `PORT` 等），业务配置不再依赖环境变量。
+- **设置热刷新机制** — 新增 `server/utils/settings-defs.ts` 注册表（键/分类/类型/掩码/默认值）+ `server/plugins/07-settings-hot-reload.ts` 刷新钩子：S3 客户端自动重建、Telegram Bot 实例重建（token/管理员/中转变更即时生效）、Pixiv 凭证与上传上限经 Redis 同步到 sidecar（`kura:pixiv:*` / `kura:max_image_size`）。
+- **Telegram Bot 境内中转支持** — 后台「机器人」卡片新增「中转类型」下拉（HTTP(S) 代理 / SOCKS5 代理 / MTProto 反代 apiRoot / 直连）与「测试 Bot 连接 (getMe)」按钮（按所选类型实测连通，返回用户名或错误详情）。实现依赖：undici `ProxyAgent`（http）、socks-proxy-agent + undici `Agent({connect})` 包装（socks，`secureEndpoint: true`）、grammy `apiRoot`（mtproto）。
+- **运行模式开关（内网/公网）** — 原 `KURA_INTERNET_MODE` 环境变量移除，改为后台「站点 → 运行模式」下拉（默认 public）：内网模式所有访客视为管理员、隐藏登录/退出入口、全部评级可见；公网模式恢复登录墙与评级限制（匿名仅见 safe）。切换即时生效，公网模式改回需管理员登录。部署文档同步更新。
+- **后台设置卡片自适应排版** — 卡片区改 CSS 瀑布流（窄屏单列 / xl+ 双列，`break-inside-avoid` 自动均衡高度），字段区窄屏单列 / sm+ 双列（textarea 跨整行）；新增 `select` 类型渲染；敏感项掩码显示、留空保持原值。
+- **新管理端点**：`POST /api/admin/settings/test-s3`（HeadBucket + ListBuckets 兜底实测连通）、`POST /api/admin/settings/test-bot`（getMe，支持候选 token/类型/地址，返回 `via` 链路标识）。契约清单同步登记。
+- **下载代理（无需 Bot 即可导入）** — 后台「集成」卡片新增「下载代理类型 / 地址」（HTTP(S) / SOCKS5），sidecar 的 gallery-dl 下载走此代理。与 Bot 代理独立配置（无 mtproto），满足未启用 Telegram Bot 场景下的境内下载需求。设置经 Redis 同步到 sidecar，热刷新生效。
+- **批量导入面板入口** — 导入功能从独立页面移入管理后台 tab（`?tab=import`）；全站菜单栏常驻「导入」按钮（公网模式仅已登录管理员可见，内网模式所有访客可见），首页空状态页保留「批量导入」入口。面板 SSE 流式进度：每 URL 独立显示状态图标 + 详情，完成后显示汇总（成功/失败/过大/超时）。
+- **安全模式（Safe Mode）** — 后台「站点」新增 `safe_mode_enabled` 与 `safe_mode_in_intranet` 开关。开启后列表/随机接口仅返回 `safe` 评级；搜索与详情仍返回全部评级但追加 `is_blurred`，前端用 `PostBlurOverlay` 点击后展开，避免管理员在公网/内网环境中意外暴露敏感内容。
 
 ### 变更
+- **AI 对话模块归档**（`archive/ai-chat/`）— admin assistant chat（`assistant.ts` / `/api/admin/ai/chat` / `AiChatPanel.vue` / Bot `/ai`、`!ai` 命令）整体移入 `archive/ai-chat/`，不再参与构建；契约清单移除 `/api/admin/ai/chat`（61→60 路由文件）。分类 / 合并 / 评级能力不受影响。
+- **包管理器 npm → pnpm** — 项目迁移至 pnpm（`packageManager: pnpm@11.3.0` + `pnpm-workspace.yaml`）；`Dockerfile` / CI / 文档中全部 npm 命令改为 pnpm。依赖新增 `undici@^7.29.0`（**必须 7.x**：8.x 与 Node 24 内置 undici 不兼容，dispatcher 报 `invalid onRequestStart method`）、`socks-proxy-agent@^10.1.0`。
+- **组件自动导入改为按文件名注册（`pathPrefix: false`）** — Nuxt 默认 `pathPrefix: true` 会给子目录组件加目录前缀（`ui/ConfirmDialog.vue` → `UiConfirmDialog`），而模板用的是无前缀名，导致共享 UI 组件全部解析失败（详见修复「全站删除按钮无响应」）。改为按文件名注册，无 basename 冲突，admin 面板本就显式 import 不受影响。
+- **web-import 入队前协议校验** — `/api/tasks/web-import` 与 `/api/tasks` 在入队前校验 URL 必须为 http/https（并在既有的私网地址校验之前），`ftp://` 等协议直接在入口拒绝，不再进入 sidecar 下载环节白跑一趟。
+- **批量导入面板错误文案** — ImportPanel 将服务端/扩展返回的原始英文错误（`unsupported protocol`、`Forbidden URL scheme: ftp`、`DNS resolution failed` 等）映射为中文友好提示；提交前做客户端 URL 协议预检，非法链接即时标错不入队。
+- **机器人配置读取** — `server/lib/bot/bot.ts` 改为 DB settings 优先 + env 回退的惰性构建（`getBot()` / `rebuildBot()`），代理/中转连接统一封装于 `server/utils/bot-proxy.ts`（`buildBotClient`，bot 与测试端点共用）。
+- **S3 客户端** — `server/utils/s3.ts` 改为按 settings 惰性构建 + 可重建（`resetS3Client`），配置变更后自动生效。
+- **管理端点契约** — `/api/admin/settings` GET 返回 `{ categories, items }`（含 type/label/description/options/masked 元数据）而非扁平 `{ key: value }`；PUT 收 `{ settings }` 且仅接受注册表内键。
+- **`getIsAdmin` / SSR 上下文** — 内网判定改读 DB `run_mode`（10s 缓存热刷新），`event.context.intranetMode` 与 `siteSettings.intranet_mode` 均由该设置推导。
+- **公开设置接口白名单收窄** — `GET /api/settings/public` 仅返回 `site_title` / `site_description` / `announcement` / `head_inject` / `maintenance_mode`，不再公开 `site_url`、安全模式配置、AI/运行模式标志；SSR 上下文单独注入 UI 所需标志。
+- **Extension Key 生成兼容 Nitro es2019** — base62 生成改为无偏 rejection sampling，移除 BigInt 字面量，消除生产构建中的 esbuild 兼容警告。
+- **自动导入冲突清理** — `parseCookies` 重命名为 `parseCookieHeader`、移除 `SettingCategory` 重复 re-export，消除 typecheck/build 中的 duplicate import 警告。
+
+### 修复
+- **搜索首字符无候选** — 自动补全改为输入第 1 个字符即开始联想，防抖从 250ms 缩短到 150ms，避免前几次按键看起来没有反应。
+- **网页批量导入来源误判为其他** — `enqueueJob` 统一对 URL 做来源识别，网页/扩展/API 入队不再漏传 `source_site`/`source_id`；流水线对旧队列任务按 `source_url` 兜底识别，Pixiv/Twitter/Danbooru 链接不再落入 `other`。
+- **后台可修改图片来源分类** — 新增 `PATCH /api/admin/posts/:id/source`（管理员会话），「图片管理」桌面与移动列表加入来源下拉，可直接把已入库的 `other` 修正为 `pixiv`/`twitter`/`danbooru`；多图系列会整组同步，`source_id` 在来源 URL 可识别时自动补齐。
+- **全站删除按钮无响应** — Nuxt 组件自动导入默认 `pathPrefix: true`，`ui/ConfirmDialog.vue` 等被注册为 `UiConfirmDialog`（带目录前缀），而模板写的是 `<ConfirmDialog>`（无前缀），共享 UI 组件（ConfirmDialog / ToastContainer / PageHeader / EmptyState / LoadingCard / TagIdTooltip）全部解析失败 → 确认弹窗从不渲染 → 所有删除按钮点击后静默无响应。`nuxt.config.ts` 设 `components: { dirs: [{ path: '~/components', pathPrefix: false }] }` 修复，同时消除 SSR hydration mismatch。
+- **删除按钮样式不统一** — 详情页 PostInfoPanel 用 `btn-ghost`+红描边、PostsPanel 桌面表格删除按钮默认 40% 透明度（hover 才显示）、AutoRatingPanel 字号不一致；统一为 `btn-danger` 小尺寸样式，桌面表格删除图标常显。
+- **AI 全局开关写不进 DB** — `ai_tag_processing_enabled` 不在 `SETTING_DEFS` 注册表，`updateSettings()` 白名单过滤后静默丢弃，AI 开关永远关不掉（刷新后仍是旧值）。已加入注册表（`adminPanel: false` 避免在「站点设置」卡片重复渲染，由「AI 设置」面板维护）。
+- **后台登录入口在 intranet 模式误显** — 登录/退出入口现在由 `intranetMode` 统一控制（`default.vue` / `BottomTabBar.vue` / `login.vue`），内网模式完全隐藏。
+- **`defineAsyncComponent` 类型错误** — 移除 Vue 3.5 不存在的 `name` 选项（`admin/index.vue`），KeepAlive 匹配改由 SFC `defineOptions` 驱动。
+- **worker 健康检查误报** — alpine 镜像无 `pgrep`，compose healthcheck 改查 `/proc/1/cmdline`。
+- **SSRF TOCTOU 竞争** — 下载 URL 校验与请求之间可被 DNS 重绑定利用；HTTPAdapter 层加 socket 级 IP 复核，扩展 SSRF 测试覆盖重绑定场景。
+- **S3 反代路径遍历**（`/i/[...].ts`）— 路径未防护 `..`/`.` 组件；加 key 校验拒绝遍历，并封堵百分号编码、反斜杠、绝对路径与控制字符绕过。
+- **外部描述 HTML 泄漏**（PostInfoPanel）— Pixiv/Twitter 描述存原始 HTML（`<br>`/`<a>`），前端文本插值导致标签字面量泄漏到界面；sanitize 序列化时剥离为纯文本（保留换行）+ `whitespace-pre-line` 渲染。
+- **登录信息泄露**（login.vue）— 错误提示区分「用户不存在」与「密码错误」，改为统一文案。
+- **容器以 root 运行**（Dockerfile + sidecar/Dockerfile）— 补非 root 用户（appgroup/appuser）；sidecar `adduser` 语法适配 debian-slim（`-S` → `--system --ingroup`）。
+- **webhook 认证缺口**（webhook.post.ts）— `x-telegram-bot-api-secret-token` 校验补 `NODE_ENV=production` 强制 + bot 未配置 503。
+- **`settings/index.put.ts` 裸 select 泄露** — 改为走 `getSettings()`（投影白名单），杜绝未来新增敏感列被管理接口顺带返回。
+- **AI provider toggle 竞态** — 单活跃语义改为事务内更新，防并发写入出现双活跃。
+- **AI reprocess 鲁棒性** — client 超时 30s→60s（DeepSeek 25 标签 JSON 批次常超 30s 导致整批 abort）；reprocess `VALUES` 更新补 `tag_category_enum` 显式 cast（text→enum 隐式转换失败会丢弃 tags 表写入）；结果按批次同步而非最后一次性 bulk update（中途中断不再导致 knowledge 与 tags 分叉）。
+- **posts `[id].patch.ts` 绕过 Zod** — 补 schema 校验层；tags.put 重构拆分职责。
+- **bot.ts 显式 import 合规** — 移除大面积 auto-import 依赖（lib/ 不被 Nitro auto-import）。
+- **过时构建脚本清理** — 删 `infra/scripts/build.sh`（完全过时），migrate-db.sh 适配 pnpm。
+- **前端组件修复** — PhotoCard/Pagination/ImageModal/ThemeToggle/AdminStatusBar/DashboardPanel/PostsPanel 等样式与逻辑问题（vue-a11y、焦点、空态、aria）。
+- **设置开关项描述换行挤压**（SettingsPanel）— 布尔字段的复选框/标签/描述原先同处一行，xl 双列布局下字段格约 250px 宽，长描述把标签挤成竖排单字；描述改为下行缩进对齐，与其他字段类型一致。
+- **Dockerfile 修复** — pnpm 构建阶段补全局安装（corepack/enable + pnpm@10.9.0），生产镜像 CMD 修正。
+- **extension 修复** — service-worker 后台任务兜底、popup 测试补齐 43 行。
+- **run_mode 默认值安全加固** — 默认从 intranet 改为 public（登录墙+评级限制），内网模式需手动选择；避免全新公网部署因默认内网模式被匿名接管。
+- **Bot 重建竞态** — `rebuildBot()` 改为先构建新实例再原子替换（不再先 null）；`getBot()` 加 in-flight promise guard 防并发构建 orphan 泄漏；`chatSemaphores` 提至模块级，重建不丢失信号量状态。
+- **test-bot SSRF 防护** — mtproto/http/socks 代理地址经 `isPrivateHost()` 校验，拒绝指向内网/私网。
+- **Webhook secret 常量时间比较** — 从 `!==` 改为 `crypto.timingSafeEqual`，与 `checkApiKey` 统一。
+- **Secret 可吊销** — `updateSettings` 接受 `__CLEAR__` 哨兵值清空密钥；`updateSettings` 补 readonly 键 defense-in-depth 过滤。
+- **Pixiv Redis 同步守卫** — 从 `in` 检查改为非空值检查，避免空串覆盖 sidecar 的 env 回退路径。
+- **测试 Bot 按钮可用** — 移除 secret 空串时的禁用条件，支持用已保存配置测试连接。
+- **`.env.example` 修正** — `THUMB_SIZE`/`PREVIEW_SIZE` 改为纯数字格式；补充 seed-only 说明。
+- **任务状态接口多图数据泄漏** — `/api/tasks/:id` 原实现只剥离顶层 `image_bytes_b64` / `phash`，多图结果的 `metadata.pages[]` 仍会返回原始图片与感知哈希；改为递归剥离全部层级。
+- **详情页安全模式遮罩回归** — 详情图片区无条件套用 `PostBlurOverlay`，导致所有作品默认被隐藏；改为仅在 `is_blurred === true` 时遮挡，并按作品 id 重置展开状态。
+- **web-import 入参校验** — `urls` 必须为非空字符串数组，异常请求体不再落入后续 `.map()` 导致 500。
+- **pipeline AI 分类从未触发（C1）** — `aiProcessTagsForPost(postId, [])` 传空数组导致导入后 `tag.category` 永远停在 `general`、`tag_knowledge` 永不写入；单图与多图路径均改为透传事务内 upsert 出的 `tagIds`，AI 记忆闭环在自动导入路径恢复。
+- **rebuildBot 原子替换名不副实（C2）** — 实现仍是「先 null 再重建」，webhook 窗口期命中无 handler 占位 Bot；改为构建新实例到局部变量、ready 后原子赋值。
+- **webhook drop_pending_updates 每次热刷新都丢消息（H7）** — `syncBotWebhook` 每次 `setWebhook` 都传 `drop_pending_updates: true`；改为模块级 `webhookInitialized` 标记，仅首次启动 true，热刷新不再丢弃 Telegram pending 队列。
+- **SSE 客户端断开后服务端仍轮询 5 分钟（H1）** — web-import 流 `ReadableStream` 无 `cancel()`；补 `cancel()` + AbortController 中断循环，`enqueue` 抛错时清理退出，不再无主轮询 Redis。
+- **EventSource 多次开始导入泄漏旧流（H2）** — ImportPanel 每次赋值前 `eventSource?.close()`，不再栈式累积连接。
+- **pollJobResult 竞态 + Redis 泄漏（H3）** — 读到 `status=done` 而 result 暂空时 100ms×3 重试；超时与 error 路径同时清理 `kura:results:*` 与 `kura:job_status:*`。
+- **Bot 评级倒计时每秒 edit 撞 Telegram 限流（H4）** — 10s 倒计时只在 5/3/1 秒编辑消息（3 次/倒计时），3 个并发评级不再撞 30/sec 全局限流。
+- **bot 代理未知类型静默当 apiRoot（H5）** — `bot_proxy_type` 拼错（如 `htp`）会把 bot token + 回调发往攻击者 URL；未识别类型一律直连（仅 `mtproto` 与空值保留 apiRoot 语义）。
+- **AI provider endpoint 无 SSRF 校验（H6）** — 新增 `validateEndpointHost`：endpoint 指向私网/回环地址（含云元数据 169.254.169.254）时拒绝保存，杜绝 Bearer 凭据被 POST 到内网。
+- **设置热刷新钩子无隔离（H8）** — `refreshSettings` 改 `Promise.allSettled` 并行执行，单个 hook 失败不再中断 S3/Bot/Pixiv/AI 其余刷新。
+- **SettingsPanel 草稿丢失（H13）** — `watch(items)` 在保存后刷新时把所有未保存的 secret 明文清空；改为仅在 `secretDirty[key] === false` 时重置。
+- **TagsPanel/PostsPanel 不刷新（H13）** — TagsPanel 的 `page` 改响应式 computed、`useAsyncData` key 含全部筛选参数、双向 watch 路由 query；PostsPanel watch 补 `perPage`（切 20/40/100 条/页即时刷新）。
+- **admin settings PUT 无类型校验（H9）** — 按 `SETTING_DEFS` 注册表类型逐键校验（boolean/number/select 枚举/长度上限），`run_mode: '<script>'` 等脏值不再落库。
+- **aiProcessTagsForPost 每标签单行 UPDATE（H11）** — 100 标签 = 100 次往返改为单条 `VALUES` 批量 UPDATE（含 `tag_category_enum` cast，与 reprocessTags 同模式）。
+- **fix-artist-categories 循环 N×2 次 count（H12）** — 预取 clean 对照（一次 `IN` 查询）+ 用 UPDATE 受影响行数替代 2 次 count 聚合扫描。
+- **02-cache-control 重复 getIsAdmin（H14）** — 01-ssr-context 现在为 /api/ 路径也预计算 `event.context.isAdmin`，缓存中间件优先复用，不再每条 API 请求重复认证计算。
+- **SSR HTML s-maxage=300 与 Set-Cookie 并存（H15）** — 检测响应含 `set-cookie` 时降级 `private, no-store`，防止 CDN 把登录响应分发给其它访客。
+- **/i/ Range header 未校验（H16）** — 服务端解析并重写 `bytes=start-end`（end = min(请求 end, fileSize-1)，fileSize 经 HEAD 缓存）；非法语法丢弃 Range。
+- **列表/搜索排序无 tiebreaker（H17）** — `listPosts`/`searchPosts` 排序改 `created_at DESC, id DESC`，配套复合索引迁移（0009），同秒级 createdAt 翻页不再重复/遗漏。
+- **suggestMerges 单 prompt 塞 200 标签（H18）** — 按 50 分块多次调用 AI 并合并去重，小模型不再截断丢末尾。
+- **registerAiWorkers 并发竞态（M1）** — in-flight promise 互斥，配置热刷新并发不再重复注册 worker。
+- **sync-tasks 全表 UPDATE 写锁风险（M2）** — 相关子查询版改为单条 `UPDATE ... FROM (GROUP BY)` join，一次聚合扫描。
+- **changeAdminPassword Redis 故障下旧 session 复活窗口（M3）** — epoch 写入失败时回滚 DB 更新，DB 与 Redis 保持原子一致。
+- **login.vue 两种错误文案（M4）** — 「登录失败」与「用户名或密码错误」统一为「用户名或密码错误」，user-enumeration 修干净。
+- **限流 IP 信任 XFF（M5）** — 登录锁定与 API key 限流改读 `X-Real-IP`（反代设置）或直连 socket 地址，忽略可伪造的 `X-Forwarded-For`。
+- **test-dl-proxy 缺 SSRF 校验（M7）** — 代理地址指向私网/回环时拒绝，与 test-bot 一致。
+- **adminCache 淘汰 O(N log N)（M9）** — Map 插入序 FIFO 淘汰，O(1)。
+- **posts tags.put 无长度上限（M12）** — add_tags / remove_tag_ids 各限 100 个。
+- **chatSemaphores 永不 delete（M13）** — 上限 500 chat 真 LRU 淘汰（命中刷新插入序），重建仍不丢信号量状态。
+- **/aitags 同步阻塞 chat（M14）** — 立即回复「处理中」，后台执行完编辑结果消息，不再排队阻塞该 chat 5+ 分钟。
+- **/search 无节流（M15）** — per-chat 3s 节流，防误连发触发 N 次 PG 查询。
+- **dashboard breakdown 全表 GROUP BY（M16）** — source/rating 分布并入 `mv_dashboard_stats`（jsonb 列，迁移 0008），dashboard 请求不再全表聚合。
+- **搜索 EXISTS 缺复合索引（M17）** — `(tag_id, post_id)` 复合索引（迁移 0009）。
+- **admin/tags 前缀查询走不了 trgm（M19）** — `(name) text_pattern_ops` B-tree 索引（迁移 0009）。
+- **批量导入 SSE 清理修复** — `ImportPanel` 的 `onUnmounted` 从事件处理器移到 setup 顶层，离开后台 tab 时正确关闭 EventSource，避免连接泄漏。
+- **Extension 导入错误展示** — content script 直接展示服务端返回的 `error` 文案，不再一律显示「失败」；对应 37 条扩展测试全部通过。
+- **Sidecar SSRF 黑名单补齐** — 增加 CGNAT、文档/基准/保留段、组播、IPv6 文档/组播等私网与保留地址范围，并补充回归测试。
+
+### 性能（单人/低并发部署资源削版）
+
+> 核心精神：别套云端 25% 法则 — 单人用单人配置，削比堆更对。
+> 容器层内存上限合计 ~2GB（8GB 本机可稳跑）。
+
+- **PostgreSQL 自定义 `postgresql.conf`**（`infra/postgres/`）— `shared_buffers=32MB`、`max_connections=20`、`work_mem=2MB`、`autovacuum_max_workers=1`、日志 50MB 轮转封顶；容器 `mem_limit: 384m`、`pids_limit: 50`。
+- **Redis `maxmemory=64mb` + `allkeys-lru`** — 硬上限防 AOF 涨满；关 RDB snapshot（`--save ""`），AOF rewrite 限流；容器 `mem_limit: 128m`。
+- **Web 容器 `mem_limit: 1g` + V8 `--max-old-space-size=512`** — V8 默认 ~4GB 上限无意义，512MB 给 sharp 大图 + pg-boss 余量；sharp/libvips 需要 `shm_size: 256m`。
+- **`sharp.concurrency(1)` + `sharp.cache(false)`** — 默认 N_cores（本机 8 worker × 300MB = 2.4GB 突发）削为 1 worker；50MB 内部 LRU 关掉（pipeline 每张图一次性）。`SHARP_CONCURRENCY` 可调。
+- **postgres-js `max: 8` + `idle_timeout: 30`** — 削自 20 连接，单人常态并发 4-5 个。
+- **pipeline BRPOP timeout 5s → 30s** — 空转 wakeup -83%。
+- **adminCache 1000 → 50** — 单人 admin 1 个会话 cookie，消除无界增长。
+- **sidecar `SIDECAR_WORKERS=1`** — 模块级 ThreadPoolExecutor 显式 1 worker（默认 min(32, cpu+4) 线程浪费内存）；`PILLOW_MAX_IMAGE_PIXELS=50000000` 防 zip bomb；容器 `mem_limit: 512m`。
+- **admin KeepAlive 选择性** — 10 个面板全缓存 → 仅缓存 AiAssistantPanel / TagsPanel（编辑态），其余切 tab 卸载，浏览器内存 -50-150MB。
+- **AdminStatusBar 5s → 30s 轮询** — 队列深度请求 -83%。
+- **dashboard 走 MV** — source/rating breakdown 并入 `mv_dashboard_stats`（jsonb 列，迁移 0008），请求从全表 GROUP BY（~50ms）变为读物化视图（~2ms）。
+
+## [0.9.0] - 2026-07-20
+
+### 新增
+- **服务端分层重构（ADR-0004 落地的横切层）** — `server/utils/*.ts` 巨型文件拆分：
+  - `server/lib/` 承载领域逻辑（posts/tags/search/import/ai/bot 各成模块，`queries.ts` → repo 模块化）
+  - `server/platform/` 承载横切关注点（`http/` handler 包装与 zod schema、`contract/` 契约冻结、`queue/`、`jobs/`、`errors/`、`openapi/`）
+  - 全部端点迁移到 `defineAdminHandler` / `defineApiKeyHandler` / `defineExtHandler` / `definePublicHandler` / `defineTelegramHandler` 包装；zod@4 全量入参校验；统一错误形状 `{ code, message, details? }`（`AppError`）
+- **契约冻结（ADR-0004）** — `server/platform/contract/endpoints.ts` 冻结 59 端点（extension/bot/image 三类标 frozen）；`check.mjs` 双向漂移守护：路由文件与契约清单不一致即失败；`npm run test:contract` + CI 契约 job。
+- **队列重构（ADR-0001 + pg-boss）** — 定义 `JobQueue` 接口（enqueue/getStatus/consume/retry）；Node 侧 AI jobs + 定时任务（dashboard-refresh / sync-tasks）收编 pg-boss（SKIP LOCKED 恰好一次、重试 + DLQ + redrive）；sidecar Redis 桥（`kura:jobs`→BRPOP）不变。spike 验证 7/7 PASS。
+- **搜索去 RediSearch（ADR-0002）** — 删除 RediSearch 依赖，autocomplete 改走 PG `pg_trgm`（审计 §5 三重名不副实证据链：Redis 里既无索引也无数据）。
+- **多档缩略图 srcset（ADR-0003）** — 导入期 sharp 预生成 300w/640w/1280w/2000w 四档 + LQIP 20²，webp 独立 S3 key（`<base>-<w>w.webp` 后缀约定）；前端 PhotoCard 接 `srcset/sizes`，旧格式回退单图；`/i/` 反代不变（Range 透传 + 流式）。
+- **phash 前缀桶索引（B6）** — 为 phash 前缀桶查找加 expression index（跨时代 phash 去重 8-bit Hamming 阈值查询提速）。
+- **AI Provider 配置迁移至管理后台** — 新增 `ai_providers` 表（迁移 `0007_ai_providers.sql`）与新管理标签页「AI 设置」：Provider 可增删改、启停（同时最多一个生效）、测试连接（显示延迟/错误），并提供全局「AI 标签处理」开关（settings KV `ai_tag_processing_enabled`）。变更即时生效，无需重启。首次启动时若表为空且 `AI_PROVIDER_*` 环境变量已设置，会自动导入为一条 Provider 记录；环境变量降级为可选的 seed/fallback。
+- **管理 API**：`GET/POST /api/admin/ai/providers`、`PUT/DELETE /api/admin/ai/providers/:id`、`POST /api/admin/ai/providers/test`、`PUT /api/admin/ai/toggle`。API Key 在任何 GET 响应中只返回掩码（前 4 + 后 4），编辑时留空表示保持不变。
+- **前端配套重构** — 删前端死代码（api.ts 5 函数 + utils.ts + main.css 冗余类）；抽 `useAiJobPolling` composable（3 个 AI 面板轮询收敛）；`ai.ts` 显式 import `fetchApi`（规避 auto-import chunk 失效）；AiChatPanel 发送最近 10 条消息作历史上下文 + 清空对话按钮 + 空态 3 个快捷问题。
+
+### 变更
+- **服务端目录规范** — `server/utils/` 文件改为 re-export shim（向后兼容），新代码从 `lib/` / `platform/` 显式 import；**`server/modules/` 名称被 Nitro 保留**（scanModules 会在构建期执行每个文件，曾导致 bot 模块在 CI 空 token 下抛 `Empty token!`），故领域目录定名 `server/lib/`。
 - `getAiConfig()` 改为读取 DB 快照（启动时 + 每次管理端写入后刷新），保持同步签名，所有既有调用方不变；迁移未应用时自动回退到环境变量行为。
 - pipeline / bot 中 8 处 `ENABLE_AI_TAG_PROCESSING` 直接环境变量检查统一改为 `isAiEnabled()`。
 - 页脚 AI 徽章改由公开设置接口的 `ai_enabled` 字段驱动（仅布尔标志，不含任何密钥/端点信息），不再依赖构建期 env 快照。
+- **CI 收紧** — docker-publish 加「tag 必须打在 main 分支 commit 上」校验（防 fork/分支上打 v* tag 污染 `:latest`）；build-extension 由任意 push 收紧为 v* tag push。
+- **文档重组** — 8 个过程性文档移入存档（runbook/audit/spike 等）；重写 architecture/decisions/SUMMARY/CLAUDE.md 反映 v0.9.0 结构。
+
+### 修复
+- **pg-boss 定时任务静默不注册** — `schedule()` 有 FK 约束，队列不存在直接抛错中断 `registerJobs`（被插件 catch 吞掉仅日志可见）。按 spike 顺序补 `createQueue`，dashboard-refresh / sync-tasks 定时任务恢复注册。
+- **`server/modules` 构建期执行** — Nitro 2.13 `scanModules` 把 `server/modules/**` 每个文件当 Nitro module 在构建期用 jiti 执行；重命名为 `server/lib`（24 文件移动 + 14 处 import + 文档同步）。
+- **类型修复** — AiStatusBar/AdminStatusBar 补 `AiStatus` 显式 import（TS2304）；AiStatusBar 模板内 IIFE `new URL` 改 `endpointHost` 函数（TS2339）；dashboard `db.execute().rows` 类型兼容（`as any` 过渡）。
 
 ## [0.8.1] - 2026-07-17
 

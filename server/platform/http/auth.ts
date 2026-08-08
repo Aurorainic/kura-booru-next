@@ -50,6 +50,17 @@ async function requireAdmin(event: H3Event): Promise<AdminAuth> {
   throw new AppError('ADMIN_REQUIRED', 401, 'Admin required')
 }
 
+/**
+ * M5: 限流取客户端 IP — 只信任反向代理设置的 X-Real-IP，忽略
+ * X-Forwarded-For（攻击者可伪造 XFF 轮换绕过登录锁定/API 限流）。
+ * 无代理时取直连 socket 地址。
+ */
+export function getClientIp(event: H3Event): string {
+  const realIp = getHeader(event, 'x-real-ip')
+  if (realIp) return realIp
+  return getRequestIP(event) || 'unknown'
+}
+
 export function defineAdminHandler<S extends HandlerSchemas | undefined = undefined>(
   opts: CommonOptions<S> & { handler: (ctx: Ctx<AdminAuth, S>) => unknown | Promise<unknown> },
 ) {
@@ -69,7 +80,7 @@ function requireAdminOrApiKey(auditAction: string) {
       throw new AppError('UNAUTHORIZED', 401, 'Unauthorized')
     }
     // API-key callers get rate-limited + audit-logged; admin sessions skip both.
-    const ip = getRequestIP(event, { xForwardedFor: true }) || 'unknown'
+    const ip = getClientIp(event)
     const rlKey = `apikey:rate:${ip}`
     const count = await redis.incr(rlKey)
     if (count === 1) await redis.expire(rlKey, API_KEY_RATE_WINDOW_SEC)
@@ -137,21 +148,35 @@ export function defineTelegramHandler<S extends HandlerSchemas | undefined = und
   return defineWrappedHandler({
     authKind: 'telegram',
     authenticate: async (event) => {
-      // Verify bot is configured
-      const { bot } = await import('../../utils/bot')
-      if (!bot.token) {
+      // Verify bot is configured & enabled. Disabled → 404 (module hidden),
+      // consistent with the content-rating existence-hiding model.
+      const { getBotConfig } = await import('../../utils/settings')
+      const botCfg = await getBotConfig()
+      if (!botCfg.enabled) {
+        throw new AppError('NOT_FOUND', 404, 'Bot disabled')
+      }
+
+      const { getBot, ensureBotReady } = await import('../../utils/bot')
+      const bot = await getBot()
+      if (!bot.token || bot.token === 'unset') {
         throw new AppError('SERVICE_UNAVAILABLE', 503, 'Bot not configured')
       }
 
       // Verify webhook secret token
       const secret = getHeader(event, 'x-telegram-bot-api-secret-token')
-      const expectedSecret = process.env.BOT_WEBHOOK_SECRET
+      const expectedSecret = botCfg.webhookSecret
 
       if (process.env.NODE_ENV === 'production' && !expectedSecret) {
         throw new AppError('INTERNAL', 500, 'Webhook secret not configured')
       }
-      if (expectedSecret && secret !== expectedSecret) {
-        throw new AppError('UNAUTHORIZED', 401, 'Unauthorized')
+      if (expectedSecret) {
+        // ponytail: constant-time comparison — same pattern as checkApiKey.
+        const crypto = await import('crypto')
+        const a = Buffer.from(secret || '')
+        const b = Buffer.from(expectedSecret)
+        if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+          throw new AppError('UNAUTHORIZED', 401, 'Unauthorized')
+        }
       }
 
       return { kind: 'telegram' as const }

@@ -32,7 +32,7 @@ For the complete list of all variables with descriptions and defaults, see [`inf
 
 | Variable | Description |
 |---|---|
-| `SITE_URL` | Your public site URL (e.g., `https://kura-booru.example.com`) |
+| `SITE_URL` | Your public site URL (e.g., `https://kura-booru.example.com`) — **seed-only**: imported into the settings table on first boot; after that, change it in the admin Settings panel (editing `.env` and restarting has no effect once seeded) |
 | `KURA_IMAGE_TAG` | Release tag to pin (e.g. `v0.7.2`); empty → `:latest` (rejected by `validate-env.sh prod`) |
 | `SECRET_KEY` | Generate with: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `POSTGRES_PASSWORD` | Database password |
@@ -82,6 +82,26 @@ docker compose --env-file ../.env -f docker-compose.yml up -d
 ```
 
 The browser talks directly to the Nuxt server (`:3000`), which handles SSR and proxies image requests to S3 internally.
+
+### Run Mode: Intranet vs Public (Admin Panel Switch)
+
+The run mode is a **database setting**, configured in the admin panel at
+`/admin?tab=settings` → **站点 → 运行模式** (default: `public`). No environment
+variable is involved; changing it takes effect immediately (hot-reload).
+
+- **intranet（内网）** — no admin login wall: every visitor is treated as an
+  admin, all content ratings are visible, `/admin` and all panels are open,
+  and login/logout UI entries are hidden. Use only on a trusted local network
+  (LAN or VPN).
+- **public（公网）** — login wall + rating restrictions restored: anonymous
+  visitors see only `safe` content, non-safe returns 404, and admin actions
+  require an admin session.
+
+Do **not** run the public internet in `intranet` mode, because it completely
+disables the admin access control.
+
+> 提示：首次部署（settings 表无 `run_mode` 记录）时默认即为 `public`（登录墙 + 评级限制）；
+> 仅可信内网可在后台切换为「内网模式」（所有访客视为管理员）。
 
 ### Reverse Proxy Optimized Mode (Production)
 
@@ -148,7 +168,7 @@ strategy and rollback.
 The stack uses the same PostgreSQL as v1. Existing tables and data are reused. If starting fresh:
 
 ```bash
-npm run db:push   # Push Drizzle schema to database
+pnpm run db:push   # Push Drizzle schema to database
 ```
 
 ### 4. Configure Reverse Proxy (Reverse Proxy Optimized mode only)

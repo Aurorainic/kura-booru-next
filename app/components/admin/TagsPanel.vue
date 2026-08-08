@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import type { TagCategory } from '~/types'
 
+// KeepAlive include 按组件名匹配（admin/index.vue 只缓存本面板与 AiAssistantPanel）
+defineOptions({ name: 'TagsPanel' })
+
 const { ssrCookie } = useSsrContext()
 const route = useRoute()
-const page = Math.max(1, parseInt(route.query.page as string || '1'))
 const toast = useToast()
 const confirm = useConfirm()
 
@@ -12,11 +14,14 @@ const categoryFilter = ref<TagCategory | ''>((route.query.category as TagCategor
 const aiStatusFilter = ref<'all' | 'unprocessed' | 'processed'>(((route.query.ai_status as any) || 'all'))
 const sortKey = ref<'post_count' | 'name' | 'created_at'>(((route.query.sort as any) || 'post_count'))
 
+// H13: 响应式 page（route.query.page 变化时重新取数），而非模块级常量
+const page = computed(() => Math.max(1, parseInt(route.query.page as string || '1')))
+
 async function refetch() {
   try {
     return await fetchAdminTags({
       q: searchQuery.value || undefined,
-      page,
+      page: page.value,
       per_page: 50,
       category: categoryFilter.value || undefined,
       ai_status: aiStatusFilter.value === 'all' ? undefined : aiStatusFilter.value,
@@ -27,17 +32,31 @@ async function refetch() {
   }
 }
 
-const { data, refresh } = await useAsyncData('admin-tags', refetch)
+// H13: key 含路由参数 — 切回 tab 或翻页时 useAsyncData 重新取数而非命中旧缓存
+const { data, refresh } = await useAsyncData(
+  () => `admin-tags-${page.value}-${searchQuery.value}-${categoryFilter.value}-${aiStatusFilter.value}-${sortKey.value}`,
+  refetch,
+)
 
 const tags = computed(() => data.value?.items || [])
 
+// H13: 路由参数（分页/搜索/筛选）变化时刷新数据
+watch([() => route.query.page, () => route.query.q, () => route.query.category, () => route.query.ai_status, () => route.query.sort], () => {
+  searchQuery.value = (route.query.q as string) || ''
+  categoryFilter.value = (route.query.category as TagCategory | '') || ''
+  aiStatusFilter.value = ((route.query.ai_status as any) || 'all')
+  sortKey.value = ((route.query.sort as any) || 'post_count')
+  refresh()
+})
+
+// 本地筛选状态 → URL（replace 不污染历史记录）；URL 变化由上方 watch 回灌
 watch([searchQuery, categoryFilter, aiStatusFilter, sortKey], () => {
   const next: Record<string, string> = {}
   if (searchQuery.value) next.q = searchQuery.value
   if (categoryFilter.value) next.category = categoryFilter.value
   if (aiStatusFilter.value !== 'all') next.ai_status = aiStatusFilter.value
   if (sortKey.value !== 'post_count') next.sort = sortKey.value
-  if (page > 1) next.page = String(page)
+  if (page.value > 1) next.page = String(page.value)
   navigateTo({ path: route.path, query: next }, { replace: true })
 })
 

@@ -28,7 +28,7 @@ export function renumberSeriesPageIndex(
 }
 
 // ponytail: one runnable self-check — fails if the renumber math drifts.
-// Run with: npx tsx server/utils/series-admin.ts
+// Run with: pnpm exec tsx server/utils/series-admin.ts
 async function _selfCheck() {
   // delete page 2 from a 1,2,3 series → 1 stays, 3→2
   const m1 = renumberSeriesPageIndex(

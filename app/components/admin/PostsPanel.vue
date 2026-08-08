@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Post, Rating } from '~/types'
+import type { Post, Rating, SourceSite } from '~/types'
 
 const { ssrCookie } = useSsrContext()
 const route = useRoute()
@@ -14,6 +14,12 @@ const ratings: { value: string; label: string; rating?: Rating }[] = [
   { value: 'questionable', label: '敏感', rating: 'questionable' },
   { value: 'explicit', label: '限制', rating: 'explicit' },
 ]
+const sourceSites: { value: SourceSite; label: string }[] = [
+  { value: 'pixiv', label: 'Pixiv' },
+  { value: 'twitter', label: 'Twitter/X' },
+  { value: 'danbooru', label: 'Danbooru' },
+  { value: 'other', label: '其他' },
+]
 
 // Pagination
 const page = computed(() => Number(route.query.p) || 1)
@@ -23,7 +29,7 @@ const perPage = ref(40)
 const { data, refresh, pending } = await useAsyncData(
   () => `admin-posts-${page.value}-${perPage.value}-${ratingFilter.value}`,
   () => fetchAdminPosts({ page: page.value, per_page: perPage.value, rating: ratingFilter.value || undefined }, ssrCookie.value),
-  { watch: [page, ratingFilter] },
+  { watch: [page, perPage, ratingFilter] },
 )
 
 const posts = computed(() => data.value?.items || [])
@@ -58,6 +64,21 @@ async function updateRating(post: Post, newRating: string) {
     toast.error('评级更新失败')
   } finally {
     saving.value.delete(post.id)
+  }
+}
+
+const savingSource = ref<Set<string>>(new Set())
+async function updateSource(post: Post, newSource: string) {
+  if (newSource === post.source_site) return
+  savingSource.value.add(post.id)
+  try {
+    await updatePostSource(post.id, newSource as SourceSite)
+    post.source_site = newSource as SourceSite
+    toast.success('来源已更新')
+  } catch {
+    toast.error('来源更新失败')
+  } finally {
+    savingSource.value.delete(post.id)
   }
 }
 
@@ -123,13 +144,13 @@ function goPage(p: number) {
         <table class="w-full text-sm">
           <thead>
             <tr class="border-b border-[var(--border-color)]" style="background: var(--accent-subtle);">
-              <th class="py-3 px-4 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">缩略图</th>
-              <th class="py-3 px-4 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">标题</th>
-              <th class="py-3 px-4 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">来源</th>
-              <th class="py-3 px-4 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">评级</th>
-              <th class="py-3 px-4 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">尺寸</th>
-              <th class="py-3 px-4 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider hidden lg:table-cell">日期</th>
-              <th class="py-3 px-4 text-right text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">操作</th>
+              <th class="py-2 px-3 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">缩略图</th>
+              <th class="py-2 px-3 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">标题</th>
+              <th class="py-2 px-3 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">来源</th>
+              <th class="py-2 px-3 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">评级</th>
+              <th class="py-2 px-3 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">尺寸</th>
+              <th class="py-2 px-3 text-left text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider hidden lg:table-cell">日期</th>
+              <th class="py-2 px-3 text-right text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -137,8 +158,8 @@ function goPage(p: number) {
               v-for="post in posts" :key="post.id"
               class="border-b border-[var(--border-color)]/50 transition-colors hover:bg-[var(--accent-subtle)]/50 group"
             >
-              <td class="py-2.5 px-4">
-                <NuxtLink :to="`/posts/${post.id}`" class="block w-16 h-16">
+              <td class="py-1.5 px-3">
+                <NuxtLink :to="`/posts/${post.id}`" class="block w-12 h-12">
                   <img
                     :src="`/i/${post.thumb_key}`"
                     :alt="post.title || ''"
@@ -147,13 +168,21 @@ function goPage(p: number) {
                   />
                 </NuxtLink>
               </td>
-              <td class="py-2.5 px-4 max-w-[200px] truncate font-medium text-[var(--text-primary)]" :title="post.title || ''">
-                {{ post.title || '(无标题)' }}
+              <td class="py-1.5 px-3 font-medium text-[var(--text-primary)]">
+                <div class="max-w-[180px] truncate" :title="post.title || ''">{{ post.title || '(无标题)' }}</div>
               </td>
-              <td class="py-2.5 px-4">
-                <span class="text-[0.6875rem] px-2 py-0.5 rounded-md font-medium" style="background: var(--accent-subtle); color: var(--accent-color);">{{ post.source_site }}</span>
+              <td class="py-1.5 px-3">
+                <select
+                  :value="post.source_site"
+                  @change="updateSource(post, ($event.target as HTMLSelectElement).value)"
+                  class="text-xs px-2 py-1 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] cursor-pointer focus:outline-none focus:border-[var(--accent-color)]"
+                  :disabled="savingSource.has(post.id)"
+                  :title="savingSource.has(post.id) ? '来源更新中…' : '修改来源'"
+                >
+                  <option v-for="s in sourceSites" :key="s.value" :value="s.value">{{ s.label }}</option>
+                </select>
               </td>
-              <td class="py-2.5 px-4">
+              <td class="py-1.5 px-3">
                 <select
                   :value="post.rating"
                   @change="updateRating(post, ($event.target as HTMLSelectElement).value)"
@@ -167,9 +196,9 @@ function goPage(p: number) {
                   <option value="explicit">限制</option>
                 </select>
               </td>
-              <td class="py-2.5 px-4 text-xs font-mono text-[var(--text-muted)]">{{ post.width }}×{{ post.height }}</td>
-              <td class="py-2.5 px-4 text-xs text-[var(--text-muted)] hidden lg:table-cell">{{ new Date(post.created_at).toLocaleDateString('zh-CN') }}</td>
-              <td class="py-2.5 px-4 text-right">
+              <td class="py-1.5 px-3 text-xs font-mono text-[var(--text-muted)]">{{ post.width }}×{{ post.height }}</td>
+              <td class="py-1.5 px-3 text-xs text-[var(--text-muted)] hidden lg:table-cell">{{ new Date(post.created_at).toLocaleDateString('zh-CN') }}</td>
+              <td class="py-1.5 px-3 text-right">
                 <button
                   @click="deletePostAction(post)"
                   class="btn-danger !w-8 !h-8 !px-0 !py-0 !justify-center"
@@ -194,7 +223,14 @@ function goPage(p: number) {
           <div class="flex-1 min-w-0 space-y-1">
             <div class="text-sm font-medium truncate text-[var(--text-primary)]">{{ post.title || '(无标题)' }}</div>
             <div class="flex items-center gap-2 text-[0.625rem] text-[var(--text-muted)]">
-              <span class="px-1.5 py-0.5 rounded text-[0.5625rem]" style="background: var(--accent-subtle); color: var(--accent-color);">{{ post.source_site }}</span>
+              <select
+                :value="post.source_site"
+                @change="updateSource(post, ($event.target as HTMLSelectElement).value)"
+                class="text-[0.625rem] px-1.5 py-0.5 rounded border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)]"
+                :disabled="savingSource.has(post.id)"
+              >
+                <option v-for="s in sourceSites" :key="s.value" :value="s.value">{{ s.label }}</option>
+              </select>
               <span>{{ post.width }}×{{ post.height }}</span>
             </div>
             <div class="flex items-center gap-2">

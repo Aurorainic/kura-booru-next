@@ -43,7 +43,10 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 
       <div class="relative w-full max-w-[680px] rounded-[var(--radius-md)] overflow-hidden bg-[var(--bg-surface)] border border-[var(--border-color)] transition-opacity duration-300" :style="{ opacity: loading ? 0.3 : 1 }">
         <NuxtLink v-if="currentPost" :to="`/posts/${currentPost.id}`" class="block">
-          <img :src="getPreviewUrl(currentPost)" :alt="currentPost.title || '随机插画'" class="w-full h-auto object-contain" loading="eager" decoding="async" />
+          <PostBlurOverlay v-if="currentPost.is_blurred" :key="currentPost.id" :post="currentPost" class="w-full">
+            <img :src="getPreviewUrl(currentPost)" :alt="currentPost.title || '随机插画'" class="w-full h-auto object-contain" loading="eager" decoding="async" />
+          </PostBlurOverlay>
+          <img v-else :src="getPreviewUrl(currentPost)" :alt="currentPost.title || '随机插画'" class="w-full h-auto object-contain" loading="eager" decoding="async" />
         </NuxtLink>
         <div v-else class="flex items-center justify-center py-24 text-[var(--text-muted)]">
           <p>暂无图片</p>

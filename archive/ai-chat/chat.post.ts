@@ -1,3 +1,5 @@
+// ARCHIVED (v0.10.0): AI 对话模块已归档，不再注册该路由（契约已移除）。
+// 原位置: server/routes/api/admin/ai/chat.post.ts。git 历史可恢复。
 import { defineAdminHandler } from '../../../../platform/http/auth'
 import { AppError } from '../../../../platform/errors'
 

@@ -3,6 +3,7 @@ import { getHeader } from 'h3'
 import { definePublicHandler } from '../../../platform/http/auth'
 import { AppError } from '../../../platform/errors'
 import { getIsAdmin } from '../../../utils/auth'
+import { isSafeModeActive } from '../../../utils/settings'
 import { getPost } from '../../../lib/posts/repo'
 
 const paramsSchema = z.object({
@@ -15,8 +16,9 @@ export default definePublicHandler({
   handler: async ({ event, params }) => {
     const cookie = getHeader(event, 'cookie') || ''
     const isAdmin = await getIsAdmin(cookie)
+    const safeModeActive = await isSafeModeActive(event)
     const post = await getPost(params.id, isAdmin)
     if (!post) throw new AppError('NOT_FOUND', 404, 'Not found')
-    return post
+    return { ...post, is_blurred: safeModeActive && post.rating !== 'safe' }
   },
 })

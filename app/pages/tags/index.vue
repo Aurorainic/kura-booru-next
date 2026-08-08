@@ -34,6 +34,9 @@ const categories = [
   { value: 'meta', label: '元信息' },
 ]
 
+// 分类颜色图例（剔除「全部」，与上方筛选器共用 labels）
+const legendCategories = categories.slice(1) as { value: TagCategory; label: string }[]
+
 const maxCount = computed(() => tags.value.length > 0 ? Math.max(...tags.value.map(t => t.post_count)) : 1)
 const minCount = computed(() => tags.value.length > 0 ? Math.min(...tags.value.map(t => t.post_count)) : 0)
 const countRange = computed(() => maxCount.value - minCount.value || 1)
@@ -59,9 +62,18 @@ useKeyboardShortcuts({ onPrevPage: () => goToPage(page.value - 1), onNextPage: (
         <h1 class="gradient-text" style="font-size: var(--font-size-display); font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; font-family: var(--font-display); animation: maskWipe var(--duration-display) var(--ease-out) both;">标签</h1>
         <p class="text-[var(--font-size-meta)] text-[var(--text-muted)] mt-1" style="animation: countUp 0.4s var(--ease-out) 0.2s both;">{{ total }} 个标签</p>
       </div>
-      <div class="inline-flex items-center bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[var(--radius-sm)] p-0.5">
-        <NuxtLink :to="`/tags?sort=count${category ? `&category=${category}` : ''}`" class="filter-pill px-3 py-1" :class="{ active: sort === 'count' }">数量</NuxtLink>
-        <NuxtLink :to="`/tags?sort=name${category ? `&category=${category}` : ''}`" class="filter-pill px-3 py-1" :class="{ active: sort === 'name' }">名称</NuxtLink>
+      <!-- 分段控件：bg-alt 底 + 边框，选中项带明确的背景态（深色下下划线太弱） -->
+      <div class="inline-flex items-center gap-1 p-0.5 rounded-lg bg-[var(--bg-alt)] border border-[var(--border-color)]">
+        <NuxtLink
+          :to="`/tags?sort=count${category ? `&category=${category}` : ''}`"
+          class="px-3 py-1 rounded-md text-[var(--font-size-meta)] font-medium transition-colors duration-[var(--duration-fast)]"
+          :class="sort === 'count' ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'"
+        >数量</NuxtLink>
+        <NuxtLink
+          :to="`/tags?sort=name${category ? `&category=${category}` : ''}`"
+          class="px-3 py-1 rounded-md text-[var(--font-size-meta)] font-medium transition-colors duration-[var(--duration-fast)]"
+          :class="sort === 'name' ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'"
+        >名称</NuxtLink>
       </div>
     </div>
 
@@ -80,12 +92,12 @@ useKeyboardShortcuts({ onPrevPage: () => goToPage(page.value - 1), onNextPage: (
          category color as text color, hover reveals translation + danbooru_name.
          No table; pagination below. -->
     <div v-if="tags.length > 0" class="mb-8" style="animation: pageIn var(--duration-slow) var(--ease-out);">
-      <div class="flex flex-wrap gap-x-4 gap-y-3 items-baseline">
+      <div class="flex flex-wrap gap-x-4 gap-y-4 items-baseline">
         <NuxtLink
           v-for="tag in tags"
           :key="tag.id"
           :to="`/tags/${encodeURIComponent(tag.name)}`"
-          class="tag-star group/tag relative inline-block rounded-[var(--radius-sm)] px-1.5 py-0.5 transition-all duration-[var(--duration-fast)] hover:scale-110"
+          class="tag-star group/tag relative inline-block rounded-[var(--radius-sm)] px-1.5 py-1 transition-all duration-[var(--duration-fast)] hover:scale-110"
           :style="{
             fontSize: tagSize(tag.post_count),
             color: getTagCategoryVar(tag.category),
@@ -95,7 +107,8 @@ useKeyboardShortcuts({ onPrevPage: () => goToPage(page.value - 1), onNextPage: (
           }"
         >
           {{ tag.name }}
-          <span class="text-[0.625rem] opacity-50 ml-0.5 font-mono tabular-nums">{{ tag.post_count }}</span>
+          <!-- 统计数：中性色 + 等宽数字 + 前置空隙，与尾部含数字的标签名区分 -->
+          <span class="text-[0.625rem] ml-1.5 font-mono tabular-nums text-[var(--text-muted)] opacity-70">{{ tag.post_count }}</span>
           <!-- Hover tooltip: translation + danbooru_name -->
           <span
             v-if="tag.translation || tag.danbooru_name"
@@ -107,6 +120,14 @@ useKeyboardShortcuts({ onPrevPage: () => goToPage(page.value - 1), onNextPage: (
             <template v-if="tag.danbooru_name"><span class="font-mono">{{ tag.danbooru_name }}</span></template>
           </span>
         </NuxtLink>
+      </div>
+
+      <!-- 分类颜色图例 -->
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-6 text-[var(--font-size-micro)] text-[var(--text-muted)]">
+        <span v-for="cat in legendCategories" :key="cat.value" class="inline-flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full flex-shrink-0" :style="{ background: getTagCategoryVar(cat.value) }" />
+          {{ cat.label }}
+        </span>
       </div>
     </div>
 

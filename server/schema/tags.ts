@@ -12,6 +12,9 @@ export const tags = pgTable('tags', {
   aiProcessedAt: timestamp('ai_processed_at', { withTimezone: true }),
 }, (t) => ({
   nameTrgmIdx: index('ix_tags_name_trgm').using('gin', sql`${t.name} gin_trgm_ops`),
+  // M19: admin/tags 的 `name LIKE 'x%'` 前缀查询走不了 GIN trgm —
+  // text_pattern_ops B-tree 覆盖（trgm 仍服务子串/模糊查询）
+  namePrefixIdx: index('ix_tags_name_prefix').using('btree', sql`${t.name} text_pattern_ops`),
   translationTrgmIdx: index('ix_tags_translation_trgm').using('gin', sql`${t.translation} gin_trgm_ops`),
   danbooruNameTrgmIdx: index('ix_tags_danbooru_name_trgm').using('gin', sql`${t.danbooruName} gin_trgm_ops`),
   postCountIdx: index('ix_tags_post_count').on(t.postCount),

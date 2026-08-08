@@ -4,9 +4,9 @@
  */
 
 const PIXIV_PATTERNS = [
-  /(?:https?:\/\/)?(?:www\.)?pixiv\.net\/(?:artworks|illust)\/(\d+)/i,
-  /(?:https?:\/\/)?(?:www\.)?pixiv\.net\/member_illust\.php\?.*illust_id=(\d+)/i,
-  /(?:https?:\/\/)?(?:www\.)?pixiv\.net\/i\/(\d+)/i,
+  /(?:https?:\/\/)?(?:(?:www|mobile)\.)?pixiv\.net\/(?:(?:en|ja|zh-cn|zh-tw|ko|th|vi|id)\/)?(?:artworks|illust)\/(\d+)/i,
+  /(?:https?:\/\/)?(?:(?:www|mobile)\.)?pixiv\.net\/member_illust\.php\?.*illust_id=(\d+)/i,
+  /(?:https?:\/\/)?(?:(?:www|mobile)\.)?pixiv\.net\/i\/(\d+)/i,
   /(?:https?:\/\/)?(?:www\.)?phixiv\.net\/(?:artworks|illust)\/(\d+)/i,
 ]
 

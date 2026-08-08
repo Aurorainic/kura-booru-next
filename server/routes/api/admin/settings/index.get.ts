@@ -1,7 +1,11 @@
 import { defineAdminHandler } from '../../../../platform/http/auth'
-import { getSettings } from '../../../../utils/settings'
+import { getAdminSettings } from '../../../../utils/settings'
+import { SETTING_CATEGORIES } from '../../../../utils/settings-defs'
 
 export default defineAdminHandler({
-  doc: { method: 'get', path: '/api/admin/settings', summary: 'List all settings (admin)' },
-  handler: async () => getSettings(),
+  doc: { method: 'get', path: '/api/admin/settings', summary: 'List all settings with metadata (admin)' },
+  handler: async () => {
+    const items = await getAdminSettings()
+    return { categories: SETTING_CATEGORIES, items }
+  },
 })

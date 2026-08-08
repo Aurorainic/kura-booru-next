@@ -18,6 +18,7 @@ export interface Post {
   description: string | null
   rating: Rating
   created_at: string
+  is_blurred?: boolean
   lqip?: string | null
   tags?: Tag[]
   // v0.7.8 PR-C: present only on multi-image posts. Mirrors the
@@ -80,6 +81,7 @@ export interface SiteSettings {
   head_inject: string
   maintenance_mode: string
   ai_enabled?: string
+  intranet_mode?: string
 }
 
 export interface DashboardOverview {
@@ -159,15 +161,4 @@ export interface RatingSuggestionItem {
   rating: Rating
   confidence: number
   reason: string
-}
-
-export interface AssistantSuggestion {
-  label: string
-  callback_data: string
-  action?: { type: string; payload: any }
-}
-
-export interface AssistantReply {
-  text: string
-  suggestions?: AssistantSuggestion[]
 }

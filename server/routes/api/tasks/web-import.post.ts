@@ -9,6 +9,9 @@ export default defineExtHandler({
   handler: async ({ event, auth }) => {
     const body = await readBody<{ urls?: string[]; force_rating?: string }>(event)
     if (!body?.urls?.length) throw new AppError('VALIDATION_FAILED', 400, 'urls required')
+    if (!Array.isArray(body.urls) || body.urls.some((url) => typeof url !== 'string' || !url.trim())) {
+      throw new AppError('VALIDATION_FAILED', 400, 'urls must be non-empty strings')
+    }
 
     // ponytail: force_rating requires the key have canForceRating (admin opt-in
     // at key creation). Without it, we DON'T silently ignore the user's selection
@@ -49,9 +52,13 @@ export default defineExtHandler({
 
     const results = await Promise.all(body.urls.slice(0, 50).map(async (url) => {
       try {
-        let host: string
-        try { host = new URL(url).hostname }
+        let parsed: URL
+        try { parsed = new URL(url) }
         catch { return { status: 'error', url, error: 'invalid URL' } }
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          return { status: 'error', url, error: 'unsupported protocol' }
+        }
+        const host = parsed.hostname
         if (await isPrivateHost(host)) return { status: 'error', url, error: 'private/reserved host' }
 
         // ponytail: per-URL rejection when key lacks force_rating cap. UI can

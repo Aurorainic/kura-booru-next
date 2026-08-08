@@ -48,6 +48,18 @@ export default defineAdminHandler({
       .from(tags)
       .where(sql`${tags.name} LIKE 'artist:%'`)
 
+    // H12: 预取所有 stripped 名的 clean 对照（一次 IN 查询），循环内不再逐条 SELECT
+    const strippedNames = prefixed
+      .map(t => t.name.replace(/^artist:/i, '').trim().toLowerCase())
+      .filter(n => n)
+    const cleanRows = strippedNames.length
+      ? await db_
+          .select({ id: tags.id, name: tags.name, category: tags.category })
+          .from(tags)
+          .where(inArray(tags.name, [...new Set(strippedNames)]))
+      : []
+    const cleanByName = new Map(cleanRows.map(c => [c.name, c]))
+
     let mergedIntoClean = 0
     let renamedInPlace = 0
     let postsMoved = 0
@@ -56,34 +68,25 @@ export default defineAdminHandler({
       const stripped = t.name.replace(/^artist:/i, '').trim().toLowerCase()
       if (!stripped || stripped === t.name) continue
 
-      const clean = await db_
-        .select({ id: tags.id, category: tags.category })
-        .from(tags)
-        .where(eq(tags.name, stripped))
-        .limit(1)
+      const clean = cleanByName.get(stripped)
 
-      if (clean[0]) {
+      if (clean) {
         // (a) duplicate — merge prefixed INTO the clean tag
-        const targetId = clean[0].id
+        const targetId = clean.id
 
         // Move post associations that aren't already on the target (raw SQL NOT IN, mirrors
         // /admin/tags/merge). (post_id, tag_id) PK guards against double-move.
-        await db_.execute(sql`
+        // H12: UPDATE 的受影响行数 = 实际移动数，替代 2 次 count(*) 聚合扫描。
+        const moveRes = await db_.execute(sql`
           UPDATE post_tags SET tag_id = ${targetId}
           WHERE tag_id = ${t.id}
           AND post_id NOT IN (
             SELECT post_id FROM post_tags WHERE tag_id = ${targetId}
           )
         `)
-        const movedRow = await db_.execute(sql`
-          SELECT count(*) AS cnt FROM post_tags WHERE tag_id = ${targetId}
-        `)
-        const beforeRow = await db_.execute(sql`
-          SELECT count(*) AS cnt FROM post_tags WHERE tag_id = ${t.id}
-        `)
-        // posts left on prefixed tag = overlapping (already on target) — they vanish with the delete
-        const moved = Number(movedRow[0]?.cnt || 0) - Number(beforeRow[0]?.cnt || 0)
-        postsMoved += Math.max(0, moved)
+        // postgres-js PostgresResult.count = 受影响行数（drizzle 透传，库边界形状）
+        const moved = Number((moveRes as unknown as { count?: number }).count || 0)
+        postsMoved += moved
 
         // Ensure the clean tag is categorized as artist + recount
         await db_

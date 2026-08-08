@@ -1,4 +1,10 @@
 <script setup lang="ts">
+withDefaults(defineProps<{
+  compact?: boolean
+}>(), {
+  compact: false,
+})
+
 const themes: Array<{ key: 'auto' | 'light' | 'dark'; label: string; icon: string }> = [
   // Monitor/display icon — auto = follow system preference
   { key: 'auto', label: '自动', icon: 'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6zM8 21h8M12 17v4' },
@@ -67,6 +73,6 @@ const activeTheme = computed(() => themes.find(t => t.key === current.value) ?? 
     >
       <path :d="activeTheme.icon" />
     </svg>
-    <span class="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">{{ activeTheme.label }}</span>
+    <span v-if="!compact" class="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">{{ activeTheme.label }}</span>
   </button>
 </template>

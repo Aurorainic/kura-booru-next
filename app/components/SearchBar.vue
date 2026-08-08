@@ -35,7 +35,7 @@ watch(query, (value) => {
   const parts = value.split(/[\s+]+/)
   const currentTag = (parts[parts.length - 1] || '').replace(/^-/, '')
 
-  if (!currentTag || currentTag.length < 2) {
+  if (!currentTag) {
     suggestions.value = []
     showSuggestions.value = false
     return
@@ -61,7 +61,7 @@ watch(query, (value) => {
         inFlight = null
       }
     }
-  }, 250)
+  }, 150)
 })
 
 // Kept for template binding but just triggers the existing watcher logic
@@ -109,7 +109,7 @@ function selectSuggestion(tag: Tag) {
   parts[parts.length - 1] = (hasNegation ? '-' : '') + tag.name
   query.value = parts.join('')
   showSuggestions.value = false
-  inputEl.value?.focus()
+  submit()
 }
 
 function submit() {

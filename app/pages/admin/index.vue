@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { defineAsyncComponent } from 'vue'
 
-const { isAdmin, ssrCookie } = useSsrContext()
+const { isAdmin, ssrCookie, intranetMode } = useSsrContext()
 const route = useRoute()
 
-if (!isAdmin.value) {
+if (!isAdmin.value && !intranetMode.value) {
   throw createError({ statusCode: 403, statusMessage: 'Admin access required' })
 }
 
 const tabs = [
+  { key: 'import', label: '导入', icon: 'M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5' },
   { key: 'dashboard', label: '概览', icon: 'M2.25 12 11.204 3.045c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25' },
   { key: 'posts', label: '图片', icon: 'm2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z' },
   { key: 'tags', label: '标签', icon: 'M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z' },
@@ -26,21 +27,22 @@ function switchTab(tab: string) {
   navigateTo(`/admin?tab=${tab}`)
 }
 
-// Route-level code splitting — only load the active panel.
-// Each defineAsyncComponent explicitly sets a name so KeepAlive can track them.
-const DashboardPanel = defineAsyncComponent({ loader: () => import('~/components/admin/DashboardPanel.vue'), name: 'DashboardPanel' })
-const PostsPanel = defineAsyncComponent({ loader: () => import('~/components/admin/PostsPanel.vue'), name: 'PostsPanel' })
-const TagsPanel = defineAsyncComponent({ loader: () => import('~/components/admin/TagsPanel.vue'), name: 'TagsPanel' })
-const AutoRatingPanel = defineAsyncComponent({ loader: () => import('~/components/admin/AutoRatingPanel.vue'), name: 'AutoRatingPanel' })
-const AiAssistantPanel = defineAsyncComponent({ loader: () => import('~/components/admin/AiAssistantPanel.vue'), name: 'AiAssistantPanel' })
-const AiProvidersPanel = defineAsyncComponent({ loader: () => import('~/components/admin/AiProvidersPanel.vue'), name: 'AiProvidersPanel' })
-const ExtensionKeysPanel = defineAsyncComponent({ loader: () => import('~/components/admin/ExtensionKeysPanel.vue'), name: 'ExtensionKeysPanel' })
-const SettingsPanel = defineAsyncComponent({ loader: () => import('~/components/admin/SettingsPanel.vue'), name: 'SettingsPanel' })
-const PasswordPanel = defineAsyncComponent({ loader: () => import('~/components/admin/PasswordPanel.vue'), name: 'PasswordPanel' })
+const ImportPanel = defineAsyncComponent(() => import('~/components/admin/ImportPanel.vue'))
+const DashboardPanel = defineAsyncComponent(() => import('~/components/admin/DashboardPanel.vue'))
+const PostsPanel = defineAsyncComponent(() => import('~/components/admin/PostsPanel.vue'))
+const TagsPanel = defineAsyncComponent(() => import('~/components/admin/TagsPanel.vue'))
+const AutoRatingPanel = defineAsyncComponent(() => import('~/components/admin/AutoRatingPanel.vue'))
+const AiAssistantPanel = defineAsyncComponent(() => import('~/components/admin/AiAssistantPanel.vue'))
+const AiProvidersPanel = defineAsyncComponent(() => import('~/components/admin/AiProvidersPanel.vue'))
+const ExtensionKeysPanel = defineAsyncComponent(() => import('~/components/admin/ExtensionKeysPanel.vue'))
+const SettingsPanel = defineAsyncComponent(() => import('~/components/admin/SettingsPanel.vue'))
+const PasswordPanel = defineAsyncComponent(() => import('~/components/admin/PasswordPanel.vue'))
 
-// ponytail: component lookup for keep-alive include list — must match the
-// panel's `name` option. defineAsyncComponent preserves the underlying name.
+// ponytail: all admin panels stay cached with max=tabs.length; panel SFCs
+// declare names via defineOptions so an explicit KeepAlive include list can
+// be added later without renaming components.
 const panelMap: Record<string, ReturnType<typeof defineAsyncComponent>> = {
+  import: ImportPanel,
   dashboard: DashboardPanel,
   posts: PostsPanel,
   tags: TagsPanel,
@@ -76,9 +78,10 @@ const panelMap: Record<string, ReturnType<typeof defineAsyncComponent>> = {
       </button>
     </div>
 
-    <!-- Tab content — keep-alive preserves panel state across tab switches -->
+    <!-- Tab content — 仅缓存需要保留编辑态的面板（AI 分类结果批量操作、标签搜索框），
+         其余面板切 tab 即卸载，下次进入重新拉数据（单人 admin 浏览器内存 -50-150MB） -->
     <div>
-      <KeepAlive :max="3">
+      <KeepAlive :include="['AiAssistantPanel', 'TagsPanel']" :max="2">
         <component :is="panelMap[currentTab] || panelMap.dashboard" />
       </KeepAlive>
     </div>

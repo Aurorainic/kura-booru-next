@@ -10,6 +10,16 @@
  */
 
 import { MAX_RETRIES, DLQ_KEY } from '../platform/queue'
+import sharp from 'sharp'
+
+// ponytail: 单人 = 一次导入一张图（多图 series 内部按页串行）。
+// concurrency=1 时单图峰值 ~150-300MB（libvips 临时 buffer），
+// 默认 N_cores（本机 8 worker × 300MB = 2.4GB 突发）纯浪费。
+// sharp.cache(false)：pipeline 流水线每张图一次性，50MB LRU 命中率为 0。
+const SHARP_CONCURRENCY = Number(process.env.SHARP_CONCURRENCY || 1)
+sharp.concurrency(SHARP_CONCURRENCY)
+sharp.cache(false)
+console.log(`[sharp] concurrency=${SHARP_CONCURRENCY}, cache=disabled`)
 
 export default defineNitroPlugin(() => {
   // Don't await — run in background
@@ -35,8 +45,10 @@ async function startPipelineWorker() {
 
   while (!ac.signal.aborted) {
     try {
-      // Block until a job ID arrives (with 5s timeout so we can check abort signal)
-      const result = await (blockRedis as any).BRPOP('kura:pending_results', 5)
+      // Block until a job ID arrives (with 30s timeout so we can check abort
+      // signal). ponytail: 单人 5min 才几条任务 — 5s timeout = 12 次/min 空转
+      // wakeup；30s = 2 次/min，省电且无感知延迟。
+      const result = await (blockRedis as any).BRPOP('kura:pending_results', 30)
       if (!result) continue
 
       // brpop returns [key, element] in node-redis v4+

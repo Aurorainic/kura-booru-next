@@ -4,7 +4,7 @@ import { eq, and, desc } from 'drizzle-orm'
 import { db } from '../../utils/db'
 import { posts, postTags, tags } from '../../schema'
 import type { Rating } from '../../platform/schemas/enums'
-import { callAi } from './client'
+import { callAi, extractJsonFromRaw } from './client'
 import { isAiEnabled } from './config'
 import { chunk } from './utility'
 import type { RatingSuggestion } from './types'
@@ -28,13 +28,18 @@ export async function suggestRatingForPost(postId: string): Promise<RatingSugges
   // weighting, the AI treats all tags equally and may be misled by neutral
   // tags outnumbering suggestive ones.
   const STRONG_SIGNALS = new Set([
-    'nude', 'naked', 'topless', 'bottomless', 'panties', 'bra', 'underwear',
-    'nipples', 'areola', 'cleavage', 'cameltoe', 'ass', 'butt', 'breasts',
+    // 明确裸露/性行为
+    'nude', 'naked', 'topless', 'bottomless', 'nipples', 'areola', 'breasts',
     'penis', 'vagina', 'cum', 'sex', 'masturbation', 'oral', 'penetration',
-    'nude_filter', 'nudity', 'explicit',
-    'bikini', 'swimsuit', 'lingerie', 'pantyhose', 'thighhighs',
-    'panty_shot', 'underboob', 'sideboob', 'cleavage',
-    'ecchi', 'hentai', 'roulai', '18+',
+    'nudity', 'explicit', 'hentai', 'futanari', 'tentacles', 'bondage',
+    'nude_filter', 'nude_girl', 'nude_body',
+    // 内衣/暴露衣著
+    'panties', 'bra', 'underwear', 'lingerie', 'pantyhose', 'thighhighs',
+    'panty_shot', 'underboob', 'sideboob', 'cleavage', 'cameltoe', 'ass',
+    'butt', 'bikini', 'swimsuit',
+    // 日文/罗马音
+    'エロ', 'えっち', '裸', 'パンツ', '下着', 'おっぱい', 'ふたなり',
+    'ecchi', 'roulai', '18+', 'r18',
   ])
   const tagInfo = postTagRows.map(r => {
     const isStrong = STRONG_SIGNALS.has(r.tag.name.toLowerCase()) ||
@@ -53,30 +58,32 @@ export async function suggestRatingForPost(postId: string): Promise<RatingSugges
   const raw = await callAi([
     {
       role: 'system',
-      content: `You are an anime image content rater for a booru-style gallery. You rate posts based on metadata and tags ONLY (you cannot see the image).
+      content: `你是 booru 风格动漫图库（Kura Booru）的内容分级器。你只能根据标签、标题、描述与图片尺寸判断，无法看到图片本身。
 
-Ratings (booru convention):
-- safe: General-audience content. Fully clothed characters, no suggestive elements, no revealing clothing. Even mild fanservice like panty shots disqualify from safe.
-- questionable: Suggestive or mildly mature content. Includes: ecchi, swimsuits, lingerie, suggestive poses, panty shots, visible underwear, provocative clothing, non-explicit fanservice.
-- explicit: Clearly adult/NSFW content. Includes: nudity, sexual acts, visible genitals, hentai.
+分级（booru 惯例）：
+- safe: 全年龄内容。角色衣着完整、无暗示元素、无暴露衣物。轻微福利（如胖次走光）即不符合 safe。
+- questionable: 暗示性或轻度成人内容。包括: ecchi、泳装、内衣、暗示性姿势、胖次走光、可见内衣、挑逗性服装、非直白的福利。
+- explicit: 明确成人/NSFW 内容。包括: 裸露、性行为、可见性器官、hentai。
 
-Tags marked [STRONG] are strong rating signals - weight them heavily in your assessment.
+判定规则：
+1. 标记 [STRONG] 的标签是强信号，需重点加权。
+2. 若多个 [STRONG] 标签指向成人内容但无法确定是否 explicit，取 questionable 而非 explicit。
+3. 若没有任何 [STRONG] 标签，极大概率是 safe——只有标题/描述明确指向成人内容才上调。
+4. 日文标题/描述里的成人暗示词（えっち、エロ、裸、Hなど）也是信号。
+5. 长窄比例（竖版）更可能是漫画/同人页（explicit 概率略高），宽幅更可能是普通插画——仅作弱信号。
 
-If most [STRONG] tags suggest mature content but you're not certain it's explicit, lean questionable rather than explicit.
-If there are no [STRONG] tags, the post is very likely safe - only rate higher if the title/description clearly indicates mature content.
-
-Return JSON: { "rating": "safe|questionable|explicit", "confidence": 0.0_to_1.0, "reason": "brief explanation referencing specific tags" }`,
+只返回 JSON，不要解释。格式: { "rating": "safe|questionable|explicit", "confidence": 0.0到1.0, "reason": "简洁中文理由，引用具体标签" }`,
     },
     {
       role: 'user',
-      content: `Title: ${post.title || '(none)'}\nDescription: ${(post.description || '').slice(0, 300)}\nSource: ${post.sourceSite}\nImage: ${post.width}x${post.height} (${orientation}, ratio ${aspectRatio})\nTags: ${tagInfo.join(', ')}`,
+      content: `标题: ${post.title || '(无)'}\n描述: ${(post.description || '').slice(0, 300)}\n来源: ${post.sourceSite}\n图片: ${post.width}x${post.height} (${orientation}, ratio ${aspectRatio})\n标签: ${tagInfo.join(', ')}`,
     },
   ], { json: true })
 
   try {
-    const parsed = JSON.parse(raw)
+    const parsed = extractJsonFromRaw(raw) as { rating?: string; confidence?: number; reason?: string }
     const validRatings: Rating[] = ['safe', 'questionable', 'explicit']
-    const rating = validRatings.includes(parsed.rating) ? parsed.rating : 'safe'
+    const rating = validRatings.includes(parsed.rating as Rating) ? parsed.rating as Rating : 'safe'
     return {
       rating,
       confidence: Math.min(1, Math.max(0, Number(parsed.confidence) || 0.5)),

@@ -1,11 +1,11 @@
 import { defineAdminHandler } from '../../../platform/http/auth'
+import { getAdminSettings } from '../../../utils/settings'
+import { SETTING_CATEGORIES } from '../../../utils/settings-defs'
 
 export default defineAdminHandler({
-  doc: { method: 'get', path: '/api/settings', summary: 'Get settings' },
+  doc: { method: 'get', path: '/api/settings', summary: 'Get settings (admin view, metadata + masked secrets)' },
   handler: async () => {
-    // Reuse getSettings() — cached, projects to { key: value } shape. Avoids
-    // a fresh SELECT * per request and prevents accidentally exposing future
-    // columns (database_url / redis_url etc.) that raw select() would leak.
-    return { settings: await getSettings() }
+    const items = await getAdminSettings()
+    return { categories: SETTING_CATEGORIES, items }
   },
 })

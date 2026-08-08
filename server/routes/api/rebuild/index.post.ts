@@ -18,9 +18,10 @@ export default defineApiKeyHandler({
     // image pipeline, but rebuild is a different surface.
     let siteOrigin: string
     try {
-      siteOrigin = new URL(process.env.SITE_URL || 'http://localhost:3000').origin
+      const { getSiteUrl } = await import('../../../utils/settings')
+      siteOrigin = new URL(await getSiteUrl()).origin
     } catch {
-      throw new AppError('INTERNAL', 500, 'SITE_URL misconfigured')
+      throw new AppError('INTERNAL', 500, 'site_url misconfigured')
     }
 
     const safePaths: string[] = []

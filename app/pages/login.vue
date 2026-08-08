@@ -1,4 +1,11 @@
 <script setup lang="ts">
+const { intranetMode } = useSsrContext()
+
+// Intranet mode has no login wall; bounce straight to home.
+if (intranetMode.value) {
+  await navigateTo('/')
+}
+
 const username = ref('')
 const password = ref('')
 const showPassword = ref(false)
@@ -20,7 +27,7 @@ async function submit() {
       // Uniform error message — do not reveal whether the password was correct
       // (prevents login information disclosure: attacker cannot distinguish
       // between "password correct but not admin" and "wrong credentials").
-      error.value = '登录失败'
+      error.value = '用户名或密码错误'
     }
   } catch (e: any) {
     error.value = '用户名或密码错误'

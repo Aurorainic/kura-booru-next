@@ -4,6 +4,7 @@ import { definePublicHandler } from '../../../platform/http/auth'
 import { AppError } from '../../../platform/errors'
 import { zRating } from '../../../platform/schemas/enums'
 import { getIsAdmin } from '../../../utils/auth'
+import { isSafeModeActive } from '../../../utils/settings'
 import { listPosts } from '../../../lib/posts/repo'
 
 const querySchema = z.object({
@@ -23,11 +24,17 @@ export default definePublicHandler({
     }
     const cookie = getHeader(event, 'cookie') || ''
     const isAdmin = await getIsAdmin(cookie)
-    return listPosts({
+    const safeModeActive = await isSafeModeActive(event)
+    const effectiveAdmin = isAdmin && !safeModeActive
+    const result = await listPosts({
       page: query.page,
       perPage: query.per_page,
       rating: query.rating,
-      isAdmin,
+      isAdmin: effectiveAdmin,
     })
+    return {
+      ...result,
+      items: result.items.map(p => ({ ...p, is_blurred: safeModeActive && p.rating !== 'safe' })),
+    }
   },
 })

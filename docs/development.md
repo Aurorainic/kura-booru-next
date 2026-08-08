@@ -12,8 +12,8 @@
 
 ```bash
 cd .
-npm install
-npm run dev          # Nuxt dev server at http://localhost:3000
+pnpm install
+pnpm run dev          # Nuxt dev server at http://localhost:3000
 ```
 
 The sidecar and PostgreSQL/Redis need to be running separately (via Docker or local install).
@@ -43,10 +43,10 @@ cd infra && ./scripts/validate-env.sh prod   # Check production config (strict)
 
 ```bash
 cd .
-npm run db:generate     # Generate migration from schema changes
-npm run db:migrate      # Apply migrations
-npm run db:push         # Push schema directly (dev only — no migration files)
-npm run db:studio       # Open Drizzle Studio (visual DB browser)
+pnpm run db:generate     # Generate migration from schema changes
+pnpm run db:migrate      # Apply migrations
+pnpm run db:push         # Push schema directly (dev only — no migration files)
+pnpm run db:studio       # Open Drizzle Studio (visual DB browser)
 ```
 
 ### Dev → Production Database
@@ -59,7 +59,7 @@ The stack connects to the same PostgreSQL as v1. Existing data is reused — no 
 
 ```bash
 # Nuxt (SSR + API + Bot webhook)
-cd . cd . &&cd . && npm run dev
+pnpm run dev
 
 # Python sidecar (gallery-dl + phash)
 cd ./sidecar && python sidecar.py
@@ -71,8 +71,8 @@ PostgreSQL and Redis must be running and accessible via `DATABASE_URL` and `REDI
 
 ## Docker Stages (Dockerfile)
 
-1. **`deps`** — `npm ci` (cached dependency layer)
-2. **`build`** — `npm run build` (Nuxt build → `.output/`). **Must** set `ENV NODE_ENV=production` — Nuxt keys build/dev entry, devtools, and client bundle on `NODE_ENV`; missing it silently emits a dev bundle (page shows "nuxt dev", dev badge bottom-left). Two guards prevent regression: (a) `RUN test "${NODE_ENV:-}" = "production"` inside the stage, (b) `Assert production build guard` step in `docker-publish.yml` greps the Dockerfile before build-push.
+1. **`deps`** — `pnpm install --frozen-lockfile` (cached dependency layer)
+2. **`build`** — `pnpm run build` (Nuxt build → `.output/`). **Must** set `ENV NODE_ENV=production` — Nuxt keys build/dev entry, devtools, and client bundle on `NODE_ENV`; missing it silently emits a dev bundle (page shows "nuxt dev", dev badge bottom-left). Two guards prevent regression: (a) `RUN test "${NODE_ENV:-}" = "production"` inside the stage, (b) `Assert production build guard` step in `docker-publish.yml` greps the Dockerfile before build-push.
 3. **`dev`** — Hot-reload, volume mounts. Used for development.
 4. **`production`** — Minimal image with only `.output/`. `NODE_ENV=production`, `HOST=0.0.0.0`, `PORT=3000`.
 

@@ -2,6 +2,7 @@
   "name": "kura-booru-next",
   "type": "module",
   "private": true,
+  "packageManager": "pnpm@11.3.0",
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",
@@ -12,7 +13,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "postinstall": "nuxt prepare",
-    "test": "npm run test:contract",
+    "test": "pnpm run test:contract",
     "test:contract": "node server/platform/contract/check.mjs"
   },
   "dependencies": {
@@ -31,7 +32,9 @@
     "postgres": "^3.4.9",
     "redis": "6.1.0",
     "sharp": "0.35.3",
+    "socks-proxy-agent": "^10.1.0",
     "tailwindcss": "4.3.2",
+    "undici": "^7.29.0",
     "vue": "^3.5.38",
     "vue-router": "^5.1.0",
     "zod": "^4.4.3"

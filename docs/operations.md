@@ -77,7 +77,7 @@ The multiplier comes from **each stage's layers stacking independently**:
 
 | Source | Approx. size | Why it stays on disk |
 |---|---|---|
-| `deps` stage — `node_modules` | ~400–600 MB | Full `npm ci` install; kept as a cache layer so rebuilds skip `npm ci` |
+| `deps` stage — `node_modules` | ~400–600 MB | Full `pnpm install --frozen-lockfile` install; kept as a cache layer so rebuilds skip `pnpm install --frozen-lockfile` |
 | `build` stage — `.nuxt` + `.output` | ~200–400 MB | Nuxt build artifacts; layer cached for incremental rebuilds |
 | `production` stage — final `.output` | ~150–250 MB | The image `docker images` actually reports |
 | BuildKit GHA cache mirror | ~matches build stage | `cache-from: type=gha`/`cache-to: type=gha,mode=max` keeps a second copy for CI |

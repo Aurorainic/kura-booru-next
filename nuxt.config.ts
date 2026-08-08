@@ -12,6 +12,14 @@ export default defineNuxtConfig({
 
   css: ['~/../assets/css/main.css'],
 
+  // ponytail: register components by basename only (pathPrefix: false).
+  // With Nuxt's default `pathPrefix: true`, ui/ConfirmDialog.vue → UiConfirmDialog,
+  // so templates using <ConfirmDialog>/<PageHeader>/<ToastContainer>/<EmptyState>/
+  // <LoadingCard>/<TagIdTooltip> resolved to nothing — the confirm dialog never
+  // rendered, making every delete button a silent no-op. No basename collisions
+  // exist, so this is safe (admin/panels are imported explicitly in admin/index.vue).
+  components: { dirs: [{ path: '~/components', pathPrefix: false }] },
+
   vite: {
     plugins: [tailwindcss()],
   },

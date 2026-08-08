@@ -9,8 +9,15 @@
 # ── Stage 1: deps ──
 FROM node:22-alpine AS deps
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
+# 国内镜像加速:容器内没有宿主机 ~/.npmrc。注意 pnpm 不读 npm_config_*
+# 环境变量(与 npm 不同),需显式写入用户级 .npmrc(npm/pnpm 都读)。默认
+# npmmirror,可通过 --build-arg NPM_REGISTRY=... 覆盖(CI 等)。
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+RUN npm config set registry "${NPM_REGISTRY}"
+RUN npm install -g pnpm@11.3.0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY extension/package.json ./extension/package.json
+RUN pnpm install --frozen-lockfile
 
 # ── Stage 2: build ──
 # ponytail: NODE_ENV=production 是 prod 构建根因开关。Nuxt 按 NODE_ENV 决定
@@ -20,6 +27,10 @@ RUN npm ci
 FROM node:22-alpine AS build
 ARG KURA_VERSION
 WORKDIR /app
+# 同 deps 阶段:本阶段的 npm install -g pnpm 也需要走加速镜像
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+RUN npm config set registry "${NPM_REGISTRY}"
+RUN npm install -g pnpm@11.3.0
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV KURA_VERSION=${KURA_VERSION}
@@ -30,7 +41,7 @@ ENV KURA_VERSION=${KURA_VERSION}
 # for runtime, but the build-time value is what gates the client build.
 ENV NODE_ENV=production
 RUN test "${NODE_ENV:-}" = "production" || { echo "FATAL: build stage requires NODE_ENV=production, got '${NODE_ENV:-unset}' — this would ship a dev bundle to GHCR"; exit 1; }
-RUN npm run build
+RUN pnpm run build
 
 # ── Stage 3: production ──
 FROM node:22-alpine AS production
@@ -44,6 +55,9 @@ EXPOSE 3000
 ENV HOST=0.0.0.0
 ENV PORT=3000
 ENV NODE_ENV=production
+# ponytail: 单人部署 — V8 默认 ~4GB old-space 上限无意义；512MB 给
+# sharp 大图 + pg-boss 异步任务留足余量，配合容器 mem_limit 1g 防突发吃光本机。
+ENV NODE_OPTIONS="--max-old-space-size=512 --max-semi-space-size=32"
 ARG KURA_VERSION
 ENV KURA_VERSION=${KURA_VERSION}
 USER appuser
@@ -55,4 +69,4 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 EXPOSE 3000
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+CMD ["pnpm", "run", "dev", "--", "--host", "0.0.0.0"]

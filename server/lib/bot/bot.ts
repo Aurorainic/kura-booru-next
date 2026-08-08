@@ -7,7 +7,6 @@ import { searchPosts, getRandomPost, getPostBySource } from '../posts/repo'
 import { isAiEnabled } from '../ai/config'
 import { generatePostSummary } from '../ai/summary'
 import { suggestRatingForPost } from '../ai/ratings'
-import { adminAssistantChat } from '../ai/assistant'
 import { reprocessTags } from '../ai/reprocess'
 import { enqueueJob, pollJobResult } from '../../utils/queue'
 import { identifySource, resolveSourceOrOther } from '../../utils/url-patterns'
@@ -25,70 +24,42 @@ interface BotContext extends Context {
   config: BotConfig
 }
 
-const BOT_TOKEN = process.env.BOT_TOKEN || ''
-const BOT_ADMIN_IDS = (process.env.BOT_ADMIN_IDS || '').split(',').map(Number).filter(Boolean)
-const SITE_URL = process.env.SITE_URL || ''
-
 // URL extraction pattern (from url-patterns.ts + generic)
 const URL_PATTERN = /https?:\/\/[^\s<>"']+/gi
 
-if (!BOT_TOKEN) {
-  console.warn('[bot] BOT_TOKEN not set, bot disabled')
-}
-
-export const bot = new Bot<BotContext>(BOT_TOKEN)
-
-// Lazy-init
+// ── Bot config: DB settings first, env as bootstrap fallback (v0.10.0) ──
+// 热刷新：getBotConfig() 每次调用读取 settings（10s 缓存），token/adminIds/
+// proxyUrl 变化后调用 rebuildBot() 重建实例。getBotConfig 内部已含 env 回退。
+let _botInstance: Bot<BotContext> | null = null
+let _buildPromise: Promise<Bot<BotContext>> | null = null
 let _botReady: Promise<void> | null = null
-export function ensureBotReady() {
-  if (!_botReady) _botReady = bot.init()
-  return _botReady
-}
 
-// ── Auth middleware (T-P0-4: reject non-admins) ──
-bot.use(async (ctx, next) => {
-  const userId = ctx.from?.id
+// H7: drop_pending_updates 只允许首次启动时 true。热刷新（改 token/管理员/
+// 中转）会触发 syncBotWebhook，若每次都丢弃 pending 队列，用户在队列里的
+// 消息会全丢。模块级布尔跨 rebuild 保留。
+let webhookInitialized = false
 
-  // Handle forwarded channel messages (negative ID)
-  const effectiveUserId = (ctx.chat?.type === 'private' && userId && userId < 0)
-    ? ctx.chat?.id : userId
-
-  const isAdmin = effectiveUserId ? BOT_ADMIN_IDS.includes(effectiveUserId) : false
-  ctx.config = { isAdmin, lang: 'zh' }
-
-  if (!isAdmin) {
-    try { await ctx.reply(t('unauthorized', ctx.config.lang)) } catch { /* ignore */ }
-    return // don't propagate to handlers
-  }
-  await next()
-})
-
-// ── Per-chat language from Redis ──
-bot.use(async (ctx, next) => {
-  if (!ctx.config.isAdmin) return // already rejected above, but guard
-  const chatId = ctx.chat?.id?.toString()
-  if (chatId) {
-    // Try new key, fall back to old key (T-P2-1 migration)
-    let lang = await redis.get(`kura:bot:lang:${chatId}`)
-    if (!lang) {
-      lang = await redis.get(`kura:bot_lang:${chatId}`)
-      if (lang) await redis.set(`kura:bot:lang:${chatId}`, lang)
-      else lang = 'en' // default to en (old default)
-    }
-    ctx.config.lang = lang
-  }
-  await next()
-})
-
-// ── Per-chat concurrency semaphore (T-P3-3: only wrap enqueueJob, not entire handler) ──
+// ── Per-chat concurrency semaphore (module-level: survives rebuildBot) ──
 const chatSemaphores = new Map<string, { count: number; max: number; queue: (() => void)[] }>()
+// M13/G5: Map 永不 delete 会随长期运行 + 群聊数增长 — 上限 500 个 chat，
+// 超限淘汰最久未用（Map 保插入序，first key = 最旧）。重建不丢信号量状态
+// （CLAUDE.md rule #5），所以只在 get 时做 LRU 淘汰。
 function getSemaphore(chatId: string, max = 3) {
-  if (!chatSemaphores.has(chatId)) {
-    chatSemaphores.set(chatId, { count: 0, max, queue: [] })
+  let sem = chatSemaphores.get(chatId)
+  if (!sem) {
+    if (chatSemaphores.size >= 500) {
+      const oldest = chatSemaphores.keys().next().value
+      if (oldest !== undefined) chatSemaphores.delete(oldest)
+    }
+    sem = { count: 0, max, queue: [] }
+    chatSemaphores.set(chatId, sem)
+  } else {
+    // 命中时刷新插入序（真 LRU）
+    chatSemaphores.delete(chatId)
+    chatSemaphores.set(chatId, sem)
   }
-  return chatSemaphores.get(chatId)!
+  return sem
 }
-
 async function acquireSemaphore(chatId: string): Promise<void> {
   const sem = getSemaphore(chatId)
   if (sem.count >= sem.max) {
@@ -96,7 +67,6 @@ async function acquireSemaphore(chatId: string): Promise<void> {
   }
   sem.count++
 }
-
 function releaseSemaphore(chatId: string) {
   const sem = chatSemaphores.get(chatId)
   if (!sem) return
@@ -105,7 +75,173 @@ function releaseSemaphore(chatId: string) {
   if (next) next()
 }
 
-// ── i18n helpers (T-P3-4: centralized) ──
+async function getBotConfigLazy() {
+  const { getBotConfig } = await import('../../utils/settings')
+  return getBotConfig()
+}
+
+/** 以当前配置构建 Bot 实例；代理/中转连接由 buildBotClient 统一处理。 */
+async function buildBot(): Promise<Bot<BotContext>> {
+  const cfg = await getBotConfigLazy()
+  const { buildBotClient } = await import('../../utils/bot-proxy')
+  type BotOpts = NonNullable<ConstructorParameters<typeof Bot<BotContext>>[1]>
+  const opts: BotOpts = {}
+  const client = buildBotClient(cfg.proxyType, cfg.proxyUrl)
+  if (client) opts.client = client as BotOpts['client']
+  return new Bot<BotContext>(cfg.token || 'unset', opts)
+}
+
+/**
+ * 根据当前配置对齐 Telegram webhook（幂等，供启动与设置热刷新调用）：
+ *   - enabled + token + siteUrl → setWebhook + setMyCommands
+ *   - disabled 或 token 为空   → deleteWebhook（释放后台，停止 Telegram 推送）
+ * 用一个独立于单例的 Bot 实例调用 API，避免与 disabled 状态/懒构建耦合。
+ */
+export async function syncBotWebhook(): Promise<void> {
+  const cfg = await getBotConfigLazy()
+  const token = cfg.token
+
+  if (!cfg.enabled || !token) {
+    // 尝试删除 webhook：让 Telegram 立即停止向本服务推送更新。
+    if (token) {
+      try {
+        const temp = await buildBot()
+        await temp.api.deleteWebhook()
+        console.log('[bot-setup] webhook removed (bot disabled)')
+      } catch (err) {
+        console.warn('[bot-setup] deleteWebhook failed (non-fatal):', err)
+      }
+    } else {
+      console.log('[bot-setup] bot_token not set, bot inactive')
+    }
+    return
+  }
+
+  if (!cfg.siteUrl) {
+    console.warn('[bot-setup] site_url not set, skipping webhook registration')
+    return
+  }
+
+  // ponytail: production webhook without webhook secret = unauthenticated
+  // surface that anyone who can reach /bot/webhook can hit. Refuse to register
+  // rather than warn-and-continue (matches the SESSION_SECRET guard in auth.ts).
+  if (process.env.NODE_ENV === 'production' && !cfg.webhookSecret) {
+    throw new Error('bot_webhook_secret must be set in production — refusing to register an unauthenticated Telegram webhook')
+  }
+
+  const b = await buildBot()
+  const webhookUrl = `${cfg.siteUrl.replace(/\/+$/, '')}/bot/webhook`
+  await b.api.setWebhook(webhookUrl, {
+    secret_token: cfg.webhookSecret || undefined,
+    drop_pending_updates: !webhookInitialized,
+    allowed_updates: ['message', 'callback_query'],
+  })
+  webhookInitialized = true
+  await b.api.setMyCommands([
+    { command: 'save', description: '保存图片 / Save image' },
+    { command: 'info', description: '查询作品信息 / Post info' },
+    { command: 'search', description: '搜索作品 / Search' },
+    { command: 'random', description: '随机作品 / Random' },
+    { command: 'stats', description: '站点统计 / Stats' },
+    { command: 'autopass', description: '自动评级开关 / Toggle autopass' },
+    { command: 'aitags', description: 'AI 标签处理 / AI tag processing' },
+    { command: 'lang', description: '切换语言 / Switch language' },
+    { command: 'start', description: '开始使用 / Start' },
+  ], { scope: { type: 'all_private_chats' } })
+  console.log('[bot-setup] webhook registered:', webhookUrl, cfg.proxyUrl ? `(via ${cfg.proxyUrl})` : '')
+}
+
+/** 获取（惰性构建）Bot 实例；首次构建时注册全部 handler。
+ *  in-flight promise guard: 并发调用共享同一个 build，避免 orphan Bot 泄漏。
+ *  bot_enabled=false 时抛出——由 webhook auth 层先转为 404。 */
+export async function getBot(): Promise<Bot<BotContext>> {
+  const cfg = await getBotConfigLazy()
+  if (!cfg.enabled) throw new Error('Telegram bot is disabled (bot_enabled=false)')
+  if (_botInstance) return _botInstance
+  if (_buildPromise) return _buildPromise
+  _buildPromise = (async () => {
+    const b = await buildBot()
+    await syncSiteUrl()
+    registerHandlers(b)
+    _botInstance = b  // atomic swap — old instance stays live until new one is ready
+    _botReady = null
+    return b
+  })()
+  try {
+    return await _buildPromise
+  } finally {
+    _buildPromise = null
+  }
+}
+
+/** settings 热刷新：构建新实例后原子替换（不先 null）。bot 禁用时不构建。
+ *  旧实例保持存活直到新实例 ready，webhook 窗口期不会命中无 handler 的占位 Bot。 */
+export async function rebuildBot() {
+  const cfg = await getBotConfigLazy()
+  if (!cfg.enabled) return  // 禁用态：webhook 对齐由 syncBotWebhook 处理
+  const b = await buildBot()
+  await syncSiteUrl()
+  registerHandlers(b)
+  _botInstance = b  // atomic swap — old instance stays live until new one is ready
+  _botReady = null
+  _buildPromise = null
+}
+
+async function getS3ExternalUrlLazy(): Promise<string> {
+  const { getS3ExternalUrl } = await import('../../utils/s3')
+  return getS3ExternalUrl()
+}
+
+// ── Admin IDs / Site URL（运行时读取，支持热刷新） ──
+async function getAdminIds(): Promise<number[]> {
+  const cfg = await getBotConfigLazy()
+  return cfg.adminIds
+}
+
+async function getSiteUrlLazy(): Promise<string> {
+  const { getSiteUrl } = await import('../../utils/settings')
+  return getSiteUrl()
+}
+
+// ── Bot 实例：Proxy 转发到当前实例，热刷新重建后 handler 由
+// registerHandlers 重新注册到新实例。外部（webhook/auth）仍按原 API 用 bot。
+
+export async function ensureBotReady(): Promise<void> {
+  const cfg = await getBotConfigLazy()
+  if (!cfg.token || !cfg.enabled) return
+  const b = await getBot()
+  if (!_botReady) _botReady = b.init()
+  await _botReady
+}
+
+// SITE_URL / admin ids 运行时值（热刷新支持）——handler 闭包读取的是 let 变量。
+let SITE_URL = ''
+
+/** 更新运行时站点 URL（getBot/rebuildBot 时同步）。 */
+async function syncSiteUrl() {
+  SITE_URL = await getSiteUrlLazy()
+}
+
+const botHandlerProxy: ProxyHandler<Bot<BotContext>> = {
+  get(_t: Bot<BotContext>, prop: string | symbol) {
+    const real = _botInstance ?? new Bot<BotContext>('unset')
+    const val = Reflect.get(real, prop)
+    // 方法转发时绑定真实实例，避免 this 指向 proxy。
+    return typeof val === 'function' ? val.bind(real) : val
+  },
+  set(_t: Bot<BotContext>, prop: string | symbol, value: unknown) {
+    const real = _botInstance ?? new Bot<BotContext>('unset')
+    return Reflect.set(real, prop, value)
+  },
+}
+
+export const bot: Bot<BotContext> = new Proxy<Bot<BotContext>>(
+  {} as Bot<BotContext>,
+  botHandlerProxy,
+)
+
+// ── i18n helpers (T-P3-4: centralized) — module-level: handlers inside
+// registerHandlers and pollAndNotify/showRatingMenu (module-level) both use t().
 const T = {
   zh: {
     welcome: '👋 你好！发送图片链接来保存到图库。\n\n命令：\n/search 标签名 — 搜索\n/random — 随机图片\n/stats — 统计\n/autopass — 自动标记为公开\n/lang — 切换语言',
@@ -176,36 +312,71 @@ const T = {
   },
 }
 
-export function t(key: string, lang: string, ...args: any[]): string {
+function t(key: string, lang: string, ...args: any[]): string {
   const strings: Record<string, any> = lang === 'zh' ? T.zh : T.en
   const val = strings[key]
   return typeof val === 'function' ? val(...args) : (val || key)
 }
 
-export const i18nLabels = {
-  zh: {
-    processingComplete: '处理完成',
-    waitingRating: '等待评级',
-    rating: '评级',
-    autoRule: '自动规则',
-    default: '默认',
-    manual: '手动',
-    auto: '自动',
-  },
-  en: {
-    processingComplete: 'Processing complete',
-    waitingRating: 'Waiting for rating',
-    rating: 'Rating',
-    autoRule: 'Auto-rating',
-    default: 'default',
-    manual: 'manual',
-    auto: 'auto',
-  },
+// M15: /search 高频命令 per-chat 节流（1 条/3s）— 防误连发触发 N 次 PG 查询。
+// 内存 Map + LRU 上限，chat 维度（管理员单人使用足够）。
+const searchThrottle = new Map<string, number>()
+function isSearchThrottled(chatId: string): boolean {
+  const now = Date.now()
+  const last = searchThrottle.get(chatId)
+  if (last !== undefined && now - last < 3000) return true
+  if (searchThrottle.size >= 500) {
+    const oldest = searchThrottle.keys().next().value
+    if (oldest !== undefined) searchThrottle.delete(oldest)
+  }
+  searchThrottle.set(chatId, now)
+  return false
 }
+
+function registerHandlers(b: Bot<BotContext>) {
+
+// ── Auth middleware (T-P0-4: reject non-admins) ──
+b.use(async (ctx, next) => {
+  const userId = ctx.from?.id
+
+  // Handle forwarded channel messages (negative ID)
+  const effectiveUserId = (ctx.chat?.type === 'private' && userId && userId < 0)
+    ? ctx.chat?.id : userId
+
+  const adminIds = await getAdminIds()
+  const isAdmin = effectiveUserId ? adminIds.includes(effectiveUserId) : false
+  ctx.config = { isAdmin, lang: 'zh' }
+
+  if (!isAdmin) {
+    try { await ctx.reply(t('unauthorized', ctx.config.lang)) } catch { /* ignore */ }
+    return // don't propagate to handlers
+  }
+  await next()
+})
+
+// ── Per-chat language from Redis ──
+b.use(async (ctx, next) => {
+  if (!ctx.config.isAdmin) return // already rejected above, but guard
+  const chatId = ctx.chat?.id?.toString()
+  if (chatId) {
+    // Try new key, fall back to old key (T-P2-1 migration)
+    let lang = await redis.get(`kura:bot:lang:${chatId}`)
+    if (!lang) {
+      lang = await redis.get(`kura:bot_lang:${chatId}`)
+      if (lang) await redis.set(`kura:bot:lang:${chatId}`, lang)
+      else lang = 'en' // default to en (old default)
+    }
+    ctx.config.lang = lang
+  }
+  await next()
+})
+
+// ── i18n helpers: T/t 定义已移至模块级（registerHandlers 上方），
+// handler 与 pollAndNotify 共享同一份。
 
 // ── Commands ──
 
-bot.command('start', async (ctx) => {
+b.command('start', async (ctx) => {
   try {
     const keyboard = {
       inline_keyboard: [[
@@ -216,10 +387,12 @@ bot.command('start', async (ctx) => {
   } catch (err) { console.error('[bot] start error:', err) }
 })
 
-bot.command('search', async (ctx) => {
+b.command('search', async (ctx) => {
   try {
     const query = ctx.message?.text?.split(' ').slice(1).join(' ')
     if (!query) { await ctx.reply(t('usageSearch', ctx.config.lang)).catch(() => {}); return }
+    const chatId = String(ctx.chat?.id ?? '')
+    if (isSearchThrottled(chatId)) return // 3s 节流 — 静默丢弃连发
 
     const results = await searchPosts(query, { perPage: 5, isAdmin: true })
     if (!results.items.length) { await ctx.reply(t('noResults', ctx.config.lang)).catch(() => {}); return }
@@ -239,13 +412,13 @@ bot.command('search', async (ctx) => {
   } catch (err) { console.error('[bot] search error:', err) }
 })
 
-bot.command('random', async (ctx) => {
+b.command('random', async (ctx) => {
   try {
     const post = await getRandomPost(true)
     if (!post) { await ctx.reply(t('noPosts', ctx.config.lang)).catch(() => {}); return }
 
     const previewUrl = post.preview_key
-      ? `${process.env.S3_EXTERNAL_URL || ''}/${post.preview_key}`
+      ? `${await getS3ExternalUrlLazy()}/${post.preview_key}`
       : null
 
     const caption = `${t('randomCaption', ctx.config.lang, post.title || '')}\n${SITE_URL}/posts/${post.id}`
@@ -266,7 +439,7 @@ bot.command('random', async (ctx) => {
   } catch (err) { console.error('[bot] random error:', err) }
 })
 
-bot.command('stats', async (ctx) => {
+b.command('stats', async (ctx) => {
   try {
     const [pc, tc, ptc, sc] = await Promise.all([
       db.select({ count: sql`count(*)` }).from(posts),
@@ -284,7 +457,7 @@ bot.command('stats', async (ctx) => {
   } catch (err) { console.error('[bot] stats error:', err) }
 })
 
-bot.command('autopass', async (ctx) => {
+b.command('autopass', async (ctx) => {
   try {
     const chatId = ctx.chat?.id?.toString()
     if (!chatId) return
@@ -297,7 +470,7 @@ bot.command('autopass', async (ctx) => {
   } catch (err) { console.error('[bot] autopass error:', err) }
 })
 
-bot.command('lang', async (ctx) => {
+b.command('lang', async (ctx) => {
   try {
     const chatId = ctx.chat?.id?.toString()
     if (!chatId) return
@@ -314,7 +487,7 @@ bot.command('lang', async (ctx) => {
   } catch (err) { console.error('[bot] lang error:', err) }
 })
 
-bot.command('info', async (ctx) => {
+b.command('info', async (ctx) => {
   try {
     const url = ctx.message?.text?.split(' ').slice(1).join(' ')
     if (!url) { await ctx.reply(t('usageInfo', ctx.config.lang)).catch(() => {}); return }
@@ -345,7 +518,7 @@ bot.command('info', async (ctx) => {
   } catch (err) { console.error('[bot] info error:', err) }
 })
 
-bot.command('save', async (ctx) => {
+b.command('save', async (ctx) => {
   try {
     const url = ctx.message?.text?.split(' ').slice(1).join(' ')
     if (!url) { await ctx.reply(t('usageInfo', ctx.config.lang)).catch(() => {}); return }
@@ -361,7 +534,7 @@ bot.command('save', async (ctx) => {
 })
 
 // ! aliases (T-P1-2)
-bot.hears(/^!save\b/, async (ctx) => {
+b.hears(/^!save\b/, async (ctx) => {
   try {
     const url = ctx.message?.text?.replace(/^!save\s*/, '').trim()
     if (!url) return
@@ -375,7 +548,7 @@ bot.hears(/^!save\b/, async (ctx) => {
   } catch (err) { console.error('[bot] !save error:', err) }
 })
 
-bot.hears(/^!search\b/, async (ctx) => {
+b.hears(/^!search\b/, async (ctx) => {
   try {
     const query = ctx.message?.text?.replace(/^!search\s*/, '').trim()
     if (!query) return
@@ -387,7 +560,7 @@ bot.hears(/^!search\b/, async (ctx) => {
   } catch (err) { console.error('[bot] !search error:', err) }
 })
 
-bot.hears(/^!random$/, async (ctx) => {
+b.hears(/^!random$/, async (ctx) => {
   try {
     const post = await getRandomPost(true)
     if (!post) { await ctx.reply(t('noPosts', ctx.config.lang)).catch(() => {}); return }
@@ -395,7 +568,7 @@ bot.hears(/^!random$/, async (ctx) => {
   } catch (err) { console.error('[bot] !random error:', err) }
 })
 
-bot.hears(/^!info\b/, async (ctx) => {
+b.hears(/^!info\b/, async (ctx) => {
   try {
     const url = ctx.message?.text?.replace(/^!info\s*/, '').trim()
     if (!url) return
@@ -413,7 +586,7 @@ bot.hears(/^!info\b/, async (ctx) => {
 })
 
 // ── /aitags command (AI capability ⑦) ──
-bot.command('aitags', async (ctx) => {
+b.command('aitags', async (ctx) => {
   try {
     const modeArg = ctx.message?.text?.split(' ')[1]
     const mode = (modeArg === 'all' ? 'all' : 'unprocessed') as 'unprocessed' | 'all'
@@ -422,59 +595,33 @@ bot.command('aitags', async (ctx) => {
       await ctx.reply(lang === 'zh' ? 'AI 处理未启用' : 'AI processing not enabled').catch(() => {})
       return
     }
+    // M14: 同步 reprocessTags 可达 5+ 分钟，期间同 chat 所有消息排队 —
+    // 改为立即回复「处理中」，后台执行完再编辑该消息。handler 返回后
+    // grammy 继续处理该 chat 的新消息。
     const processingMsg = await ctx.reply('⏳ AI 标签处理中…').catch(() => {})
-    const result = await reprocessTags(mode)
-    const text = lang === 'zh'
-      ? `✅ 处理完成: ${result.processed} 成功, ${result.failed} 失败`
-      : `✅ Done: ${result.processed} processed, ${result.failed} failed`
-    if (processingMsg) {
-      await ctx.api.editMessageText(ctx.chat!.id, processingMsg.message_id, text).catch(() => {})
-    } else {
-      await ctx.reply(text).catch(() => {})
-    }
+    const chatId = ctx.chat?.id
+    const messageId = processingMsg?.message_id
+
+    reprocessTags(mode)
+      .then((result) => {
+        const text = lang === 'zh'
+          ? `✅ 处理完成: ${result.processed} 成功, ${result.failed} 失败`
+          : `✅ Done: ${result.processed} processed, ${result.failed} failed`
+        if (chatId !== undefined && messageId !== undefined) {
+          ctx.api.editMessageText(chatId, messageId, text).catch(() => {})
+        }
+      })
+      .catch((err) => {
+        console.error('[bot] /aitags error:', err)
+        if (chatId !== undefined && messageId !== undefined) {
+          ctx.api.editMessageText(chatId, messageId, lang === 'zh' ? '❌ AI 处理失败' : '❌ AI processing failed').catch(() => {})
+        }
+      })
   } catch (err) { console.error('[bot] /aitags error:', err) }
 })
 
-// ── /ai command (AI capability ⑧) ──
-bot.command('ai', async (ctx) => {
-  try {
-    const query = ctx.message?.text?.split(' ').slice(1).join(' ')
-    if (!query) {
-      await ctx.reply(ctx.config.lang === 'zh' ? '用法: /ai <问题>' : 'Usage: /ai <question>').catch(() => {})
-      return
-    }
-    if (!isAiEnabled()) {
-      await ctx.reply(ctx.config.lang === 'zh' ? 'AI 未启用' : 'AI not enabled').catch(() => {})
-      return
-    }
-    const thinkingMsg = await ctx.reply('🤔 思考中…').catch(() => {})
-    const reply = await adminAssistantChat(query, { source: 'bot', lang: ctx.config.lang })
-    const keyboard = reply.suggestions?.length
-      ? { inline_keyboard: reply.suggestions.slice(0, 8).map(s => [{ text: s.label.slice(0, 64), callback_data: s.callback_data.slice(0, 64) }]) }
-      : undefined
-    if (thinkingMsg) {
-      await ctx.api.editMessageText(ctx.chat!.id, thinkingMsg.message_id, reply.text.slice(0, 4096), keyboard ? { reply_markup: keyboard } : undefined).catch(() => {})
-    } else {
-      await ctx.reply(reply.text.slice(0, 4096), keyboard ? { reply_markup: keyboard } : undefined).catch(() => {})
-    }
-  } catch (err) { console.error('[bot] /ai error:', err) }
-})
-
-bot.hears(/^!ai\b/, async (ctx) => {
-  try {
-    const query = ctx.message?.text?.replace(/^!ai\s*/, '').trim()
-    if (!query) return
-    if (!isAiEnabled()) return
-    const thinkingMsg = await ctx.reply('🤔…').catch(() => {})
-    const reply = await adminAssistantChat(query, { source: 'bot', lang: ctx.config.lang })
-    if (thinkingMsg) {
-      await ctx.api.editMessageText(ctx.chat!.id, thinkingMsg.message_id, reply.text.slice(0, 4096)).catch(() => {})
-    }
-  } catch (err) { console.error('[bot] !ai error:', err) }
-})
-
 // ── URL detection handler (T-P0-1: extract URLs from text) ──
-bot.on('message:text', async (ctx) => {
+b.on('message:text', async (ctx) => {
   try {
     const text = ctx.message.text
 
@@ -529,7 +676,7 @@ bot.on('message:text', async (ctx) => {
 })
 
 // ── Photo caption handler (T-P1-6) ──
-bot.on('message:photo', async (ctx) => {
+b.on('message:photo', async (ctx) => {
   try {
     const caption = ctx.message.caption || ''
     const urls = [...new Set(caption.match(URL_PATTERN) || [])]
@@ -569,7 +716,7 @@ bot.on('message:photo', async (ctx) => {
 })
 
 // ── Callback query handler (T-P0-3: rating buttons + search pagination + random) ──
-bot.on('callback_query', async (ctx) => {
+b.on('callback_query', async (ctx) => {
   const data = ctx.callbackQuery.data ?? ''
   const chatId = ctx.chat?.id?.toString()
   if (!chatId) return
@@ -585,7 +732,7 @@ bot.on('callback_query', async (ctx) => {
     } else if (data.startsWith('random:another')) {
       const post = await getRandomPost(true)
       if (!post) return ctx.answerCallbackQuery({ text: t('noPosts', ctx.config.lang) })
-      const previewUrl = post.preview_key ? `${process.env.S3_EXTERNAL_URL || ''}/${post.preview_key}` : null
+      const previewUrl = post.preview_key ? `${await getS3ExternalUrlLazy()}/${post.preview_key}` : null
       const caption = `${t('randomCaption', ctx.config.lang, post.title || '')}\n${SITE_URL}/posts/${post.id}`
       const keyboard = {
         inline_keyboard: [[
@@ -613,6 +760,8 @@ bot.on('callback_query', async (ctx) => {
 
   await ctx.answerCallbackQuery().catch(() => {})
 })
+
+}
 
 // ── Poll and notify (T-P0-2) ──
 async function pollAndNotify(

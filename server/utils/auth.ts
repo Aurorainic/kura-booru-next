@@ -68,14 +68,30 @@ function unsign(token: string): { value: string; iat: number } | null {
 const epochCache: { changedAt: number | null; at: number } = { changedAt: null, at: 0 }
 const EPOCH_CACHE_TTL = 10_000
 
-// ponytail: simple admin cache — per-token-hash, 30s TTL
+// ponytail: simple admin cache — per-token-hash, 30s TTL.
+// G3: 单人 admin 只有 1 个会话 cookie，50 条历史值足够（原 256/1000 无意义）。
+// M9: Map 保插入序 — 淘汰取 first key 即最旧，O(1)（原 sort O(N log N)）。
 const adminCache = new Map<string, { result: boolean; at: number }>()
 const ADMIN_CACHE_TTL = 30_000
-const ADMIN_CACHE_MAX = 256
+const ADMIN_CACHE_MAX = 50
+
+function cacheAdminResult(cacheKey: string, result: boolean) {
+  if (adminCache.size >= ADMIN_CACHE_MAX) {
+    const oldest = adminCache.keys().next().value
+    if (oldest !== undefined) adminCache.delete(oldest)
+  }
+  adminCache.set(cacheKey, { result, at: Date.now() })
+}
 
 export async function getIsAdmin(cookieHeader: string): Promise<boolean> {
+  // ponytail: intranet mode treats every visitor as admin. Single source of truth
+  // for admin elevation so all handlers (defineAdminHandler, public rating filters,
+  // etc.) see it without per-route guards. run_mode 来自 DB settings（默认 intranet），
+  // 后台切换后经 settings 缓存热刷新（10s TTL）。
+  const { getRunMode } = await import('./settings')
+  if (await getRunMode() === 'intranet') return true
   if (!cookieHeader) return false
-  const cookies = parseCookies(cookieHeader)
+  const cookies = parseCookieHeader(cookieHeader)
   const token = cookies[SESSION_COOKIE]
   if (!token) return false
 
@@ -89,12 +105,7 @@ export async function getIsAdmin(cookieHeader: string): Promise<boolean> {
   const parsed = unsign(token)
   if (!parsed) {
     // Cache negative result
-    if (adminCache.size >= ADMIN_CACHE_MAX) {
-      // Evict oldest entry
-      const oldest = [...adminCache.entries()].sort((a, b) => a[1].at - b[1].at)[0]
-      if (oldest) adminCache.delete(oldest[0])
-    }
-    adminCache.set(cacheKey, { result: false, at: Date.now() })
+    cacheAdminResult(cacheKey, false)
     return false
   }
 
@@ -123,11 +134,7 @@ export async function getIsAdmin(cookieHeader: string): Promise<boolean> {
   const result = !!admin[0]
 
   // Cache result
-  if (adminCache.size >= ADMIN_CACHE_MAX) {
-    const oldest = [...adminCache.entries()].sort((a, b) => a[1].at - b[1].at)[0]
-    if (oldest) adminCache.delete(oldest[0])
-  }
-  adminCache.set(cacheKey, { result, at: Date.now() })
+  cacheAdminResult(cacheKey, result)
 
   return result
 }
@@ -163,9 +170,29 @@ export async function changeAdminPassword(adminId: string, newPassword: string) 
   }
   const hash = await bcryptjs.hash(newPassword, 12)
   const now = new Date()
-  await db.update(admins).set({ passwordHash: hash, passwordChangedAt: now }).where(eq(admins.id, adminId))
   const epoch = now.getTime()
-  await redis.set('kura:password_epoch', String(epoch))
+
+  // M3: DB 更新与 Redis epoch 必须原子一致。Redis 写入失败时回滚 DB —
+  // 否则 DB 已换新密码但 epoch 未推进，旧 session 在新密码生效后仍有效
+  // （旧 session 复活窗口）。
+  const [prev] = await db
+    .select({ passwordHash: admins.passwordHash, passwordChangedAt: admins.passwordChangedAt })
+    .from(admins)
+    .where(eq(admins.id, adminId))
+    .limit(1)
+
+  await db.update(admins).set({ passwordHash: hash, passwordChangedAt: now }).where(eq(admins.id, adminId))
+  try {
+    await redis.set('kura:password_epoch', String(epoch))
+  } catch (err) {
+    // Redis 故障：回滚 DB 更新，保持旧密码 + 旧 epoch 一致，不产生复活窗口
+    if (prev) {
+      await db.update(admins)
+        .set({ passwordHash: prev.passwordHash, passwordChangedAt: prev.passwordChangedAt })
+        .where(eq(admins.id, adminId))
+    }
+    throw err
+  }
   epochCache.changedAt = epoch
   epochCache.at = Date.now()
   // Clear admin cache to force re-auth
@@ -173,7 +200,7 @@ export async function changeAdminPassword(adminId: string, newPassword: string) 
 }
 
 // ponytail: exposed so other routes (e.g. change-password) can avoid re-implementing cookie parsing.
-export function parseCookies(header: string): Record<string, string> {
+export function parseCookieHeader(header: string): Record<string, string> {
   const cookies: Record<string, string> = {}
   for (const part of header.split(';')) {
     const [k, ...v] = part.trim().split('=')

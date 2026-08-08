@@ -5,7 +5,7 @@
 
 export default defineEventHandler(async (event) => {
   const origin = getRequestHeader(event, 'origin')
-  const siteUrl = process.env.SITE_URL || ''
+  const siteUrl = await getSiteUrl() || ''
 
   // ponytail: extension origins allowed without credentials — they use X-Api-Key.
   // Only the site origin gets Allow-Credentials (cookie auth).

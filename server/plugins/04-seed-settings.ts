@@ -1,24 +1,13 @@
-/**
- * Seed settings from environment variables on first startup.
- * B-P3-11: check if settings table is empty, seed from SITE_TITLE/SITE_DESCRIPTION/MAINTENANCE_MODE.
- */
-
-import { sql } from 'drizzle-orm'
-import { db } from '../utils/db'
-import { settings } from '../schema/settings'
+// Seed DB settings from env-provided values (or defaults) on first boot.
+// v0.10.0: all business config migrated to the DB `settings` table; env vars
+// remain as the *bootstrap source* — seed once, then the admin panel owns them.
 
 export default defineNitroPlugin(async () => {
-  const countResult = await db.select({ count: sql<number>`count(*)` }).from(settings)
-  const count = Number(countResult[0]?.count || 0)
-  if (count > 0) return // already seeded
-
-  const seedValues: { key: string; value: string }[] = []
-  if (process.env.SITE_TITLE) seedValues.push({ key: 'site_title', value: process.env.SITE_TITLE })
-  if (process.env.SITE_DESCRIPTION) seedValues.push({ key: 'site_description', value: process.env.SITE_DESCRIPTION })
-  if (process.env.MAINTENANCE_MODE) seedValues.push({ key: 'maintenance_mode', value: process.env.MAINTENANCE_MODE })
-
-  if (seedValues.length === 0) return
-
-  await db.insert(settings).values(seedValues).onConflictDoNothing()
-  console.log('[seed-settings] Seeded from env:', seedValues.map(s => s.key).join(', '))
+  try {
+    const { seedSettingsFromEnv } = await import('../utils/settings')
+    await seedSettingsFromEnv()
+    console.log('[seed-settings] settings seeded from env (idempotent)')
+  } catch (err) {
+    console.error('[seed-settings] failed to seed settings:', err)
+  }
 })
