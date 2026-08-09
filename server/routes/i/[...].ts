@@ -60,11 +60,16 @@ export default defineEventHandler(async (event) => {
     return new Response('Forbidden', { status: 403 })
   }
 
-  const { getS3ExternalUrl } = await import('../../utils/s3')
-  const s3Base = await getS3ExternalUrl()
-  if (!s3Base) {
-    return new Response('S3_EXTERNAL_URL not configured', { status: 502 })
+  // 断网闭环：/i/ 代理的 fetch 目标必须用「web 容器视角」的 S3 endpoint
+  // （本机部署 = host.docker.internal），而不是 s3_external_url ——
+  // external_url 是给浏览器直出/公网场景（如 Telegram bot 发图）用的，
+  // 配成路由器 DHCP 分配的局域网 IP 时，断网该 IP 消失，图片全部 502。
+  const { getS3Config } = await import('../../utils/settings')
+  const cfg = await getS3Config()
+  if (!cfg.endpoint) {
+    return new Response('S3 endpoint not configured', { status: 502 })
   }
+  const s3Base = `${cfg.endpoint.replace(/\/+$/, '')}/${cfg.bucket}`
   const targetUrl = `${s3Base}/${key}`
 
   // ponytail: S3_BUCKET prefix is enforced in the utility layer (server/utils/s3.ts)
