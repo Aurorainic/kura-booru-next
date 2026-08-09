@@ -18,6 +18,11 @@ pnpm run dev          # Nuxt dev server at http://localhost:3000
 
 The sidecar and PostgreSQL/Redis need to be running separately (via Docker or local install).
 
+> **S3 endpoint 解析**：`/i/` 图片代理与 S3 客户端从服务进程视角访问
+> `s3_endpoint`（容器部署 = `http://host.docker.internal:9000`，compose 已配
+> extra_hosts）。宿主机裸跑 `pnpm run dev` 时 `host.docker.internal` 需要手动
+> 解析到 127.0.0.1（`/etc/hosts` 加一行），否则图片 502。
+
 ### Start Dev Compose
 
 ```bash
