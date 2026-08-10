@@ -5,8 +5,6 @@ import { admins } from '../schema/admins'
 import { eq } from 'drizzle-orm'
 import { redis } from './redis'
 
-// ponytail: refuse to start in production with the public dev fallback secret.
-// Without this guard, anyone reading the repo can forge kura_admin_session.
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SECRET_KEY || 'dev-secret-change-me'
 if (process.env.NODE_ENV === 'production' && SESSION_SECRET === 'dev-secret-change-me') {
   throw new Error('SESSION_SECRET (or SECRET_KEY) must be set in production — refusing to sign admin cookies with the public dev fallback')
@@ -68,9 +66,6 @@ function unsign(token: string): { value: string; iat: number } | null {
 const epochCache: { changedAt: number | null; at: number } = { changedAt: null, at: 0 }
 const EPOCH_CACHE_TTL = 10_000
 
-// ponytail: simple admin cache — per-token-hash, 30s TTL.
-// G3: 单人 admin 只有 1 个会话 cookie，50 条历史值足够（原 256/1000 无意义）。
-// M9: Map 保插入序 — 淘汰取 first key 即最旧，O(1)（原 sort O(N log N)）。
 const adminCache = new Map<string, { result: boolean; at: number }>()
 const ADMIN_CACHE_TTL = 30_000
 const ADMIN_CACHE_MAX = 50
@@ -84,10 +79,6 @@ function cacheAdminResult(cacheKey: string, result: boolean) {
 }
 
 export async function getIsAdmin(cookieHeader: string): Promise<boolean> {
-  // ponytail: intranet mode treats every visitor as admin. Single source of truth
-  // for admin elevation so all handlers (defineAdminHandler, public rating filters,
-  // etc.) see it without per-route guards. run_mode 来自 DB settings（默认 intranet），
-  // 后台切换后经 settings 缓存热刷新（10s TTL）。
   const { getRunMode } = await import('./settings')
   if (await getRunMode() === 'intranet') return true
   if (!cookieHeader) return false
@@ -104,7 +95,6 @@ export async function getIsAdmin(cookieHeader: string): Promise<boolean> {
 
   const parsed = unsign(token)
   if (!parsed) {
-    // Cache negative result
     cacheAdminResult(cacheKey, false)
     return false
   }
@@ -118,7 +108,6 @@ export async function getIsAdmin(cookieHeader: string): Promise<boolean> {
       epochCache.at = now
     } catch {
       // Redis down → fail-open (allow session), per CLAUDE.md.
-      // ponytail: don't cache fail-open — retry Redis on next request so recovery is fast.
       return true
     }
   }
@@ -133,7 +122,6 @@ export async function getIsAdmin(cookieHeader: string): Promise<boolean> {
   const admin = await db.select({ id: admins.id }).from(admins).where(eq(admins.id, parsed.value)).limit(1)
   const result = !!admin[0]
 
-  // Cache result
   cacheAdminResult(cacheKey, result)
 
   return result
@@ -146,8 +134,6 @@ export async function verifyAdminLogin(username: string, password: string) {
   return admin[0]
 }
 
-// ponytail: bcrypt compare pulled out of verifyAdminLogin so the change-password route
-// can verify the current password without re-fetching the admin row.
 export async function verifyAdminPassword(admin: { passwordHash: string }, password: string): Promise<boolean> {
   return bcryptjs.compare(password, admin.passwordHash)
 }
@@ -156,8 +142,7 @@ export function createSession(adminId: string): string {
   return sign(adminId)
 }
 
-// Exported so other handlers can extract adminId without duplicating crypto logic.
-// Returns null on invalid/expired tokens.
+// Exported so handlers can extract adminId without duplicating crypto logic; null on invalid/expired.
 export function parseSession(token: string): { value: string; iat: number } | null {
   return unsign(token)
 }
@@ -172,9 +157,8 @@ export async function changeAdminPassword(adminId: string, newPassword: string) 
   const now = new Date()
   const epoch = now.getTime()
 
-  // M3: DB 更新与 Redis epoch 必须原子一致。Redis 写入失败时回滚 DB —
-  // 否则 DB 已换新密码但 epoch 未推进，旧 session 在新密码生效后仍有效
-  // （旧 session 复活窗口）。
+  // M3: DB 更新与 Redis epoch 必须原子一致 — Redis 失败时回滚 DB，否则
+  // 旧 session 在新密码生效后仍有效（复活窗口）。
   const [prev] = await db
     .select({ passwordHash: admins.passwordHash, passwordChangedAt: admins.passwordChangedAt })
     .from(admins)
@@ -199,7 +183,6 @@ export async function changeAdminPassword(adminId: string, newPassword: string) 
   adminCache.clear()
 }
 
-// ponytail: exposed so other routes (e.g. change-password) can avoid re-implementing cookie parsing.
 export function parseCookieHeader(header: string): Record<string, string> {
   const cookies: Record<string, string> = {}
   for (const part of header.split(';')) {

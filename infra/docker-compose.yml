@@ -1,36 +1,21 @@
 # =============================================================================
 # Kura Booru — Production Docker Compose (4 containers)
-# =============================================================================
-# Web: Nitro SSR + REST API + Bot webhook (single Node process)
-# Worker: Python gallery-dl + imagehash phash (Redis queue)
-# PostgreSQL: Primary database (with pg_trgm)
-# Redis: Queue (bare LPUSH/BRPOP) + Cache
-#
-# Deployment (run from infra/, .env lives at project root):
-#   docker compose --env-file ../.env -f docker-compose.yml pull
-#   docker compose --env-file ../.env -f docker-compose.yml up -d
-#
-# Versioning:
-#   Custom images are version-pinned by tag (KURA_IMAGE_TAG in .env).
-#   A release pushes both :<tag> and :latest to GHCR; deployers pin a tag.
-#   Rollback = change KURA_IMAGE_TAG to a prior tag + `pull` + `up -d`.
-#   Leave KURA_IMAGE_TAG unset/empty to track :latest (dev/rolling).
-#   NOTE: --env-file is REQUIRED — `env_file` below only injects vars into
-#   containers; it does NOT feed ${VAR} interpolation in this file.
+# Web: Nitro SSR + REST API + Bot webhook | Worker: Python gallery-dl + phash
+# PostgreSQL (pg_trgm) | Redis: queue (LPUSH/BRPOP) + cache
+# Deploy from infra/: docker compose --env-file ../.env -f docker-compose.yml up -d
+# Images pinned by KURA_IMAGE_TAG (.env); rollback = change tag + pull + up -d;
+# unset/empty tracks :latest. NOTE: --env-file is REQUIRED — `env_file` only
+# injects vars into containers, not ${VAR} interpolation in this file.
 # =============================================================================
 
-# Registry prefix for custom images. Override KURA_IMAGE_TAG in .env to pin a
-# release tag (e.g. v0.7.1); defaults to :latest for local/rolling deploys.
+# Registry prefix for custom images; KURA_IMAGE_TAG pins a release tag (default :latest)
 
 services:
-  # ---------------------------------------------------------------------------
   # Web — SSR + REST API + Bot webhook (single Node process)
-  # ---------------------------------------------------------------------------
   web:
     image: ${KURA_IMAGE_REGISTRY:-ghcr.io/aurorainic}/kura-booru-web:${KURA_IMAGE_TAG:-latest}
     container_name: kura-web
     restart: unless-stopped
-    # ponytail: 单人部署硬上限 — V8 heap 512MB + sharp 峰值 ~300MB，1g 足够
     mem_limit: 1g
     memswap_limit: 1g
     shm_size: 256m
@@ -56,15 +41,11 @@ services:
       retries: 3
       start_period: 15s
 
-  # ---------------------------------------------------------------------------
-  # Worker — Python (gallery-dl + imagehash phash)
-  # BRPOP kura:jobs → download + phash → LPUSH kura:results:{id}
-  # ---------------------------------------------------------------------------
+  # Worker — Python (gallery-dl + imagehash phash); BRPOP kura:jobs → LPUSH kura:results:{id}
   worker:
     image: ${KURA_IMAGE_REGISTRY:-ghcr.io/aurorainic}/kura-booru-worker:${KURA_IMAGE_TAG:-latest}
     container_name: kura-worker
     restart: unless-stopped
-    # ponytail: 单人部署 — Pillow 解码峰值 ~150MB，512m 足够
     mem_limit: 512m
     memswap_limit: 512m
     pids_limit: 100
@@ -80,21 +61,17 @@ services:
     networks:
       - kura-internal
     healthcheck:
-      # ponytail: alpine worker image has no pgrep — PID 1 is sidecar.py, check its cmdline.
       test: ["CMD-SHELL", "grep -q sidecar /proc/1/cmdline"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
 
-  # ---------------------------------------------------------------------------
-  # PostgreSQL 18 — Primary database
-  # ---------------------------------------------------------------------------
+  # PostgreSQL 18 — primary database
   postgres:
     image: postgres:18-alpine
     container_name: kura-postgres
     restart: unless-stopped
-    # ponytail: 单人/低并发部署 — 容器硬上限 + 精简配置（见 postgresql.conf）
     mem_limit: 384m
     memswap_limit: 384m
     shm_size: 64m
@@ -116,22 +93,18 @@ services:
       retries: 5
       start_period: 10s
 
-  # ---------------------------------------------------------------------------
-  # Redis 8 — Queue (bare LPUSH/BRPOP) + Cache
-  # ---------------------------------------------------------------------------
+  # Redis 8 — queue (bare LPUSH/BRPOP) + cache
   redis:
     image: redis:8-alpine
     container_name: kura-redis
     restart: unless-stopped
-    # ponytail: 单人数据 < 64MB（峰值在导入大图时）；超额 LRU 淘汰而非 OOM。
-    # 关 RDB snapshot（--save ""）— AOF 已足够，单人项目 fork dump 纯浪费。
-    mem_limit: 128m
-    memswap_limit: 128m
+    mem_limit: 512m
+    memswap_limit: 512m
     pids_limit: 50
     command: >
       redis-server
       --appendonly yes
-      --maxmemory 64mb
+      --maxmemory 256mb
       --maxmemory-policy allkeys-lru
       --maxmemory-samples 5
       --save ""
@@ -148,9 +121,7 @@ services:
       retries: 5
       start_period: 5s
 
-# =============================================================================
-# Network — Internal communication (reverse proxy on host forwards into this network)
-# =============================================================================
+# Network — internal; host reverse proxy forwards into it
 networks:
   kura-internal:
     driver: bridge

@@ -176,7 +176,6 @@ function formatDate(s: string | null | undefined): string {
   <div class="space-y-6 max-w-2xl">
     <PageHeader title="AI 设置" subtitle="管理 AI Provider 与全局开关，变更即时生效，无需重启。" />
 
-    <!-- Global toggle -->
     <div class="dash-card !p-5">
       <label class="flex items-center gap-3 cursor-pointer select-none">
         <input
@@ -194,7 +193,6 @@ function formatDate(s: string | null | undefined): string {
       </p>
     </div>
 
-    <!-- Provider list -->
     <div class="dash-card !p-5">
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-sm font-semibold" style="font-family: var(--font-display);">Providers ({{ providers.length }})</h2>
@@ -266,7 +264,6 @@ function formatDate(s: string | null | undefined): string {
       </div>
     </div>
 
-    <!-- Add / edit form -->
     <div v-if="formOpen" class="dash-card !p-5 border-2 border-[var(--accent-color)] space-y-4">
       <h2 class="text-sm font-semibold" style="font-family: var(--font-display);">
         {{ editingId ? '编辑 Provider' : '添加 Provider' }}

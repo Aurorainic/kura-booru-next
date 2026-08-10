@@ -1,7 +1,7 @@
 import type { AiStatus, AiJobStatus, TagClassificationSuggestion, MergeSuggestion, RatingSuggestionItem, AiProvidersResponse, AiProvider, AiConnectionTestResult } from '~/types'
 import { fetchApi } from './api'
 
-// 显式 import 规避 auto-import 在异步 chunk 的失效（源自前端审计结论，审计文档已随仓库清理移除）
+// 显式 import 规避 auto-import 在异步 chunk 中失效
 
 // ── AI Status ──
 

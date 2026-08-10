@@ -21,8 +21,7 @@ jobs:
         with:
           node-version: "22"
           cache: pnpm
-      # postinstall runs `nuxt prepare`, which generates the .nuxt tsconfig refs
-      # that `nuxt typecheck` consumes — must succeed for typecheck to be valid.
+      # postinstall 的 `nuxt prepare` 生成 typecheck 依赖的 .nuxt tsconfig refs。
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec nuxt typecheck
 
@@ -53,12 +52,10 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
       - name: Run tests
-        # Fail loudly if sidecar has no tests yet — a green CI that silently
-        # skipped pytest hides real breakage. `--no-header -q` keeps output lean.
+        # 静默跳过 pytest 的绿 CI 会掩盖真实破坏——无测试收集必须显式失败。
         run: |
           cd sidecar
-          # exit 5 = "no tests collected"; treat that as a failure here so the
-          # absence of tests is visible instead of masquerading as a pass.
+          # exit 5 = "no tests collected"，此处显式判失败而非伪通过。
           python -m pytest tests/ -v --tb=short
 
   contract-test:

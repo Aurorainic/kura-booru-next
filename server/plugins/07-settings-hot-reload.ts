@@ -1,11 +1,7 @@
 /**
- * 设置热刷新接线（v0.10.0）。
- *
- * 注册 settings 变更后的刷新钩子：
- *   - S3 客户端重建（resetS3Client）
- *   - Telegram Bot 实例重建（rebuildBot — token/apiRoot/adminIds 生效）
- *   - Pixiv 凭证同步到 Redis（sidecar 从 Redis 读取，避免改 sidecar 环境）
- * 同时启动时把 DB 中的 Pixiv 凭证同步一次（幂等）。
+ * 设置热刷新接线（v0.10.0）：注册 settings 变更钩子 — S3 客户端重建、Telegram Bot
+ * 重建（token/apiRoot/adminIds 生效）、Pixiv 凭证与下载代理同步到 Redis（sidecar
+ * 读取，避免改 sidecar 环境）。启动时同步一次 Pixiv 凭证（幂等）。
  */
 
 import { onSettingsChanged, getPixivConfig } from '../utils/settings'
@@ -33,7 +29,6 @@ async function syncPixivToRedis() {
 }
 
 export default defineNitroPlugin(async () => {
-  // 注册热刷新钩子
   onSettingsChanged(async () => {
     const { resetS3Client } = await import('../utils/s3')
     resetS3Client()

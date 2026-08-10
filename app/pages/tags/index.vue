@@ -4,7 +4,6 @@ import type { TagCategory } from '~/types'
 const { ssrCookie } = useSsrContext()
 const route = useRoute()
 
-// Reactive query params
 const page = computed(() => Math.max(1, parseInt(route.query.page as string || '1')))
 const sort = computed(() => route.query.sort as string || 'count')
 const category = computed(() => route.query.category as string | undefined)
@@ -46,7 +45,7 @@ function tagSize(postCount: number): string {
   return `${size}rem`
 }
 
-// 5.3 ← / → page navigation (tags list).
+// ←/→ page navigation (tags list).
 function goToPage(p: number) {
   if (p < 1 || p > totalPages.value) return
   navigateTo({ path: '/tags', query: { ...(category.value ? { category: category.value } : {}), sort: sort.value, ...(p > 1 ? { page: String(p) } : {}) } })
@@ -56,7 +55,6 @@ useKeyboardShortcuts({ onPrevPage: () => goToPage(page.value - 1), onNextPage: (
 
 <template>
   <div class="max-w-[var(--content-max)] mx-auto px-4 lg:px-8 py-6" style="padding-top: var(--space-page-top);">
-    <!-- Header -->
     <div class="flex items-end justify-between gap-6 mb-8 flex-wrap">
       <div>
         <h1 class="gradient-text" style="font-size: var(--font-size-display); font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; font-family: var(--font-display); animation: maskWipe var(--duration-display) var(--ease-out) both;">标签</h1>
@@ -77,7 +75,6 @@ useKeyboardShortcuts({ onPrevPage: () => goToPage(page.value - 1), onNextPage: (
       </div>
     </div>
 
-    <!-- Category filters -->
     <div class="flex items-center gap-4 mb-8 flex-wrap">
       <NuxtLink
         v-for="cat in categories"
@@ -88,9 +85,7 @@ useKeyboardShortcuts({ onPrevPage: () => goToPage(page.value - 1), onNextPage: (
       >{{ cat.label }}</NuxtLink>
     </div>
 
-    <!-- Tag constellation (4.4): cloud IS the content — name in display font,
-         category color as text color, hover reveals translation + danbooru_name.
-         No table; pagination below. -->
+    <!-- Tag cloud: name in display font, category color as text color, hover reveals translation + danbooru_name -->
     <div v-if="tags.length > 0" class="mb-8" style="animation: pageIn var(--duration-slow) var(--ease-out);">
       <div class="flex flex-wrap gap-x-4 gap-y-4 items-baseline">
         <NuxtLink
@@ -109,7 +104,6 @@ useKeyboardShortcuts({ onPrevPage: () => goToPage(page.value - 1), onNextPage: (
           {{ tag.name }}
           <!-- 统计数：中性色 + 等宽数字 + 前置空隙，与尾部含数字的标签名区分 -->
           <span class="text-[0.625rem] ml-1.5 font-mono tabular-nums text-[var(--text-muted)] opacity-70">{{ tag.post_count }}</span>
-          <!-- Hover tooltip: translation + danbooru_name -->
           <span
             v-if="tag.translation || tag.danbooru_name"
             class="pointer-events-none absolute left-0 top-full mt-1 z-20 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--bg-surface)] border border-[var(--border-color)] px-2 py-1 text-[0.6875rem] font-normal opacity-0 translate-y-1 transition-all duration-[var(--duration-fast)] group-hover/tag:opacity-100 group-hover/tag:translate-y-0"
@@ -122,7 +116,6 @@ useKeyboardShortcuts({ onPrevPage: () => goToPage(page.value - 1), onNextPage: (
         </NuxtLink>
       </div>
 
-      <!-- 分类颜色图例 -->
       <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-6 text-[var(--font-size-micro)] text-[var(--text-muted)]">
         <span v-for="cat in legendCategories" :key="cat.value" class="inline-flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full flex-shrink-0" :style="{ background: getTagCategoryVar(cat.value) }" />
@@ -131,7 +124,6 @@ useKeyboardShortcuts({ onPrevPage: () => goToPage(page.value - 1), onNextPage: (
       </div>
     </div>
 
-    <!-- Empty -->
     <div v-else class="flex flex-col items-center justify-center py-24 text-[var(--text-muted)]">
       <p class="text-lg font-semibold mb-1">暂无标签</p>
       <p class="text-sm">添加插画后标签会自动出现</p>

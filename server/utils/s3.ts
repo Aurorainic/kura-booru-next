@@ -2,7 +2,6 @@ import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, List
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { getS3Config } from './settings'
 
-// ponytail: S3 客户端改为懒构建 + 可重建，settings 变更后重建客户端（热刷新）。
 let _s3: S3Client | null = null
 let _configSig = ''
 
@@ -17,6 +16,9 @@ async function getClient(): Promise<S3Client> {
     _s3 = new S3Client({
       region: cfg.region || 'auto',
       endpoint: cfg.endpoint || undefined,
+      // S3 兼容存储（rustfs/MinIO 类）只支持 path-style；SDK 默认 virtual-host
+      // 会把 bucket 拼成子域（kura-booru-images.host.docker.internal），DNS 必然失败。
+      forcePathStyle: true,
       credentials: {
         accessKeyId: cfg.accessKeyId || '',
         secretAccessKey: cfg.secretAccessKey || '',
@@ -44,8 +46,7 @@ export async function getS3ExternalUrl(): Promise<string> {
 }
 
 export function getS3Url(key: string): string {
-  // 同步包装：外部 URL 通常稳定，但为热刷新一致性走异步读取。
-  // 调用方多为渲染路径，这里保持同步返回，由调用侧决定是否用异步版本。
+  // 同步包装：外部 URL 通常稳定，但为热刷新一致性走异步读取源；调用方多为渲染路径。
   return `/i/${key}`
 }
 
@@ -76,10 +77,7 @@ export async function deleteS3Objects(...keys: string[]) {
   await Promise.all(keys.map(k => deleteFromS3(k).catch(() => {})))
 }
 
-/**
- * 测试 S3 连接：用当前配置建临时客户端，HeadBucket 验证凭据与桶可达。
- * 返回 { ok, error?, bucket, region?, endpoint? }；ok=false 时 error 为人类可读原因。
- */
+/** 测试 S3 连接：临时客户端 HeadBucket 验证凭据与桶可达；ok=false 时 error 为可读原因。 */
 export async function testS3Connection(): Promise<{ ok: boolean; error?: string; bucket?: string; region?: string; endpoint?: string }> {
   const cfg = await currentS3Config()
   if (!cfg.accessKeyId && !cfg.secretAccessKey) {
@@ -94,8 +92,7 @@ export async function testS3Connection(): Promise<{ ok: boolean; error?: string;
     return { ok: true, bucket: cfg.bucket, region: cfg.region, endpoint: cfg.endpoint || '(默认)' }
   } catch (err: any) {
     const msg = err?.message || String(err)
-    // HeadBucket 对部分 Provider 返回 403 但 ListBuckets 可用的场景（如 R2 需显式授权）。
-    // 给一次 ListBuckets 兜底，避免误报。
+    // HeadBucket 对部分 Provider（如 R2）返回 403 但 ListBuckets 可用 — 给一次兜底，避免误报。
     try {
       const client = await getClient()
       await client.send(new ListBucketsCommand({}))

@@ -1,10 +1,7 @@
 /**
- * Redis client lifecycle — close on Nitro shutdown.
- *
- * Without this, every Nitro hot-reload leaves a dangling redis TCP connection.
- * Over time the redis maxclients / client-tracking list grows; we saw 36k
- * connections history over 4 days. Closing on shutdown is enough for a
- * single-instance deploy; multi-replica would want a shared client pool.
+ * Redis client lifecycle — close on Nitro shutdown. Without it every hot-reload
+ * leaks a redis TCP connection (saw 36k over 4 days); closing on shutdown is
+ * enough for single-instance deploy; multi-replica would want a shared pool.
  */
 import { _client, _blockingClient } from '../utils/redis'
 

@@ -8,9 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const POPUP_HTML = readFileSync(resolve(__dirname, "../popup/popup.html"), "utf8");
 const POPUP_JS = readFileSync(resolve(__dirname, "../popup/popup.js"), "utf8");
 
-// popup.js reads popup.html's structure at load. We load the real HTML so the
-// element IDs (#server-url, #api-key, #save-btn, #status) match production,
-// then run popup.js inside the jsdom window.
+// Load real popup.html so element IDs match production, then run popup.js in jsdom
 function setupPopup(storage: Record<string, any> = {}) {
   const dom = new JSDOM(POPUP_HTML, {
     url: "https://example.com/",
@@ -36,11 +34,9 @@ function setupPopup(storage: Record<string, any> = {}) {
     },
   };
 
-  // popup.js wraps its logic in DOMContentLoaded. jsdom may have already fired
-  // it during parse, so call the script via Function and manually dispatch.
+  // popup.js runs on DOMContentLoaded — jsdom may have fired it during parse, so dispatch manually
   const fn = new window.Function(POPUP_JS);
   fn.call(window);
-  // If listener already attached but DOMContentLoaded passed, dispatch now.
   window.document.dispatchEvent(new window.Event("DOMContentLoaded"));
 
   return { dom, storageData };

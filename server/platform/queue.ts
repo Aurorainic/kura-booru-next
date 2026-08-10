@@ -1,13 +1,7 @@
 /**
- * JobQueue 接口（ADR-0001）。
- *
- * 定义 enqueue / getStatus / consume / retry 四操作。默认 Redis 实现包装
- * 现有 queue.ts 语义（kura:jobs / kura:results: / kura:job_status:），行为
- * 一字不变。pg-boss 实现在 R2.5 收编 AI job + 定时器时接入。
- *
- * 不动（ADR-0001 §3）：kura:jobs → sidecar 的 Redis 桥；kura:results: /
- * kura:job_status: 结果回取协议及其 TTL/字面量语义；pipeline-worker 对
- * kura:pending_results 的 BRPOP。
+ * JobQueue 接口（ADR-0001）：enqueue / getStatus / consume / retry。默认 Redis 实现
+ * 包装现有 queue.ts 语义（kura:jobs / kura:results: / kura:job_status:），行为不变。
+ * 不动：kura:jobs → sidecar 桥、结果回取协议及 TTL/字面量、kura:pending_results 的 BRPOP。
  */
 import type { SidecarJob, PipelineResult } from '../utils/queue'
 
@@ -25,12 +19,7 @@ export interface JobQueue {
 export const MAX_RETRIES = 3
 export const DLQ_KEY = 'kura:dlq'
 
-/**
- * Redis 实现 — 包装现有 queue.ts 语义。
- *
- * enqueue 复用 enqueueJob（LPUSH kura:jobs）；getStatus 读 kura:job_status:；
- * consume 做对 kura:pending_results 的 BRPOP 循环；retry 在 DLQ 里记录失败 job。
- */
+/** Redis 实现 — 包装现有 queue.ts 语义（enqueue=LPUSH，getStatus 读 kura:job_status:，consume=BRPOP，retry=DLQ）。 */
 import { redis } from '../utils/redis'
 import { enqueueJob } from '../utils/queue'
 

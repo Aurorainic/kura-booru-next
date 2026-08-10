@@ -24,8 +24,6 @@ export function useConfirm() {
         const id = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
           ? crypto.randomUUID()
           : `c-${Date.now()}`
-        // ponytail: replace any prior pending confirm so the new one shows.
-        // A stale resolve(false) is the safest default for the displaced one.
         if (pending.value) pending.value.resolve(false)
         pending.value = { id, resolve, ...options }
       })

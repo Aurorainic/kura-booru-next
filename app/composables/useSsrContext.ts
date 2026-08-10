@@ -1,11 +1,7 @@
 import type { SiteSettings } from '~/types'
 
 export function useSsrContext() {
-  // Initialize from server-side event context on first SSR render, then rely
-  // on useState serialization for hydration. This ensures the values set in
-  // server/middleware/01-ssr-context.ts (isAdmin, ssrCookie, siteSettings)
-  // are properly captured and transferred to the client, instead of being
-  // re-initialized to defaults on every composable call. (M9 fix)
+  // Seed useState from server middleware context (01-ssr-context.ts) on SSR; serialization carries values to the client. (M9 fix)
   if (import.meta.server) {
     const event = useRequestEvent()
     if (event?.context) {

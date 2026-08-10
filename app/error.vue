@@ -1,10 +1,6 @@
 <script setup lang="ts">
 const props = defineProps<{ error: { statusCode: number; message: string } }>()
 
-// ponytail: error page was at the repo root, not under app/, so it bypassed
-// the default layout, anti-flash inline script, and theme CSS variables.
-// Moving it into app/error.vue lets Nuxt route it through <NuxtLayout> and
-// <html style="--accent-hue.."> set by the layout.
 const error = computed(() => props.error)
 const handleError = () => clearError({ redirect: '/' })
 

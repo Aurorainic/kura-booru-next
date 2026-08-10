@@ -10,8 +10,7 @@ const props = withDefaults(defineProps<{
   currentPage: 1,
 })
 
-// URL-encoded post-id list so the detail page can do J/K navigation within
-// the same gallery page. Cheap (only current page's IDs).
+// URL-encoded post-id list so the detail page can do J/K nav within the same gallery page (only current page's IDs).
 const listParam = computed(() =>
   encodeURIComponent(JSON.stringify(props.posts.map(p => p.id))),
 )

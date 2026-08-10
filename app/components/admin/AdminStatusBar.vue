@@ -1,6 +1,5 @@
 <script setup lang="ts">
-// AdminStatusBar: consolidated top-of-page status bar.
-// Provides aiStatus and aiEnabled to child/admin panels via inject,
+// AdminStatusBar: consolidated top-of-page bar. Shares aiStatus with admin panels via useState,
 // replacing the duplicate getAiStatus calls in AiAssistantPanel.
 import type { AiStatus } from '~/types'
 
@@ -11,14 +10,12 @@ const aiStatus = ref<AiStatus | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let alive = true
 
-// H2: 单人 admin 看队列深度 5s 与 30s 几乎无差别 — 5s = 17,280 次/天，
-// 30s = 2,880 次/天（-83%）。
+// H2: 单人 admin 看队列深度 5s 与 30s 几乎无差别 — 30s 减少 83% 请求量。
 const POLL_INTERVAL = 30_000
 
 const aiEnabled = computed(() => aiStatus.value?.enabled && aiStatus.value?.endpoint && aiStatus.value?.model)
 
-// Share AI status via useState so sibling panels (e.g. AiAssistantPanel)
-// can consume it without duplicating the getAiStatus call. (H5 fix)
+// Share AI status via useState so sibling panels skip the duplicate getAiStatus call. (H5 fix)
 const sharedAiStatus = useState<AiStatus | null>('sharedAiStatus', () => null)
 watch(aiStatus, (v) => { sharedAiStatus.value = v }, { immediate: true })
 
@@ -46,7 +43,6 @@ onUnmounted(() => {
 
 <template>
   <div class="flex items-center gap-4 text-xs text-[var(--text-muted)] py-1.5 px-1 flex-wrap">
-    <!-- System queue -->
     <span class="inline-flex items-center gap-1.5">
       <span
         class="w-1.5 h-1.5 rounded-full"
@@ -56,7 +52,6 @@ onUnmounted(() => {
       <span class="font-mono tabular-nums text-[var(--text-primary)]">{{ systemStatus?.queue_depth ?? '…' }}</span>
     </span>
 
-    <!-- AI status -->
     <span v-if="aiStatus" class="inline-flex items-center gap-1.5">
       <span
         class="w-1.5 h-1.5 rounded-full"

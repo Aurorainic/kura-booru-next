@@ -10,12 +10,10 @@ const props = defineProps<{
 const toast = useToast()
 const chatInput = ref('')
 
-// Chat history is ephemeral by default (M5 fix). For persistent history
-// across page reloads, use localStorage with save/load logic.
+// Chat history is ephemeral (M5 fix); use localStorage for persistence.
 const chatMessages = ref<{ role: 'user' | 'assistant'; content: string; suggestions?: any[] }[]>([])
 const chatLoading = ref(false)
 
-// Clear conversation - admin wants a fresh start
 function clearChat() {
   chatMessages.value = []
   toast.info('已清空对话')
@@ -28,7 +26,6 @@ function applySuggestion(s: any) {
   }
 }
 
-// Quick-start prompts for empty state
 function quickStart(prompt: string) {
   chatInput.value = prompt
   sendChat()
@@ -43,12 +40,6 @@ async function sendChat() {
   chatLoading.value = true
 
   try {
-    // ponytail: send the last 10 messages (5 Q&A pairs) as history so the
-    // AI has real conversational context. Previously NO history was sent -
-    // every message was a cold start, so follow-ups like "那翻译呢?" had
-    // no referent and the AI answered as if it was a new session.
-    // We slice(-11, -1) to exclude the message we just pushed (last item)
-    // and take the 10 messages before it.
     const history = chatMessages.value
       .slice(-11, -1)
       .map(m => ({ role: m.role, content: m.content }))
@@ -65,7 +56,6 @@ async function sendChat() {
   }
 }
 
-// Auto-scroll chat container to bottom on new message
 const chatScroll = ref<HTMLElement | null>(null)
 watch(() => chatMessages.value.length, async () => {
   await nextTick()

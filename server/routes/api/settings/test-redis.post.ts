@@ -25,7 +25,6 @@ export default defineAdminHandler({
     }
 
     try {
-      // ponytail: pin DNS to resolved IP to prevent rebinding SSRF.
       const parsed = new URL(url)
       const resolved = await dnsLookup(parsed.hostname)
       const pinnedUrl = new URL(url)

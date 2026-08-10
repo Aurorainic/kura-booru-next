@@ -7,9 +7,6 @@ export const postTags = pgTable('post_tags', {
   tagId: uuid('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
 }, (t) => ({
   pk: primaryKey({ columns: [t.postId, t.tagId] }),
-  // ponytail: PK is (post_id, tag_id) — every WHERE tag_id= seq-scans without this.
-  // Reverse index covers listTags safeCount subquery, search EXISTS, autocomplete
-  // EXISTS, tag-merge counts and the post_tags UPDATE during merge.
   tagIdx: index('ix_post_tags_tag_id').on(t.tagId),
   // M17: 搜索 EXISTS 子查询是 (tag_id = ? AND post_id = ?) — 复合索引覆盖
   tagPostIdx: index('ix_post_tags_tag_id_post_id').on(t.tagId, t.postId),

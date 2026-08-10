@@ -1,6 +1,5 @@
-// v0.9.0 R2.5: split into lib/ai/. Re-export for backward compat.
-// Nitro auto-imports follow `export *` re-exports (same as server/utils/schema.ts),
-// so all symbols below remain globally available to server code without explicit imports.
+// v0.9.0 R2.5: split into lib/ai/. Re-export for backward compat — Nitro auto-imports
+// follow `export *` re-exports (as with server/utils/schema.ts), so all symbols stay global.
 export * from '../lib/ai/types'
 export * from '../lib/ai/config'
 export * from '../lib/ai/client'

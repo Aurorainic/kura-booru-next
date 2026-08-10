@@ -1,9 +1,7 @@
 /**
- * phash dedup step — shared by single-image and multi-image paths.
- *
- * Uses the ix_posts_phash_prefix expression index (R2.1) for the bucket
- * lookup, then findDuplicateByPhash for Hamming-distance comparison.
- *
+ * phash dedup step — shared by single and multi-image paths.
+ * Uses the ix_posts_phash_prefix expression index (R2.1) for the bucket lookup,
+ * then findDuplicateByPhash for Hamming-distance comparison.
  * Returns the existing post ID if a duplicate is found, null otherwise.
  */
 import { sql } from 'drizzle-orm'

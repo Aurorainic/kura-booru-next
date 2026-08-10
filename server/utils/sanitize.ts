@@ -1,15 +1,8 @@
 /**
- * HTML sanitizer for post descriptions.
- * Uses DOMPurify (via isomorphic-dompurify) so we get a real HTML parser instead
- * of regex — regex can be bypassed with malformed tags.
- *
- * Allowed: basic text formatting, headings, lists, code, blockquote, links.
+ * HTML sanitizer for post descriptions: DOMPurify (real parser — regex can be
+ * bypassed with malformed tags). Output is PLAIN TEXT, never rendered as HTML
+ * (CLAUDE.md Hard-Won Rule #14): block/line tags → line breaks, rest stripped.
  * Anchors get http(s)-only href + rel hardening.
- *
- * Output is PLAIN TEXT (never rendered as HTML anywhere in the frontend —
- * CLAUDE.md "Hard-Won Rule #14: external artwork descriptions are plain text"):
- * block/line tags are converted to line breaks, remaining tags stripped, and
- * readable multi-line text instead of leaking literal markup.
  */
 import DOMPurify from 'isomorphic-dompurify'
 

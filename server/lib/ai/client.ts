@@ -18,8 +18,6 @@ class AiError extends Error {
 
 // ── Core API call ──
 
-// ponytail: 30s 对 DeepSeek 等分类任务（25 标签 + JSON 输出）太紧，实测常超
-// 导致整批 reprocess abort。提到 60s 覆盖慢响应，重试仍有兜底。
 const AI_TIMEOUT_MS = 60_000
 const AI_MAX_RETRIES = 2
 
@@ -76,11 +74,9 @@ export interface AiConnectionTestResult {
 }
 
 /**
- * 从 AI 原始输出中稳健地提取 JSON。
- *
- * 部分模型（尤其 deepseek 等）即使开了 response_format，也可能把 JSON
- * 包在 ```json ... ``` 代码围栏里，或前后加闲聊文字。JSON.parse 直接失败
- * 会让整个批次作废。这里先剥围栏、再截取首个平衡的 {...} 区间。
+ * 稳健提取 AI 输出中的 JSON：部分模型即使开了 response_format 也会包
+ * ```json``` 围栏或夹带闲聊文字，直接 JSON.parse 会让整个批次作废。
+ * 先剥围栏，再截取首个平衡的 {...} 区间。
  */
 export function extractJsonFromRaw(raw: string): unknown {
   let text = (raw || '').trim()
@@ -115,9 +111,9 @@ export function extractJsonFromRaw(raw: string): unknown {
 const TEST_TIMEOUT_MS = 15_000
 
 /**
- * Test an explicit provider config with a minimal chat completion.
- * Used by the admin "测试连接" button — does NOT touch the global snapshot,
- * so unsaved form payloads can be tested too. Single attempt, no retries.
+ * Test an explicit provider config with a minimal chat completion (admin
+ * "测试连接" button). Does NOT touch the global snapshot, so unsaved form
+ * payloads can be tested too. Single attempt, no retries.
  */
 export async function testAiConnection(cfg: { endpoint: string; model: string; apiKey: string }): Promise<AiConnectionTestResult> {
   const baseEndpoint = cfg.endpoint.replace(/\/$/, '')

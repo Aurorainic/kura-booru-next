@@ -1,14 +1,7 @@
 /**
- * pg-boss 单点注册（ADR-0001 §4）。
- *
- * 全部命名任务在此注册：AI job worker + 定时任务。
- * pg-boss 初始化在 08-pg-boss.ts Nitro 插件中调用 registerJobs()。
- *
- * 实施注意（源自 pg-boss 技术验证结论，验证代码已随仓库清理移除）：
- * - v12 worker 回调是批量签名 async ([job]) => {}
- * - DLQ 必须先建：createQueue(name, { deadLetter }) 要求死信队列已存在
- * - cron 有 60s singleton 下限（5min/1h 产线节奏无影响）
- * - 死信是"复制"（新 id），原 job 留 failed
+ * pg-boss 单点注册（ADR-0001 §4）：全部命名任务在此注册，初始化在 08-pg-boss.ts。
+ * 坑位：v12 worker 批量签名 async ([job]) => {}；DLQ 必须先建；cron 60s singleton
+ * 下限；死信是"复制"（新 id），原 job 留 failed。
  */
 import { PgBoss } from 'pg-boss'
 import { sql } from 'drizzle-orm'
@@ -32,10 +25,8 @@ export async function getBoss(): Promise<PgBoss> {
 }
 
 // ── AI worker 动态注册/注销 ──
-// 按需启用原则：AI 关闭时不注册任何 AI worker（work() 每个队列都会常驻轮询，
-// 占用 DB 连接与 CPU）。启用时注册，关闭时 offWork 释放。isAiEnabled() 的
-// 快照在 admin 增删改 Provider / 切换全局开关后由 refreshAiConfig 更新，
-// 并通过 onAiConfigChanged 钩子触发这里同步。
+// 按需启用：AI 关闭时不注册 worker（避免常驻轮询占用 DB 连接/CPU）；isAiEnabled()
+// 快照在 Provider 增删改/全局开关后由 refreshAiConfig 更新，经 onAiConfigChanged 钩子同步。
 let aiWorkersRegistered = false
 // M1: 并发 syncAiWorkers（启动 + 配置热刷新竞态）可能重复注册 worker —
 // in-flight promise 互斥，第二次调用等待第一次完成
@@ -166,7 +157,7 @@ export async function registerJobs(boss: PgBoss) {
       await db.execute(sql`
         UPDATE tags t SET post_count = sub.c
         FROM (SELECT tag_id, COUNT(*) AS c FROM post_tags GROUP BY tag_id) sub
-        WHERE t.id = sub.id
+        WHERE t.id = sub.tag_id
       `)
       console.log('[sync] tag post_count reconciled')
     } catch (err) {

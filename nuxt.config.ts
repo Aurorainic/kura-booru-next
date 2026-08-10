@@ -3,21 +3,10 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
-  // ponytail: devtools 静态配置不随 NODE_ENV 自动关闭。Nuxt 在 schema 解析阶段
-  // 读取 devtools.enabled，此时 Docker build 阶段 NODE_ENV 默认为 undefined（非
-  // production），于是 @nuxt/devtools 被注册进客户端产物——升级后线上又冒出浮窗。
-  // 根因是构建期 NODE_ENV 未设，而非配置本身。这里保留显式判断做兜底，但真正
-  // 的修复在 Dockerfile build 阶段注入 NODE_ENV=production（见 commit）。
   devtools: { enabled: process.env.NODE_ENV !== 'production' },
 
   css: ['~/../assets/css/main.css'],
 
-  // ponytail: register components by basename only (pathPrefix: false).
-  // With Nuxt's default `pathPrefix: true`, ui/ConfirmDialog.vue → UiConfirmDialog,
-  // so templates using <ConfirmDialog>/<PageHeader>/<ToastContainer>/<EmptyState>/
-  // <LoadingCard>/<TagIdTooltip> resolved to nothing — the confirm dialog never
-  // rendered, making every delete button a silent no-op. No basename collisions
-  // exist, so this is safe (admin/panels are imported explicitly in admin/index.vue).
   components: { dirs: [{ path: '~/components', pathPrefix: false }] },
 
   vite: {
@@ -40,10 +29,7 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     internalApiUrl: process.env.INTERNAL_API_URL || 'http://127.0.0.1:3000/api',
-    // enableAiTagProcessing: only the server checks this flag to decide
-    // whether to dispatch AI tagging jobs. The client never needs to know
-    // this value — kept at root level (server-only) to avoid leaking the
-    // feature toggle to the browser bundle.
+    // Server-only: gates AI tagging job dispatch. Kept out of `public` so the toggle never reaches the browser bundle.
     enableAiTagProcessing: process.env.ENABLE_AI_TAG_PROCESSING || 'false',
     public: {
       gitTag: process.env.KURA_VERSION || process.env.PUBLIC_GIT_TAG || 'dev',
@@ -52,22 +38,9 @@ export default defineNuxtConfig({
   },
 
   routeRules: {
-    // SSR HTML cache is fully controlled by
-    // server/middleware/02-cache-control.ts, which inspects the request
-    // cookie on every SSR: anon → `public, s-maxage=300` (CDN-cacheable),
-    // admin → `private, no-store` (never cached), Redis-down → no-store
-    // (fail-closed to avoid leaking admin HTML).
-    //
-    // Do NOT add `swr: 300` back here. v0.7.2 introduced Nitro's in-process
-    // SWR cache keyed on URL only — no cookie in the cache key — so the anon
-    // HTML Nitro cached for `/` was served back to a just-logged-in admin on
-    // full page reload (login.vue does `window.location.href = '/'`), leaving
-    // them in the stale `isAdmin=false` state. The middleware can't undo this
-    // because SWR short-circuits the request in the Nitro hook chain before
-    // any middleware runs.
-    //
-    // Admin/login/logout paths stay explicitly no-store at the route level too,
-    // as a belt-and-suspenders guard for any proxy that ignores Vary: Cookie.
+    // SSR HTML cache is owned by server/middleware/02-cache-control.ts (anon → s-maxage=300, admin → no-store, Redis-down → no-store fail-closed).
+    // Do NOT add `swr: 300` back: v0.7.2's URL-only SWR cache served stale anon HTML to just-logged-in admins.
+    // Route-level no-store below is a belt-and-suspenders guard for proxies that ignore Vary: Cookie.
     '/admin/**': { headers: { 'cache-control': 'private, no-store' } },
     '/login': { headers: { 'cache-control': 'private, no-store' } },
     '/logout': { headers: { 'cache-control': 'private, no-store' } },

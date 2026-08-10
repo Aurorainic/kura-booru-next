@@ -23,10 +23,6 @@ export async function suggestRatingForPost(postId: string): Promise<RatingSugges
     .innerJoin(tags, eq(postTags.tagId, tags.id))
     .where(eq(postTags.postId, postId))
 
-  // ponytail: weight tags by signal strength. A tag like "nude" or "panties"
-  // is a much stronger rating signal than "long_hair" or "blue_eyes". Without
-  // weighting, the AI treats all tags equally and may be misled by neutral
-  // tags outnumbering suggestive ones.
   const STRONG_SIGNALS = new Set([
     // 明确裸露/性行为
     'nude', 'naked', 'topless', 'bottomless', 'nipples', 'areola', 'breasts',
@@ -48,10 +44,6 @@ export async function suggestRatingForPost(postId: string): Promise<RatingSugges
     return `${r.tag.name}${signal} (${r.tag.category}${r.tag.translation ? `, ${r.tag.translation}` : ''})`
   })
 
-  // ponytail: include image dimensions - a very tall narrow image is likely
-  // a manga/doujin page (higher explicit probability), while a wide landscape
-  // image is more likely a safe illustration. This is a weak signal but
-  // better than nothing when we can't see the actual image.
   const aspectRatio = post.width && post.height ? (post.width / post.height).toFixed(2) : 'unknown'
   const orientation = aspectRatio === 'unknown' ? 'unknown' : (Number(aspectRatio) > 1.2 ? 'landscape' : Number(aspectRatio) < 0.8 ? 'portrait' : 'square')
 
@@ -113,9 +105,6 @@ export async function suggestRatings(
   const results: (RatingSuggestion & { post_id: string; current_rating: Rating })[] = []
   let examined = 0
 
-  // ponytail: avoid concurrent bursts on the AI API - process sequentially in
-  // small batches with a 200ms inter-request delay. Previous Promise.all fired
-  // 10 requests simultaneously; that triggered 429s and was hostile to shared endpoints.
   for (const batch of chunk(postRows, 5)) {
     for (const post of batch) {
       try {
@@ -128,9 +117,6 @@ export async function suggestRatings(
           })
         }
       } catch { /* skip */ }
-      // ponytail: report progress per-post examined, not per-suggestion-found.
-      // Counting only changed-rating posts made progress stall at 0 until the
-      // very end, giving the admin no feedback during a long scan.
       examined++
       if (onProgress) onProgress(examined, postRows.length)
       await new Promise(r => setTimeout(r, 200))

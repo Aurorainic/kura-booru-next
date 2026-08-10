@@ -1,7 +1,4 @@
--- Materialized view aggregating counts and totals for /api/admin/dashboard.
--- Refreshed in-process every 5 min via server/plugins/06-dashboard-refresh.ts.
--- ponytail: 5-min refresh cadence matches the dashboard's re-read pattern;
--- CONCURRENTLY requires the unique index on (id) — id=1 is a sentinel row.
+-- MV of counts/totals for /api/admin/dashboard; refreshed in-process every 5 min (06-dashboard-refresh.ts)
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_dashboard_stats AS
 SELECT
   1::int AS id,
@@ -15,8 +12,7 @@ WITH NO DATA;
 -- Required for REFRESH MATERIALIZED VIEW CONCURRENTLY (no exclusive lock).
 CREATE UNIQUE INDEX IF NOT EXISTS ix_mv_dashboard_stats_id ON mv_dashboard_stats (id);
 
--- First refresh — populate immediately so the first request after deploy
--- doesn't get an empty dashboard.
+-- First populate so the first request after deploy isn't served an empty dashboard
 INSERT INTO mv_dashboard_stats (id, total_posts, total_tags, total_post_tags, total_file_size_bytes, refreshed_at)
 SELECT 1,
   (SELECT count(*) FROM posts),

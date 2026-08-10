@@ -1,6 +1,6 @@
 /**
- * Auth helpers for endpoints that accept either admin session or extension key.
- * Used by web-import.post.ts and any future extension-facing endpoint.
+ * Auth helpers for endpoints accepting either admin session or extension key
+ * (used by web-import.post.ts and future extension-facing endpoints).
  */
 import type { H3Event } from 'h3'
 import { createError } from 'h3'
@@ -10,9 +10,8 @@ export function getExtensionKey(event: H3Event): { id: string; name: string; cre
 }
 
 /**
- * Accept either admin session OR extension key. Returns the auth context
- * discriminator so callers can branch (rate-limit bucketing, capability
- * checks) without re-reading from event.context.
+ * Accept admin session OR extension key; returns the kind discriminator so
+ * callers branch (rate-limit bucketing, capability checks) without re-reading context.
  */
 export async function requireAdminOrExtensionKey(event: H3Event): Promise<
   | { kind: 'admin' }

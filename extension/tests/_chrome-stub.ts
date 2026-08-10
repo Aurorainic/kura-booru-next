@@ -1,8 +1,3 @@
-// ponytail: shared chrome.* stub used by extension tests.
-// The extension is plain ES5 with no module system — it reads `chrome` off
-// the global scope at load time. Tests install a fresh stub, then resetModules
-// + dynamic-import the script so its top-level listener registration runs against
-// this stub. No real Chrome APIs are invoked.
 import { vi, expect } from "vitest";
 
 // Minimal types for the surface area the extension actually touches.
@@ -31,8 +26,7 @@ export function installChrome(stub: ChromeStub): void {
   (globalThis as any).chrome = stub;
 }
 
-// Build a chrome stub whose storage starts empty and whose fetch is the
-// provided function (defaults to a throwing stub so tests must opt in).
+// Chrome stub: storage starts empty; fetch only installed when provided
 export function makeChrome(opts: {
   storage?: Record<string, any>;
   fetch?: typeof fetch;
@@ -61,11 +55,8 @@ export function makeChrome(opts: {
 
   const storage: ChromeStorage = {
     sync: {
-      // The extension code does `await chrome.storage.sync.get(keys)` and reads
-      // the resolved value off the await. Real Chrome's callback API returns
-      // undefined from the await — but the code clearly expects a value, so the
-      // stub returns a Promise that resolves to the data object. This mirrors
-      // how the code is actually exercised in this project.
+      // Extension awaits chrome.storage.sync.get(keys) — real Chrome's callback API
+      // resolves undefined, so return a Promise resolving to the data object.
       get: (keys, cb) => {
         const data = keys.reduce((acc, k) => ({ ...acc, [k]: storageData[k] }), {});
         if (cb) cb(data);
@@ -86,8 +77,7 @@ export function makeChrome(opts: {
   return { runtime, storage };
 }
 
-// Convenience: dispatch a message to all registered onMessage listeners,
-// returning a promise that resolves with whatever sendResponse was called with.
+// Dispatch a message to registered onMessage listeners; resolves with sendResponse's argument
 export function dispatchMessage(stub: ChromeStub, message: any): Promise<any> {
   return new Promise((resolve) => {
     const listener = stub.runtime.onMessage._listeners[0];
@@ -100,9 +90,8 @@ export function dispatchMessage(stub: ChromeStub, message: any): Promise<any> {
   });
 }
 
-// Re-import a plain-JS script fresh so its top-level side effects re-run
-// (e.g. registering chrome.runtime.onMessage listener). Must be called after
-// installing the chrome stub on globalThis.
+// Re-import a plain-JS script fresh so its top-level side effects (e.g. onMessage
+// registration) re-run; call after installChrome().
 export async function loadScript(path: string): Promise<void> {
   vi.resetModules();
   await import(path);

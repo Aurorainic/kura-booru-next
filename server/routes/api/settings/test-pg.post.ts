@@ -25,9 +25,6 @@ export default defineAdminHandler({
     }
 
     try {
-      // ponytail: pin DNS to the resolved IP at validation time to prevent
-      // rebinding — swap hostname with IP in the connection URL so the driver
-      // can't resolve to a different address.
       const { default: postgres } = await import('postgres')
       const parsed = new URL(url)
       const resolved = await dnsLookup(parsed.hostname)

@@ -1,7 +1,6 @@
 <script setup lang="ts">
-// v0.10.0: 全站设置后台 — 7 类卡片（site/images/storage/bot/integrations/infra/admin）。
-// 数据来自 GET /api/admin/settings（含 metadata：type/label/description/secret/masked），
-// secret 项掩码显示、空输入=保持原值；保存走 PUT /api/admin/settings（服务端热刷新）。
+// 全站设置后台：GET /api/admin/settings 返回 metadata（type/label/secret/masked），
+// secret 掩码显示、空输入=保持原值；保存走 PUT（服务端热刷新）。
 import type { SettingItem } from '~/composables/api'
 const { ssrCookie } = useSsrContext()
 const toast = useToast()
@@ -22,7 +21,6 @@ const items = computed(() => data.value?.items || [])
 // 可编辑草稿：key -> value（secret 项空串 = 保持原值）
 const draft = reactive<Record<string, string>>({})
 const secretDirty = reactive<Record<string, boolean>>({})
-// 测试按钮状态
 const testStates = reactive<Record<string, { testing: boolean; result: { ok?: boolean; error?: string; username?: string; id?: number; bucket?: string; region?: string; endpoint?: string; via?: string; status?: number } | null }>>({})
 
 function itemsOf(cat: string): SettingItem[] {
@@ -31,8 +29,7 @@ function itemsOf(cat: string): SettingItem[] {
 
 watch(items, (list) => {
   for (const it of list) {
-    // H13: refreshNuxtData('admin-settings') 触发本 watch 时，用户正在输入
-    // 未保存的 secret 明文（secretDirty=true）不能被重置为空。
+    // H13: refresh 触发本 watch 时,用户正在输入的未保存 secret 明文(secretDirty=true)不能被重置为空。
     if (it.secret) {
       if (!secretDirty[it.key]) {
         draft[it.key] = ''
@@ -137,7 +134,7 @@ function fieldSpan(item: SettingItem): string {
   <div class="max-w-6xl">
     <PageHeader title="站点设置" subtitle="全站配置均已迁移到数据库，保存后立即热刷新生效。" class="mb-6" />
 
-    <!-- 自适应瀑布流：窄屏单列，xl+ 双列（CSS columns 自动均衡高度，避免同行等高空隙） -->
+    <!-- 自适应瀑布流:窄屏单列,xl+ 双列(CSS columns 自动均衡高度,避免同行等高空隙) -->
     <div class="columns-1 xl:columns-2 gap-6">
       <template v-for="cat in categories" :key="cat.key">
         <!-- 管理员类卡片：只读说明，密码走独立面板 -->
@@ -151,17 +148,14 @@ function fieldSpan(item: SettingItem): string {
           </div>
         </div>
 
-        <!-- 其余卡片 -->
         <div v-else class="dash-card !p-5 break-inside-avoid mb-6">
           <div class="mb-4">
             <h3 class="text-sm font-semibold text-[var(--text-primary)]">{{ cat.label }}</h3>
             <p class="text-xs text-[var(--text-muted)] mt-0.5">{{ cat.description }}</p>
           </div>
 
-          <!-- 字段自适应：窄屏单列，sm+ 双列（textarea 跨整行） -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
             <div v-for="item in itemsOf(cat.key)" :key="item.key" :class="fieldSpan(item)">
-              <!-- readonly：仅展示 -->
               <template v-if="item.type === 'readonly'">
                 <label class="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider block mb-1.5">{{ item.label }}</label>
                 <div class="flex gap-2">
@@ -188,7 +182,6 @@ function fieldSpan(item: SettingItem): string {
                 </div>
               </template>
 
-              <!-- boolean：描述独占一行（缩进对齐标签），避免与标签在同一 flex 行里互相挤压 -->
               <div v-else-if="item.type === 'boolean'">
                 <label class="flex items-center gap-2.5 py-1 cursor-pointer">
                   <input type="checkbox" class="w-4 h-4 rounded accent-[var(--accent-color)] flex-shrink-0"
@@ -214,7 +207,6 @@ function fieldSpan(item: SettingItem): string {
                 <p class="text-[0.625rem] text-[var(--text-muted)] mt-1">{{ item.description }} 留空保持原值，保存后不回显明文。</p>
               </template>
 
-              <!-- select：下拉选项（如 bot_proxy_type / run_mode） -->
               <template v-else-if="item.type === 'select'">
                 <label class="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider block mb-1.5">{{ item.label }}</label>
                 <select v-model="draft[item.key]" :class="fieldClasses() + ' cursor-pointer'"
@@ -231,7 +223,6 @@ function fieldSpan(item: SettingItem): string {
                 </div>
               </template>
 
-              <!-- textarea -->
               <template v-else-if="item.type === 'textarea'">
                 <label class="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider block mb-1.5">{{ item.label }}</label>
                 <textarea v-model="draft[item.key]" :rows="item.key === 'announcement' ? 4 : item.key === 'head_inject' ? 6 : 3" :class="fieldClasses() + ' resize-none'"
@@ -239,7 +230,6 @@ function fieldSpan(item: SettingItem): string {
                 <p class="text-[0.625rem] text-[var(--text-muted)] mt-1">{{ item.description }}</p>
               </template>
 
-              <!-- number -->
               <template v-else-if="item.type === 'number'">
                 <label class="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider block mb-1.5">{{ item.label }}</label>
                 <input v-model="draft[item.key]" type="number" :placeholder="item.placeholder"
@@ -247,7 +237,6 @@ function fieldSpan(item: SettingItem): string {
                 <p class="text-[0.625rem] text-[var(--text-muted)] mt-1">{{ item.description }}</p>
               </template>
 
-              <!-- text -->
               <template v-else>
                 <label class="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider block mb-1.5">{{ item.label }}</label>
                 <input v-model="draft[item.key]" type="text" :placeholder="item.placeholder"
@@ -258,7 +247,6 @@ function fieldSpan(item: SettingItem): string {
             </div>
           </div>
 
-          <!-- 卡片级测试按钮（存储 / 机器人） -->
           <div v-if="cat.key === 'storage'" class="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t border-[var(--border-color)]">
             <button @click="testS3" :disabled="testState('s3_test').testing"
               class="btn-ghost !text-xs !px-4 !py-2 !border !border-[var(--border-color)] !rounded-xl disabled:opacity-40">
@@ -307,7 +295,7 @@ function fieldSpan(item: SettingItem): string {
       SOCKS5 代理、MTProto 反代（apiRoot）——先选「中转类型」再填地址，可用「测试 Bot 连接」验证。
     </p>
 
-    <!-- sticky 底部保存条：滚动时始终吸附底部可见，不必滚回顶部保存 -->
+    <!-- sticky 底部保存条:滚动时始终吸附底部可见,不必滚回顶部保存 -->
     <div class="sticky bottom-0 mt-6 -mx-1 px-1 py-3 border-t border-[var(--border-color)] bg-[var(--bg-primary)]">
       <div class="flex items-center gap-3">
         <button @click="save" :disabled="saving" class="btn-primary !px-5 !py-2.5 !text-sm">

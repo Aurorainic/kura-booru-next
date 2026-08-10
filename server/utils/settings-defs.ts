@@ -1,19 +1,6 @@
 /**
- * 全站设置定义注册表（v0.10.0）。
- *
- * 定义后台可维护的全部设置项：分类、类型、标签、描述、是否公开、是否敏感。
- * DB 侧仍是 settings 键值表，这里提供渲染与校验所需的元数据。
- *
- * 分类（后台 7 类卡片）：
- *   site       站点       — 标题/描述/URL/公告/head 注入/维护模式
- *   images     图片       — 缩略图/预览/上传大小
- *   storage    存储       — S3 六项
- *   bot        机器人     — token/webhook secret/管理员 ID/中转代理
- *   integrations 集成    — Pixiv / Backend API Key
- *   infra      基础设施   — DATABASE_URL / REDIS_URL（只读展示 + 测试）
- *   admin      管理员     — 账号密码（独立 PasswordPanel 管理，此处只读说明）
- *
- * secret=true 的项在后台掩码显示、保存后不回显明文、public 恒为 false。
+ * 全站设置定义注册表（v0.10.0）：后台 7 类卡片（site/images/storage/bot/integrations/infra/admin）的元数据，
+ * DB 侧仍是 settings 键值表。secret=true 项掩码显示、保存后不回显明文、public 恒为 false。
  */
 
 export type SettingType = 'text' | 'textarea' | 'number' | 'boolean' | 'secret' | 'select' | 'readonly'
@@ -54,10 +41,6 @@ export const SETTING_DEFS: SettingDef[] = [
   { key: 'announcement', category: 'site', type: 'textarea', label: '公告内容', description: '支持 Markdown。多行轮播，溢出水平滚动。', public: true, default: '' },
   { key: 'head_inject', category: 'site', type: 'textarea', label: 'Head 注入', description: '注入到 <head> 的 HTML（如分析脚本）。', public: true, default: '' },
   { key: 'maintenance_mode', category: 'site', type: 'boolean', label: '维护模式', description: '开启后非管理员将被重定向到维护页面。', public: true, default: 'false' },
-  // ponytail: AI 全局开关加入注册表（site 分类）。此前该 key 只被
-  // toggle.put 通过 updateSettings 写入，但 updateSettings 只接受注册表内的 key，
-  // 导致 AI 开关永远写不进 DB（刷新后仍保持旧值）。加入后 toggle 才能真正落库，
-  // 并随热刷新联动 worker 注册。「AI 设置」面板与「站点设置」卡片均可维护同一值。
   { key: 'ai_tag_processing_enabled', category: 'site', type: 'boolean', label: '启用 AI 标签处理', description: '全局 AI 开关，由「AI 设置」面板维护。', default: 'false', adminPanel: false },
   { key: 'safe_mode_enabled', category: 'site', type: 'boolean', label: '安全模式', description: '开启后列表/随机接口仅返回 safe 评级，搜索/详情返回全部评级但追加 is_blurred。', public: false, default: 'false' },
   { key: 'safe_mode_in_intranet', category: 'site', type: 'boolean', label: '内网模式下启用安全模式', description: '运行模式为 intranet 时强制启用安全模式。', public: false, default: 'false' },
@@ -134,9 +117,7 @@ export function maskSecret(value: string): string {
 }
 
 /**
- * H9: 按注册表类型校验单个设置值（后台 PUT 落库前调用）。
- * 抛 Error 表示不合法；返回规范化后的字符串值。
- * secret 空串 = 保持原值、'__CLEAR__' = 吊销（由 updateSettings 语义处理）。
+ * H9: 按注册表类型校验设置值（后台 PUT 落库前调用）；抛 Error 表示不合法，返回规范化后的值。
  */
 export function validateSettingValue(def: SettingDef, rawValue: string): string {
   const v = String(rawValue)

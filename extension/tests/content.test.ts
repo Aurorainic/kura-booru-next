@@ -30,14 +30,10 @@ function setupDom(pathname: string): { dom: JSDOM; sendMessages: SendMessageCall
     },
   };
 
-  // Expose to the script's scope: content.js references `window`, `document`,
-  // `chrome` as globals. Running via vm with its own context requires these on
-  // that context.
+  // content.js reads window/document/chrome as globals; running via Function keeps them on jsdom's window
   const vm = (window as any)._virtualConsole;
   void vm;
 
-  // Execute the IIFE in the jsdom window scope using its Function constructor so
-  // `document`/`window`/`chrome` resolve to jsdom's.
   const fn = new window.Function(CONTENT_JS);
   fn.call(window);
 
@@ -242,11 +238,8 @@ describe("pollStatus terminal states (CHECK_STATUS)", () => {
     const { dom, sendMessages } = setupDom("/artworks/1");
     const btn = startPoll(dom, sendMessages);
 
-    // The script counts polling attempts and bails when attempt > 60. Each
-    // loop iteration responds to the next unanswered CHECK_STATUS (which
-    // increments pollStatus's attempt counter) and advances the 2s re-poll
-    // timer that schedules the following CHECK_STATUS. Iterating enough times
-    // reliably pushes attempt past 60 regardless of the exact off-by-one.
+    // Answer each unanswered CHECK_STATUS and advance the 2s re-poll timer until
+    // the script's attempt counter passes 60 (off-by-one-agnostic).
     const answered = new Set<SendMessageCall>();
     let checkCount = 0;
     for (let i = 0; i < 80; i++) {

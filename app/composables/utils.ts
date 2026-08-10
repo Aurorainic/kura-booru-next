@@ -30,10 +30,8 @@ export function getPreviewUrl(post: Post): string {
 }
 
 /**
- * Derive srcset from the ADR-0003 multi-width key naming convention:
- *   <base>-300w.webp, <base>-640w.webp, <base>-1280w.webp, <base>-2000w.webp
- * Returns null for old-format keys (no width suffix) — caller falls back to single image.
- * Mid/large keys are derived from thumb/preview by suffix replacement.
+ * Build srcset from the ADR-0003 width-suffixed keys (<base>-300w/-640w/-1280w/-2000w.webp);
+ * null for old-format keys (caller falls back to a single image).
  */
 export function getSrcset(post: Post): string | null {
   const thumb = post.thumb_key

@@ -2,6 +2,14 @@
 
 本文件记录项目的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 修复
+- **`/i/` 图片代理改走服务端 endpoint** — `/i/[...].ts` 不再用 `s3_external_url`
+  拼上游地址（external_url 配路由器 DHCP IP 时断网即失效，图片全部 502），改为
+  按服务进程视角的 `s3_endpoint` 拉取（本机闭环走 `host.docker.internal`）；
+  `s3_external_url` 保留给 bot 等公网直出场景。
+
 ## [0.10.0] - 2026-08-08
 
 ### 新增

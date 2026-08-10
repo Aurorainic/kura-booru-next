@@ -15,13 +15,8 @@ interface UseAiJobPollingOptions {
 }
 
 /**
- * Shared AI job polling for the 3 admin AI panels (Classify/Merges/Ratings).
- * Each panel POSTs to start a job, gets a job_id back, then polls
- * GET /api/admin/ai/jobs/:id until status is done/error/gone.
- *
- * The composable owns the setInterval timer, the activeJobId/jobProgress refs,
- * and the onUnmounted cleanup. Callers provide per-panel callbacks for the
- * done/error/terminal transitions.
+ * Shared AI job polling: POST starts a job → poll GET /api/admin/ai/jobs/:id until done/error/gone.
+ * Owns the timer, activeJobId/jobProgress refs and onUnmounted cleanup; callers pass transition callbacks.
  */
 export function useAiJobPolling(options: UseAiJobPollingOptions) {
   const activeJobId = ref<string | null>(null)

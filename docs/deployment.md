@@ -33,7 +33,7 @@ For the complete list of all variables with descriptions and defaults, see [`inf
 | Variable | Description |
 |---|---|
 | `SITE_URL` | Your public site URL (e.g., `https://kura-booru.example.com`) — **seed-only**: imported into the settings table on first boot; after that, change it in the admin Settings panel (editing `.env` and restarting has no effect once seeded) |
-| `KURA_IMAGE_TAG` | Release tag to pin (e.g. `v0.7.2`); empty → `:latest` (rejected by `validate-env.sh prod`) |
+| `KURA_IMAGE_TAG` | Release tag to pin (e.g. `v0.10.0`); empty → `:latest` (rejected by `validate-env.sh prod`) |
 | `SECRET_KEY` | Generate with: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `POSTGRES_PASSWORD` | Database password |
 | `S3_ENDPOINT` / `S3_EXTERNAL_URL` | S3 storage endpoint (see S3 Configuration below) |
@@ -52,9 +52,9 @@ For the complete list of all variables with descriptions and defaults, see [`inf
 | S3 Storage | `S3_ENDPOINT`, `S3_EXTERNAL_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION` |
 | Database | `DATABASE_URL` (postgres-js format: `postgres://...`), `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` |
 | Redis | `REDIS_URL` (password included in URL if needed) |
-| AI Tag Processing | `ENABLE_AI_TAG_PROCESSING`, `AI_PROVIDER_API_KEY`, `AI_PROVIDER_ENDPOINT`, `AI_PROVIDER_MODEL` |
+| AI Tag Processing | `ENABLE_AI_TAG_PROCESSING`, `AI_PROVIDER_API_KEY`, `AI_PROVIDER_ENDPOINT`, `AI_PROVIDER_MODEL` — 仅首启 seed / 冷启动兜底，运行时在后台「AI 设置」面板管理 |
 | Bot | `BOT_TOKEN`, `BOT_WEBHOOK_SECRET`, `BOT_ADMIN_IDS` |
-| Image Processing | `MAX_IMAGE_SIZE`, `THUMB_SIZE`, `PREVIEW_SIZE` |
+| Image Processing | `MAX_IMAGE_SIZE`, `THUMB_SIZE`, `PREVIEW_SIZE` — 首启 seed，后台「图片」卡片维护 |
 | gallery-dl Auth | `PIXIV_REFRESH_TOKEN`, `PIXIV_PHPSESSID` |
 | Frontend | `INTERNAL_API_URL` (default: `http://127.0.0.1:3000/api` — in-process) |
 
@@ -137,8 +137,8 @@ The S3 layer works with **any** S3-compatible storage. Images are served **direc
 | `S3_EXTERNAL_URL` | `https://images.your-domain.com` | `http://localhost:9000/kura-booru` | `https://<bucket>.s3.<region>.amazonaws.com` |
 | `S3_REGION` | `auto` | `us-east-1` | `<region>` |
 
-- `S3_ENDPOINT`: Internal endpoint for backend uploads (S3 API)
-- `S3_EXTERNAL_URL`: Backend public URL prefix (used in API responses; in Standalone mode, images are served via `/i/*` proxy)
+- `S3_ENDPOINT`: 服务端上传与 `/i/*` 代理使用的 S3 API 地址（容器部署用 `host.docker.internal` 走本机闭环）
+- `S3_EXTERNAL_URL`: 公网直出 URL 前缀（CDN 域名）——浏览器直连 / bot 发图等场景；留空则一律走站内 `/i/*` 代理
 
 ---
 
@@ -226,36 +226,45 @@ The `seed-admin.ts` plugin auto-creates a default admin account on first startup
 - Port bindings use `127.0.0.1:PORT:PORT` — the reverse proxy runs on the **host machine** (in Reverse Proxy Optimized mode), not in Docker, so containers expose ports to localhost only
 - Redis `--requirepass` with empty password breaks docker-compose parsing. Remove the line entirely when password is empty
 - PG 18+ volume mount: use `/var/lib/postgresql` (not `/var/lib/postgresql/data`) — PG 18 changed its data directory layout
-- **4 containers**: nuxt, sidecar, postgres, redis. See `infra/docker-compose.yml`
+- **4 containers**（见 `infra/docker-compose.yml`）:
+
+| Container | Image | Purpose |
+|---|---|---|
+| `kura-web` | `ghcr.io/aurorainic/kura-booru-web:${KURA_IMAGE_TAG:-latest}` | SSR + REST API + Bot webhook (single Node process) |
+| `kura-worker` | `ghcr.io/aurorainic/kura-booru-worker:${KURA_IMAGE_TAG:-latest}` | Python gallery-dl + imagehash phash worker |
+| `kura-postgres` | `postgres:18-alpine` | Primary database |
+| `kura-redis` | `redis:8-alpine` | Job queue + cache |
 
 ---
 
 ## `/i/*` Image Proxy
 
-In, the Nuxt server handles `/i/*` internally via `server/routes/i/[...].ts`, which proxies to `S3_EXTERNAL_URL/{key}`. The reverse proxy does not need a separate `/i/*` block — all traffic goes to the Nuxt container.
+The Nuxt server handles `/i/*` internally via `server/routes/i/[...].ts`（key
+校验防路径遍历，Range 透传 + 流式转发），它从**服务进程视角**按 `s3_endpoint`
+（DB settings，容器部署 = `http://host.docker.internal:9000`）向 S3 拉取——
+不依赖 `s3_external_url`。宿主机裸跑 `pnpm run dev` 时需在 `/etc/hosts` 把
+`host.docker.internal` 解析到 127.0.0.1，否则图片 502。反向代理无需单独的
+`/i/*` 规则，所有流量都进 Nuxt 容器。
 
-When using direct S3/CDN URLs (recommended for production), set `S3_EXTERNAL_URL` to the CDN domain and images bypass the Nuxt proxy entirely.
+生产推荐直连 CDN：设 `S3_EXTERNAL_URL` 为 CDN 域名后，浏览器与 bot 等公网场景
+直出对象存储，完全绕过 Nuxt 代理。
 
 ---
 
 ## AI Tag Processing
 
-When `ENABLE_AI_TAG_PROCESSING=true`, newly imported images are automatically classified by an OpenAI-compatible API:
+AI 标签处理由**后台「AI 设置」面板**（`/admin?tab=ai`）管理，无需改环境变量：
 
-- Tags are classified into 5 categories (artist/character/copyright/general/meta)
-- Chinese translations are generated
-- Danbooru canonical names are assigned
-- Results are cached in `tag_knowledge` table to avoid repeated API calls
+- **全局开关** `ai_tag_processing_enabled`（settings 表）— 开启后新导入图片自动
+  调用 AI 分类：5 类标签（artist/character/copyright/general/meta）+ 中文翻译 +
+  Danbooru 标准命名；结果缓存进 `tag_knowledge` 表避免重复调用。
+- **Provider 配置**存 `ai_providers` 表（endpoint / model / api_key，单活跃），
+  在面板中增删改即时生效（热刷新）。
 
-### Required Variables
-
-| Variable | Description |
-|---|---|
-| `AI_PROVIDER_API_KEY` | API key for the OpenAI-compatible provider |
-| `AI_PROVIDER_ENDPOINT` | Base URL (e.g., `https://api.openai.com/v1`) |
-| `AI_PROVIDER_MODEL` | Model name (e.g., `gpt-4o-mini`) |
-
-All three are required when `ENABLE_AI_TAG_PROCESSING=true`. When disabled (default), these variables are ignored.
+`.env` 中的 `ENABLE_AI_TAG_PROCESSING` / `AI_PROVIDER_API_KEY` /
+`AI_PROVIDER_ENDPOINT` / `AI_PROVIDER_MODEL` 仅作**首启 seed 与冷启动兜底**：
+settings 表无 `ai_tag_processing_enabled` 记录时回退到 env 布尔值；`ai_providers`
+表为空时从 env 导入一个 provider 行。正常维护一律在后台面板操作。
 
 ### SSE Note
 
@@ -274,7 +283,7 @@ The web import page uses SSE (`GET /api/tasks/web-import/stream`) for real-time 
 ### Prerequisites
 
 - Chromium-based browser (Chrome, Edge, Brave, etc.)
-- `BACKEND_API_KEY` from your Kura Booru server (same key used by Telegram Bot)
+- A per-admin extension key (`kb_ext_` prefix) issued from the admin panel at `/admin?tab=extension` — NOT the shared `BACKEND_API_KEY` (v0.7.8+)
 
 ### Install from CI Artifact
 
@@ -302,4 +311,9 @@ for size in [16, 48, 128]:
 
 ### API Key
 
-The extension uses the same `BACKEND_API_KEY` environment variable as the Telegram Bot. If you rotate this key, extension users must update their saved API Key in the extension popup.
+The extension uses **per-admin extension keys** (`kb_ext_` prefix), generated
+and revoked in the admin panel（`/admin?tab=extension`）— each key is scoped to
+one admin, the raw value is shown only once, and revoking a key takes effect
+immediately. This is distinct from `BACKEND_API_KEY` (service-level, shared with
+the Telegram bot). See [operations.md](operations.md) § Extension API Key
+Management for the full workflow.

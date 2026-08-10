@@ -22,17 +22,15 @@ export default definePublicHandler({
 
     const path = (event.context.params?._ as any)?.toString() || ''
 
-    // /api/tags/:name — the dedicated /api/tags/autocomplete.get.ts handles that
-    // exact path; route the catch-all around it so a tag literally named
-    // "autocomplete" is still resolvable.
+    // /api/tags/:name: route the catch-all around the dedicated autocomplete
+    // route so a tag literally named "autocomplete" is still resolvable.
     if (path && path !== 'autocomplete') {
       const tag = await getTagByName(path, isAdmin)
       if (!tag) throw new AppError('NOT_FOUND', 404, 'Tag not found')
       return tag
     }
 
-    // /api/tags (list) — falls through here for both path === '' and the
-    // autocomplete branch (which has its own route file and never reaches us).
+    // /api/tags (list) — both '' and the autocomplete branch land here.
     return listTags({
       category: query.category,
       sort: query.sort,

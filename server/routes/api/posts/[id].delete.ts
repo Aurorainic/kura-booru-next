@@ -8,10 +8,8 @@ export default defineAdminHandler({
     const id = event.context.params?.id as string
     if (!id) throw new AppError('VALIDATION_FAILED', 400, 'Post ID required')
 
-    // v0.7.8 PR-C: shared helper handles both single-image and series
-    // delete + reorder. Admin PostsPanel calls this path; admin series
-    // nav calls the dedicated /api/admin/posts/[id] endpoint which
-    // delegates here.
+    // v0.7.8 PR-C: shared helper handles single-image and series delete + reorder;
+    // admin series nav delegates here via /api/admin/posts/[id].
     await deletePostAndRenumberSeries(id)
     return new Response(null, { status: 204 })
   },

@@ -13,8 +13,6 @@ export default defineAdminHandler({
     if (!name || name.length > 64) {
       throw new AppError('VALIDATION_FAILED', 400, 'name required (1-64 chars)')
     }
-    // ponytail: default false. Admin must explicitly opt in to granting a key
-    // the power to bypass auto-rating. Stops accidental policy-bypass.
     const canForceRating = body?.can_force_rating === true
 
     const createdBy = await getAdminUsernameFromCookie(cookie) || 'admin'
@@ -37,8 +35,6 @@ export default defineAdminHandler({
 
     if (!row) throw new AppError('INTERNAL', 500, 'Insert failed')
 
-    // ponytail: raw value returned ONCE. After this response, only the hash
-    // exists in the DB. UI must show it once and ask admin to save.
     return { ...row, raw_key: raw }
   },
 })

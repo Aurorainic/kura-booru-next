@@ -1,11 +1,7 @@
 /**
- * 61 路由文件 / 62 端点契约冻结清单（v0.9.0 规划 阶段 2；后端审计附录 A——规划与审计文档已随仓库清理移除，见 git 历史）。
- *
- * 这是契约的静态真源：路由文件增减/改名必须与这里同步，check.mjs 负责双向漂移守护。
- * frozen 标注三类不可变契约（源自后端审计 §6 结论）：
- *   extension — 浏览器扩展依赖（错误码、状态字面量、响应字段原样保留）
- *   bot       — Telegram webhook 协议（secret_token + callback_data）
- *   image     — /i/ 反代（Range 透传 + 流式 + cache 语义，ADR-0003 保持不变）
+ * 61 路由 / 62 端点契约冻结清单（v0.9.0 规划阶段 2；后端审计附录 A 已随仓库清理移除，见 git 历史）。
+ * 静态真源：路由文件增减/改名必须与这里同步，check.mjs 守护双向漂移。
+ * frozen 三类不可变契约：extension（浏览器扩展依赖）、bot（Telegram webhook 协议）、image（/i/ 反代，ADR-0003）。
  */
 
 export type ContractAuth =

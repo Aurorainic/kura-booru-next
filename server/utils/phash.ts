@@ -1,7 +1,4 @@
-/**
- * Perceptual hash utilities — Hamming distance for duplicate detection.
- * ponytail: simple hex XOR + popcount, no native addon needed.
- */
+/** Perceptual hash utilities — Hamming distance for duplicate detection. */
 
 export function hammingDistance(a: string | undefined, b: string | undefined): number {
   if (!a || !b || a.length !== b.length) return Infinity

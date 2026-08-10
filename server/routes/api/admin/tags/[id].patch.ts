@@ -9,7 +9,6 @@ export default defineAdminHandler({
     const id = event.context.params?.id as string
     if (!id) throw new AppError('VALIDATION_FAILED', 400, 'Tag ID required')
 
-    // Check tag exists
     const existing = await db.select().from(tags).where(eq(tags.id, id)).limit(1)
     if (!existing[0]) throw new AppError('NOT_FOUND', 404, 'Tag not found')
 
@@ -19,14 +18,11 @@ export default defineAdminHandler({
     }
 
     // Validate category against the PG enum — bad values would 500 from the DB layer.
-    // ponytail: hardcoded list mirrors the enum in app/types; if it grows, derive
-    // from the drizzle schema's text('category') annotation or a shared constant.
     const VALID_CATEGORIES = new Set(['artist', 'character', 'copyright', 'general', 'meta'])
     if (body.category !== undefined && !VALID_CATEGORIES.has(body.category)) {
       throw new AppError('VALIDATION_FAILED', 400, `Invalid category: ${body.category}`)
     }
 
-    // Build update payload
     const updateData: Record<string, any> = {}
     if (body.category !== undefined) updateData.category = body.category
     if (body.danbooru_name !== undefined) updateData.danbooruName = body.danbooru_name
@@ -35,9 +31,8 @@ export default defineAdminHandler({
     const [updated] = await db.update(tags).set(updateData).where(eq(tags.id, id)).returning()
     if (!updated) throw new AppError('NOT_FOUND', 404, 'Tag update failed')
 
-    // Sync to tag_knowledge (source: 'manual' — 人工纠偏，优先级最高，永远覆盖 AI 结果)
-    // agent 自学习闭环：管理员修正的分类/翻译/规范名写回经验库，后续 AI 分类会
-    // 采样到这些"已确认样例"，同类标签保持一致性。
+    // Sync to tag_knowledge（source: 'manual' — 人工纠偏最高优先级，永远覆盖 AI 结果）：
+    // 管理员修正写回经验库，后续 AI 分类采样到这些已确认样例，保持同类标签一致。
     await db.insert(tagKnowledge).values({
       name: updated.name,
       danbooruName: updated.danbooruName,

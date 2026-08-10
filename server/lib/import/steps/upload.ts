@@ -1,14 +1,7 @@
 /**
  * S3 upload step — uploads all image variants concurrently.
- *
- * Key naming convention (ADR-0003): one base UUID per image, width-suffixed:
- *   <base>-300w.webp, <base>-640w.webp, <base>-1280w.webp, <base>-2000w.webp
- * The original full-resolution image keeps its own <uuid>.<ext> key.
- *
- * ponytail: 5 concurrent S3 uploads per pipeline run. With a single worker
- * this is fine. If a worker pool is added later, cap at e.g. 2 concurrent
- * to avoid saturating the S3 connection pool — image is the largest
- * (full-resolution), variants can wait.
+ * Key convention (ADR-0003): one base UUID per image, width-suffixed
+ * (<base>-300w/640w/1280w/2000w.webp); original keeps its own <uuid>.<ext> key.
  */
 import crypto from 'crypto'
 import { uploadToS3 } from '../../../utils/s3'

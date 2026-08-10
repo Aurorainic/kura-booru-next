@@ -8,8 +8,6 @@ export async function generatePostSummary(post: any): Promise<string> {
   const tagNames = (post.tags || []).map((t: any) => t.name).slice(0, 30).join(', ')
   const translations = (post.tags || []).map((t: any) => t.translation).filter(Boolean).slice(0, 15).join(', ')
 
-  // ponytail: twitter posts often have no title/description. Without this
-  // guard, the AI gets "标题: (无)\n描述: \n标签: " and hallucinates nonsense.
   if (!tagNames && !post.title && !post.description) {
     return '无标题、描述及标签的图片'
   }

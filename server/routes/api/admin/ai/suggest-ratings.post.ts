@@ -22,8 +22,8 @@ export default defineAdminHandler({
       normalizedScope = (scope as 'unrated' | 'all') || 'unrated'
     }
 
-    // Rating suggestions are inherently slow (one AI call per post, sequential
-    // with 200ms delay). Run as a pg-boss job; client polls GET /jobs/:id.
+    // Rating suggestions are slow (one AI call per post, sequential with 200ms
+    // delay) — run as a pg-boss job; client polls GET /jobs/:id.
     const jobId = await createAiJob('ratings', limit)
     const boss = await getBoss()
     await boss.send('ai-ratings', { jobId, scope: normalizedScope, limit })

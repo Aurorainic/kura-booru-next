@@ -34,8 +34,8 @@ export default defineAdminHandler({
       if (!allowed.includes(parsed.protocol)) {
         return { ok: false, error: '下载代理地址协议与所选类型不匹配' }
       }
-      // M7: 与 test-bot 一致 — 代理地址指向私网/回环时拒绝（防止把探测请求
-      // 打到内网资产，也是 SSRF 的代理形态）
+      // M7: 与 test-bot 一致 — 代理地址指向私网/回环时拒绝（防止探测请求打到
+      // 内网资产，SSRF 的代理形态）。
       const { isPrivateHost } = await import('../../../../utils/settings')
       if (!parsed.hostname || await isPrivateHost(parsed.hostname)) {
         return { ok: false, error: '下载代理地址不能指向私网/回环地址' }

@@ -20,8 +20,7 @@ const lines = computed(() => {
     .filter(Boolean)
 })
 
-// Escape HTML first, then apply markdown transforms — prevents XSS from
-// raw angle brackets or attribute injection in the announcement content.
+// Escape HTML first, then apply markdown — prevents XSS via raw angle brackets / attribute injection.
 function renderMarkdown(text: string): string {
   let html = text
     .replace(/&/g, '&amp;')
@@ -49,10 +48,8 @@ onMounted(() => {
 
   if (lines.value.length === 0) return
 
-  // Attach resize listener inside onMounted so it pairs with onUnmounted
   window.addEventListener('resize', onResize)
 
-  // Start rotation after initial line is shown
   scrollTimers.push(setTimeout(() => startRotation(), 600))
   scheduleScroll(0, 500)
 })

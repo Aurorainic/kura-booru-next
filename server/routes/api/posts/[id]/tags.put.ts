@@ -7,7 +7,6 @@ export default defineAdminHandler({
   handler: async ({ event }) => {
     const id = event.context.params?.id as string
 
-    // Check post exists before modifying tags
     const postCheck = await db.select({ id: posts.id }).from(posts).where(eq(posts.id, id)).limit(1)
     if (!postCheck[0]) throw new AppError('NOT_FOUND', 404, 'Post not found')
 
@@ -49,9 +48,8 @@ export default defineAdminHandler({
             .onConflictDoNothing()
             .returning({ tagId: postTags.tagId })
 
-          // Increment count only for newly linked tags. onConflictDoNothing is a no-op
-          // when the (postId, tagId) row already exists, so we must derive new links
-          // from the RETURNING set, not from the upserted set.
+          // Increment count only for newly linked tags — onConflictDoNothing no-ops on
+          // existing (postId, tagId) rows, so derive new links from RETURNING, not upserted.
           const newTagIds = inserted.map(r => r.tagId)
           if (newTagIds.length) {
             await tx.update(tags).set({ postCount: sql`post_count + 1` }).where(inArray(tags.id, newTagIds))
@@ -60,7 +58,6 @@ export default defineAdminHandler({
       }
     })
 
-    // Return updated post
     const post = await db.select().from(posts).where(eq(posts.id, id)).limit(1)
     const postTagRows = await db.select({ tag: tags })
       .from(postTags)

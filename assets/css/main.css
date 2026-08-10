@@ -15,9 +15,6 @@
   font-display: swap;
   src: url("/fonts/display-latin.woff2") format("woff2"),
        url("/fonts/display-cjk.woff2") format("woff2");
-  /* ponytail: urls 404 until font files are added — browsers silently fall
-     back to the next family in the --font-display stack, so this is a
-     no-op upgrade path, not a regression. */
 }
 
 /* ═══════════════════════════════════════════════════════════════

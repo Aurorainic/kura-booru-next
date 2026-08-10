@@ -7,7 +7,6 @@ document.addEventListener("DOMContentLoaded", function () {
   var saveBtn = document.getElementById("save-btn");
   var statusDiv = document.getElementById("status");
 
-  // Load saved settings
   chrome.storage.sync.get(["serverUrl", "apiKey", "contentType"], function (data) {
     serverUrlInput.value = data.serverUrl || "";
     apiKeyInput.value = data.apiKey || "";
@@ -19,8 +18,6 @@ document.addEventListener("DOMContentLoaded", function () {
     var apiKey = apiKeyInput.value.trim();
     var contentType = contentTypeInput.value || "auto";
 
-    // ponytail: surface a typo (e.g. pasting BACKEND_API_KEY) immediately
-    // instead of letting the user discover it via 401 on every import.
     if (apiKey && apiKey.indexOf("kb_ext_") !== 0) {
       statusDiv.textContent = "Key 应以 kb_ext_ 开头 — 去 admin 后台生成";
       statusDiv.className = "error";

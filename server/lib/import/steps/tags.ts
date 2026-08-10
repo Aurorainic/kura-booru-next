@@ -1,14 +1,8 @@
 /**
  * Tag upsert step — shared by single-image and multi-image paths.
- *
- * Bulk upserts tags in a single statement; postCount++ for both new and
- * existing rows. Artist tag gets a dedicated upsert with category=artist.
- *
- * ponytail: artist comes as a dedicated field from sidecar, not "artist:xxx"
- * string. Upsert with category=artist directly — AI never has to infer it.
- *
- * Returns the tag IDs for the upserted tags (used for post_tags associations
- * and AI tag processing).
+ * Bulk upserts in one statement, postCount++ for new and existing rows;
+ * artist tag gets a dedicated upsert with category=artist.
+ * Returns the tag IDs (for post_tags associations and AI tag processing).
  */
 import { sql } from 'drizzle-orm'
 import { tags } from '../../../schema/tags'
@@ -20,9 +14,6 @@ export async function upsertTags(
 ): Promise<string[]> {
   const tagIds: string[] = []
 
-  // ponytail: gallery-dl 的 tag 列表可能把画师也作为一个 "artist:xxx" 前缀标签
-  // 返回（Pixiv 尤其常见）。这些应并入 artist 专用字段，而不是作为独立 general
-  // 标签入库——否则会出现 "artist:みこフライ" 这种既带前缀又被归为 artist 的怪标签。
   const cleanNames: string[] = []
   let extractedArtist = artistName
   for (const raw of tagNames) {
@@ -56,7 +47,7 @@ export async function upsertTags(
         target: tags.name,
         set: {
           postCount: sql`${tags.postCount} + 1`,
-          // Fix existing mis-categorized artist tags in place
+          // Fix mis-categorized artist tags in place
           category: 'artist' as any,
           aiProcessedAt: new Date(),
         },

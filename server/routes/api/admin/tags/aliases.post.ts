@@ -10,14 +10,13 @@ export default defineAdminHandler({
       throw new AppError('VALIDATION_FAILED', 400, 'alias_name and tag_id required')
     }
 
-    // Check target tag exists
     const target = await db.select().from(tags).where(eq(tags.id, body.tag_id)).limit(1)
     if (!target[0]) throw new AppError('NOT_FOUND', 404, 'Target tag not found')
 
     const cleanAlias = body.alias_name.trim().toLowerCase()
 
-    // Pre-check uniqueness — the schema has a unique index on alias_name, but
-    // relying on it would surface a 500 from a DB error; the caller can act on 409.
+    // Pre-check uniqueness — relying on the DB unique index would surface a 500;
+    // the caller can act on 409.
     const existing = await db.select({ id: tagAliases.id }).from(tagAliases)
       .where(eq(tagAliases.aliasName, cleanAlias)).limit(1)
     if (existing[0]) {

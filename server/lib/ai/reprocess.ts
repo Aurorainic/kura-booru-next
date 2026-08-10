@@ -21,8 +21,6 @@ export async function aiProcessTagsForPost(postId: string, tagIds: string[]): Pr
 
   if (!tagRows.length) return
 
-  // ponytail: artist tags are categorized at ingest (pipeline upserts them as category=artist).
-  // Skip them here so AI doesn't re-infer and mis-classify.
   const generalTagRows = tagRows.filter(t => t.category !== 'artist')
   const tagNames = generalTagRows.map(t => t.name)
 
@@ -42,8 +40,7 @@ export async function aiProcessTagsForPost(postId: string, tagIds: string[]): Pr
     allClassifications.set(c.name, c)
   }
 
-  // H11: 批量更新 tags — 100 标签 = 1 次 VALUES UPDATE（原实现 100 次单行往返）。
-  // 与 reprocessTags 的 syncResultsToTags 同一模式（含 tag_category_enum cast）。
+  // H11: 批量更新 tags — 100 标签 = 1 次 VALUES UPDATE（与 syncResultsToTags 同模式）。
   const pendingUpdates: Array<{ name: string; category: TagClassification['category']; translation: string | null; danbooru_name: string | null }> = []
   for (const tagRow of generalTagRows) {
     const cls = allClassifications.get(tagRow.name)
@@ -83,21 +80,15 @@ export async function aiProcessTagsForPost(postId: string, tagIds: string[]): Pr
 export async function reprocessTags(mode: 'unprocessed' | 'all'): Promise<{ processed: number; failed: number }> {
   const conditions = []
   if (mode === 'unprocessed') conditions.push(isNull(tags.aiProcessedAt))
-  // ponytail: never re-classify artist tags — they're categorized at ingest, AI mis-classifies them as general
   conditions.push(sql`${tags.category} != 'artist'`)
   const where = conditions.length ? and(...conditions) : undefined
   const allTags = await db.select().from(tags).where(where)
 
-  // ponytail: 复用 tag_knowledge 缓存——未处理模式第二次运行时，已缓存的标签
-  // 直接命中，不再重复打 AI（与 aiProcessTagsForPost 行为一致），并照常落库
-  // 标记 ai_processed_at，避免反复被计为"待处理"。
   const names = allTags.map(t => t.name)
   const cached = await getTagKnowledge(names)
   const results = new Map<string, TagClassification>(cached)
 
   // 每处理一批就把该批结果同步到 tags 表（不再等全部批次结束才一次性更新）。
-  // ponytail: 之前末尾统一 UPDATE——若中途某批抛异常中断整个函数，knowledge 已
-  // 写但 tags 未同步，造成记忆与事实漂移（且 500 丢失整批结果）。
   let processed = 0
   let failed = 0
 
@@ -130,7 +121,6 @@ export async function reprocessTags(mode: 'unprocessed' | 'all'): Promise<{ proc
   for (const batch of chunk(pendingRows, 50)) {
     try {
       const batchNames = batch.map(t => t.name)
-      // ponytail: classifyTags 内部已按 25 分片 + 60s 超时兜底；这里每 50 一批
       const classifications = await classifyTags(batchNames)
       if (classifications.length) {
         await upsertTagKnowledge(classifications)
@@ -146,7 +136,7 @@ export async function reprocessTags(mode: 'unprocessed' | 'all'): Promise<{ proc
     }
   }
 
-  // agent 自学习闭环 —— 人工纠偏（source='manual'）是最高权威：tags 以 knowledge 为准
+  // 自学习闭环：人工纠偏（source='manual'）是最高权威，tags 以 knowledge 为准
   try {
     const manualRows = await db.select()
       .from(tagKnowledge)

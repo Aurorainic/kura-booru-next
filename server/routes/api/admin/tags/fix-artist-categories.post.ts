@@ -4,14 +4,6 @@ import { defineAdminHandler } from '../../../../platform/http/auth'
 export default defineAdminHandler({
   doc: { method: 'post', path: '/api/admin/tags/fix-artist-categories', summary: 'Fix artist tag categories' },
   handler: async () => {
-    // ponytail: one-shot fix — artist tags were mis-categorized as 'general' by AI.
-    // Source of truth is tag_knowledge.type='artist' (set either by AI classification that did
-    // correctly identify artists in the cache, or by manual admin edit). Mirror that back onto tags.
-    //
-    // Also catches bare artist tags (no tag_knowledge row) by name pattern —
-    // these are the ones the sidecar used to inject as "artist:xxx" string and pipeline
-    // upserted as general. We fix them too and strip the "artist:" prefix from the name.
-
     const db_ = db
 
     // 1. Fix tags whose name appears in tag_knowledge with type='artist'
@@ -34,15 +26,10 @@ export default defineAdminHandler({
       fixedFromKnowledge = res.length
     }
 
-    // 2. Fix tags whose name still has the "artist:" prefix from the old sidecar flow.
-    //    Two sub-cases per prefixed tag, after stripping "artist:":
-    //      (a) a clean same-named tag already exists → this is a DUPLICATE.
-    //          Move post_tags from the prefixed tag to the clean tag, ensure the clean
-    //          tag is category=artist, then delete the prefixed tag (cascade drops its
-    //          post_tags rows, but we've already moved the non-overlapping ones first).
-    //          Posts already on both tags are skipped (PK dedup) — no data loss.
-    //      (b) no clean counterpart → just rename in place + set category=artist.
-    //    This is idempotent: a second run finds zero `artist:%` rows.
+    // 2. Fix "artist:"-prefixed tags (old sidecar flow): (a) clean same-named tag exists →
+    //    duplicate: move post_tags to it, set category=artist, delete prefixed tag (overlaps
+    //    skipped by PK dedup — no data loss); (b) else rename in place. Idempotent: second
+    //    run finds zero `artist:%` rows.
     const prefixed = await db_
       .select({ id: tags.id, name: tags.name })
       .from(tags)
@@ -74,9 +61,9 @@ export default defineAdminHandler({
         // (a) duplicate — merge prefixed INTO the clean tag
         const targetId = clean.id
 
-        // Move post associations that aren't already on the target (raw SQL NOT IN, mirrors
-        // /admin/tags/merge). (post_id, tag_id) PK guards against double-move.
-        // H12: UPDATE 的受影响行数 = 实际移动数，替代 2 次 count(*) 聚合扫描。
+        // Move post associations not already on the target (raw SQL NOT IN, mirrors
+        // /admin/tags/merge); (post_id, tag_id) PK guards double-move.
+        // H12: affected-rows = actually moved count, replaces 2 count(*) scans.
         const moveRes = await db_.execute(sql`
           UPDATE post_tags SET tag_id = ${targetId}
           WHERE tag_id = ${t.id}

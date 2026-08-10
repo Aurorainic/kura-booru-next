@@ -2,9 +2,6 @@ import { eq } from 'drizzle-orm'
 import { admins } from '../schema'
 import { parseCookieHeader, parseSession } from './auth'
 
-// ponytail: best-effort identity lookup for audit fields. Returns the
-// admin's username if the session is valid; null if cookie is missing/
-// unsigned. Never throws — audit metadata is non-critical.
 export async function getAdminUsernameFromCookie(cookieHeader: string): Promise<string | null> {
   if (!cookieHeader) return null
   const token = parseCookieHeader(cookieHeader)['kura_admin_session']

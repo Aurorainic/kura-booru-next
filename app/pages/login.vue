@@ -19,14 +19,10 @@ async function submit() {
   try {
     const result = await login(username.value, password.value)
     if (result.is_admin) {
-      // Full reload so SSR middleware re-reads the kura_admin_session cookie
-      // and populates isAdmin correctly. Client-side navigateTo would keep
-      // the stale isAdmin=false from the initial SSR.
+      // Full reload so SSR middleware re-reads kura_admin_session; navigateTo would keep stale isAdmin=false.
       window.location.href = '/'
     } else {
-      // Uniform error message — do not reveal whether the password was correct
-      // (prevents login information disclosure: attacker cannot distinguish
-      // between "password correct but not admin" and "wrong credentials").
+      // Uniform error — don't reveal whether the password was correct (prevents login information disclosure).
       error.value = '用户名或密码错误'
     }
   } catch (e: any) {
@@ -77,7 +73,6 @@ async function submit() {
             class="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)]"
             :aria-label="showPassword ? '隐藏密码' : '显示密码'"
           >
-            <!-- Eye icon -->
             <svg v-if="!showPassword" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />

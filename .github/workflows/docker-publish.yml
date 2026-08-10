@@ -8,8 +8,7 @@ on:
 env:
   REGISTRY: ghcr.io
 
-# A double-push of two tags should produce two builds, but the same tag
-# re-pushed must not race itself into a corrupt manifest. Key on the tag.
+# 同一 tag 重复推送不得自竞争出损坏 manifest——按 ref 加并发锁。
 concurrency:
   group: docker-publish-${{ github.ref }}
   cancel-in-progress: false
@@ -17,9 +16,7 @@ concurrency:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    # Only build tags that look like releases — `v*` already filters on the
-    # trigger, but this guards against a tag like `v-test` slipping a throwaway
-    # into the registry's :latest. Skip non-release tags without failing the run.
+    # 仅构建 release tag（防 v-test 之类把 throwaway 推上 :latest）。
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     permissions:
       contents: read
@@ -39,20 +36,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        # Fetch full history + main ref so we can verify the tagged commit is
-        # reachable from main. A shallow checkout can't answer "is this tag on
-        # main?" — `git branch --contains $TAG` needs the full commit graph.
+        # 全量历史：`git branch --contains` 需要完整提交图来验证 tag 在 main 上。
         with:
           fetch-depth: 0
 
       - name: Verify tag is on main
-        # 镜像只允许从 main 分支历史中的 commit 打 tag 触发构建。
-        # 这阻挡了在 fork/分支上打 v* tag 误触发 release 构建的情况。
+        # 只允许 main 历史中的 commit 打 tag 触发构建，挡掉 fork/分支上的 v* tag。
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
           TAG_COMMIT=$(git rev-list -n 1 "$TAG")
           echo "Tag $TAG -> commit $TAG_COMMIT"
-          # Check if the tag's commit is reachable from origin/main
           if ! git merge-base --is-ancestor "$TAG_COMMIT" origin/main; then
             echo "::error::Tag $TAG ($TAG_COMMIT) is not reachable from main. Image builds are only allowed for tags on main commits."
             echo "::error::Re-tag the commit after merging it into main, or push the tag onto a main commit directly."
@@ -79,9 +72,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Assert production build guard
-        # 根因守卫: NODE_ENV=production 是 prod 构建开关,缺失 = 静默产出 dev 包
-        # (网页含 "nuxt dev"、左下角 dev 角标)。Dockerfile 内也有 RUN test 兜底,
-        # 此处提前在 build-push 前失败,日志更清晰且不浪费 GHA 缓存。
+        # 根因守卫：缺失 NODE_ENV=production 会静默产出 dev 包；Dockerfile 内有 RUN test 兜底，这里提前失败。
         run: |
           grep -q '^ENV NODE_ENV=production' Dockerfile || { \
             echo "FATAL: Dockerfile build stage missing 'ENV NODE_ENV=production'"; \
@@ -136,7 +127,5 @@ jobs:
           package-name: ${{ matrix.image }}
           package-type: container
           min-versions-to-keep: 3
-          # Only purge UN-tagged versions (digest-only leftovers from re-tags
-          # and cache pushes). Tagged versions are kept regardless of age so a
-          # still-pulled release tag is never deleted out from under a deploy.
+          # 只清 untagged（digest 残留）；tagged 永不清，避免删掉仍在拉取的 release。
           delete-only-untagged-versions: true

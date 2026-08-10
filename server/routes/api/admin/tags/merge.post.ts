@@ -37,7 +37,6 @@ export default defineAdminHandler({
       const postsSkipped = Math.max(0, source[0].postCount - postsMoved)
 
       // Move post associations: only move posts not already on target
-      // ponytail: raw SQL for NOT EXISTS — Drizzle's notExists builder is verbose
       await tx.execute(sql`
         UPDATE post_tags SET tag_id = ${target[0].id}
         WHERE tag_id = ${source[0].id}
@@ -46,7 +45,6 @@ export default defineAdminHandler({
         )
       `)
 
-      // Recalculate target post_count
       await tx.update(tags).set({
         postCount: sql`(SELECT count(*) FROM post_tags WHERE tag_id = ${target[0].id})`,
       }).where(eq(tags.id, target[0].id))

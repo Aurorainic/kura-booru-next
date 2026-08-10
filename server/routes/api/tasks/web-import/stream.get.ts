@@ -31,6 +31,12 @@ export default defineAdminHandler({
                 let parsed: any
                 try { parsed = JSON.parse(raw) }
                 catch { parsed = { status: 'error', error: 'malformed result data' } }
+
+                // 竞态修复：只消费 pipeline-worker 覆盖后的最终结果（success/duplicate/
+                // too_large/failed）；sidecar 原始结果（ok/error）跳过不删 — 提前 del 会让
+                // pipeline 读到 null 导致任务悬空（no result）。
+                if (!['success', 'duplicate', 'too_large', 'failed'].includes(parsed.status)) continue
+
                 await redis.del(`kura:results:${taskIds[i]}`)
 
                 let status: string, detail: string

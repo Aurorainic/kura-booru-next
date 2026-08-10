@@ -12,12 +12,6 @@ import type { MergeSuggestion } from './types'
 
 export async function suggestMerges(scope: 'all' | { category: TagCategory }): Promise<MergeSuggestion[]> {
   const where = scope === 'all' ? undefined : eq(tags.category, scope.category as any)
-  // ponytail: duplicates are most common among LOW-count tags (typos, variant
-  // romanizations, partial names). The previous code ordered by post_count DESC
-  // and took the top 200 - exactly the tags least likely to need merging.
-  // Strategy: take a mix - top 50 by count (canonical candidates) + bottom 150
-  // by count ascending (likely duplicates). Exclude zero-count tags (orphans
-  // with no posts can't be "duplicates" of anything meaningful).
   const [highCount, lowCount] = await Promise.all([
     db.select().from(tags)
       .where(where ? and(where, sql`${tags.postCount} > 0`) : sql`${tags.postCount} > 0`)
@@ -53,8 +47,7 @@ export async function suggestMerges(scope: 'all' | { category: TagCategory }): P
 
 只返回 JSON，不要解释。格式: { "groups": [{ "canonical_name": "最佳标签名", "aliases": ["变体1", "变体2"], "reason": "简洁中文理由", "confidence": 0.0到1.0 }] }`
 
-  // H18: 200 标签元数据 ≈ 4-8k tokens 会截断小模型 — 按 50 分块，每块独立
-  // 调用 AI，合并结果（去重）。输出结构与单次调用完全一致。
+  // H18: 200 标签 ≈ 4-8k tokens 会截断小模型 — 按 50 分块独立调用，合并去重。
   const rawGroups: any[] = []
   for (const batch of chunk(tagInfo, 50)) {
     try {
@@ -71,8 +64,6 @@ export async function suggestMerges(scope: 'all' | { category: TagCategory }): P
   }
 
   try {
-    // ponytail: 过滤掉引用不存在标签的分组——AI 可能建议合并输入列表之外的
-    // "标签"，这些在 DB 里没有对应行，前端执行合并会失败。
     const seen = new Set<string>()
     return rawGroups
       .filter((g: any) => (g.confidence || 0) >= 0.6)

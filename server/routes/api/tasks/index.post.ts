@@ -1,7 +1,4 @@
 
-// ponytail: sidecar has its own SSRF check (validate_url), but reject obvious
-// non-http(s) and private-host URLs at the entry point so we never enqueue
-// work we know will be rejected downstream.
 async function assertSafeUrl(url: string) {
   let parsed: URL
   try { parsed = new URL(url) }

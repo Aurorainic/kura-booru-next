@@ -1,20 +1,11 @@
 /**
- * CORS middleware — allows cross-origin requests from SITE_URL and browser extensions.
- * B-P1-5: Required for Chromium extension to call API.
+ * CORS middleware — allows cross-origin from SITE_URL + browser extensions (B-P1-5: Chromium extension calls API).
  */
 
 export default defineEventHandler(async (event) => {
   const origin = getRequestHeader(event, 'origin')
   const siteUrl = await getSiteUrl() || ''
 
-  // ponytail: extension origins allowed without credentials — they use X-Api-Key.
-  // Only the site origin gets Allow-Credentials (cookie auth).
-  // S10: env-controlled allowlist for specific extension IDs. Additionally
-  // allow any chrome-extension:// and moz-extension:// origin prefix because
-  // extension API keys (kb_ext_*) are per-admin and capability-scoped — the
-  // key itself is the auth boundary, not the extension origin. This matches
-  // the v0.7.8 extension auth model where any user can install the extension
-  // and authenticate with their own key.
   const extOriginSet = new Set(
     (process.env.ALLOWED_EXT_ORIGINS || '')
       .split(',')
@@ -40,9 +31,8 @@ export default defineEventHandler(async (event) => {
     setResponseHeaders(event, headers)
   }
 
-  // Handle preflight — end the response explicitly so Nitro doesn't fall
-  // through to route matching (which returns 404 for POST routes that have
-  // no OPTIONS handler).
+  // Handle preflight — end the response explicitly so Nitro doesn't fall through
+  // to route matching (404 for POST routes without an OPTIONS handler).
   if (getMethod(event) === 'OPTIONS') {
     event.node.res.statusCode = 204
     event.node.res.end()

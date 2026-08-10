@@ -1,8 +1,5 @@
-// S9: Security response headers. Set on every response that reaches a
-// browser, including SSR HTML. SSE endpoints set their own Cache-Control
-// which this middleware does not touch (we only add the security trio).
-// ponytail: Permissions-Policy is kept minimal — if a feature needs to be
-// enabled (camera/geolocation etc.), add it here on a per-route basis.
+// S9: Security response headers on every browser-facing response, incl. SSR HTML.
+// SSE endpoints set their own Cache-Control, untouched — we only add the trio.
 export default defineEventHandler((event) => {
   setResponseHeader(event, 'X-Content-Type-Options', 'nosniff')
   setResponseHeader(event, 'X-Frame-Options', 'SAMEORIGIN')

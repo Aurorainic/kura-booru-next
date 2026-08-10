@@ -23,7 +23,6 @@ onMounted(() => {
   current.value = (localStorage.getItem('kura-theme-preference') as typeof current.value) || 'auto'
   applyTheme(current.value)
 
-  // Listen for system theme changes when in 'auto' mode
   mq = window.matchMedia('(prefers-color-scheme: dark)')
   onSystemChange = () => {
     if (current.value === 'auto') applyTheme('auto')
@@ -31,7 +30,7 @@ onMounted(() => {
   mq.addEventListener('change', onSystemChange)
 })
 
-// onUnmounted is top-level (parallel to onMounted, not nested inside it) — M6 fix
+// onUnmounted is top-level, not nested inside onMounted — M6 fix
 onUnmounted(() => {
   if (mq && onSystemChange) mq.removeEventListener('change', onSystemChange)
 })

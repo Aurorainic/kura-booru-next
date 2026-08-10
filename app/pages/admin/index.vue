@@ -38,9 +38,6 @@ const ExtensionKeysPanel = defineAsyncComponent(() => import('~/components/admin
 const SettingsPanel = defineAsyncComponent(() => import('~/components/admin/SettingsPanel.vue'))
 const PasswordPanel = defineAsyncComponent(() => import('~/components/admin/PasswordPanel.vue'))
 
-// ponytail: all admin panels stay cached with max=tabs.length; panel SFCs
-// declare names via defineOptions so an explicit KeepAlive include list can
-// be added later without renaming components.
 const panelMap: Record<string, ReturnType<typeof defineAsyncComponent>> = {
   import: ImportPanel,
   dashboard: DashboardPanel,
@@ -62,7 +59,6 @@ const panelMap: Record<string, ReturnType<typeof defineAsyncComponent>> = {
     <!-- Consolidated status bar (queue depth + AI status) -->
     <AdminStatusBar class="mb-2" />
 
-    <!-- Tab navigation -->
     <div
       class="flex items-center gap-2 mb-6 border-b border-[var(--border-color)] pb-1 overflow-x-auto admin-tab-scroll"
     >
@@ -78,8 +74,7 @@ const panelMap: Record<string, ReturnType<typeof defineAsyncComponent>> = {
       </button>
     </div>
 
-    <!-- Tab content — 仅缓存需要保留编辑态的面板（AI 分类结果批量操作、标签搜索框），
-         其余面板切 tab 即卸载，下次进入重新拉数据（单人 admin 浏览器内存 -50-150MB） -->
+    <!-- 仅缓存需保留编辑态的面板（AI 分类结果、标签搜索框），其余切 tab 即卸载，节省单人 admin 内存 -->
     <div>
       <KeepAlive :include="['AiAssistantPanel', 'TagsPanel']" :max="2">
         <component :is="panelMap[currentTab] || panelMap.dashboard" />
@@ -89,10 +84,6 @@ const panelMap: Record<string, ReturnType<typeof defineAsyncComponent>> = {
 </template>
 
 <style scoped>
-/* ponytail: admin tabs need horizontal padding + bigger gap than .filter-pill
-   (which is padding:4px 0 and designed for tight tag-row density). Without
-   padding the icons + labels felt cramped against each other and against
-   the row's neighbors. */
 .admin-tab {
   padding: 6px 10px;
   border-radius: var(--radius-sm);

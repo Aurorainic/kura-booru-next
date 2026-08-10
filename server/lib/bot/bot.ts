@@ -14,8 +14,7 @@ import { isPrivateHost } from '../../utils/settings'
 import { confirmRating, startCountdown, ratingCountdowns } from '../../utils/bot-rating'
 import { posts, tags, postTags } from '../../schema'
 
-// Custom context flavor: per-request bot config set by auth middleware.
-// grammy standard pattern — one flavor declaration eliminates all ctx.config errors.
+// Context flavor: per-request bot config set by auth middleware (grammy standard pattern).
 interface BotConfig {
   isAdmin: boolean
   lang: string
@@ -27,23 +26,20 @@ interface BotContext extends Context {
 // URL extraction pattern (from url-patterns.ts + generic)
 const URL_PATTERN = /https?:\/\/[^\s<>"']+/gi
 
-// ── Bot config: DB settings first, env as bootstrap fallback (v0.10.0) ──
-// 热刷新：getBotConfig() 每次调用读取 settings（10s 缓存），token/adminIds/
-// proxyUrl 变化后调用 rebuildBot() 重建实例。getBotConfig 内部已含 env 回退。
+// ── Bot config: DB settings first, env as bootstrap fallback ──
+// 热刷新：settings 每次读取（10s 缓存），token/adminIds/proxyUrl 变化后 rebuildBot() 重建。
 let _botInstance: Bot<BotContext> | null = null
 let _buildPromise: Promise<Bot<BotContext>> | null = null
 let _botReady: Promise<void> | null = null
 
-// H7: drop_pending_updates 只允许首次启动时 true。热刷新（改 token/管理员/
-// 中转）会触发 syncBotWebhook，若每次都丢弃 pending 队列，用户在队列里的
-// 消息会全丢。模块级布尔跨 rebuild 保留。
+// H7: drop_pending_updates 仅首次启动为 true — 热刷新触发 syncBotWebhook 时
+// 重复丢弃会清掉用户排队消息。模块级布尔跨 rebuild 保留。
 let webhookInitialized = false
 
 // ── Per-chat concurrency semaphore (module-level: survives rebuildBot) ──
 const chatSemaphores = new Map<string, { count: number; max: number; queue: (() => void)[] }>()
-// M13/G5: Map 永不 delete 会随长期运行 + 群聊数增长 — 上限 500 个 chat，
-// 超限淘汰最久未用（Map 保插入序，first key = 最旧）。重建不丢信号量状态
-// （CLAUDE.md rule #5），所以只在 get 时做 LRU 淘汰。
+// M13/G5: cap 500 chats, LRU-evict oldest (Map keeps insertion order);
+// eviction happens in get() so rebuilds never lose semaphore state.
 function getSemaphore(chatId: string, max = 3) {
   let sem = chatSemaphores.get(chatId)
   if (!sem) {
@@ -92,10 +88,9 @@ async function buildBot(): Promise<Bot<BotContext>> {
 }
 
 /**
- * 根据当前配置对齐 Telegram webhook（幂等，供启动与设置热刷新调用）：
- *   - enabled + token + siteUrl → setWebhook + setMyCommands
- *   - disabled 或 token 为空   → deleteWebhook（释放后台，停止 Telegram 推送）
- * 用一个独立于单例的 Bot 实例调用 API，避免与 disabled 状态/懒构建耦合。
+ * 幂等对齐 Telegram webhook（启动与设置热刷新调用）：
+ * enabled+token+siteUrl → setWebhook+setMyCommands；disabled/无 token → deleteWebhook。
+ * 用独立 Bot 实例调用 API，避免与单例懒构建耦合。
  */
 export async function syncBotWebhook(): Promise<void> {
   const cfg = await getBotConfigLazy()
@@ -122,9 +117,6 @@ export async function syncBotWebhook(): Promise<void> {
     return
   }
 
-  // ponytail: production webhook without webhook secret = unauthenticated
-  // surface that anyone who can reach /bot/webhook can hit. Refuse to register
-  // rather than warn-and-continue (matches the SESSION_SECRET guard in auth.ts).
   if (process.env.NODE_ENV === 'production' && !cfg.webhookSecret) {
     throw new Error('bot_webhook_secret must be set in production — refusing to register an unauthenticated Telegram webhook')
   }
@@ -151,9 +143,8 @@ export async function syncBotWebhook(): Promise<void> {
   console.log('[bot-setup] webhook registered:', webhookUrl, cfg.proxyUrl ? `(via ${cfg.proxyUrl})` : '')
 }
 
-/** 获取（惰性构建）Bot 实例；首次构建时注册全部 handler。
- *  in-flight promise guard: 并发调用共享同一个 build，避免 orphan Bot 泄漏。
- *  bot_enabled=false 时抛出——由 webhook auth 层先转为 404。 */
+/** 惰性获取 Bot 实例；首次构建注册全部 handler（in-flight promise guard 防 orphan）。
+ *  bot_enabled=false 时抛出——webhook auth 层先转为 404。 */
 export async function getBot(): Promise<Bot<BotContext>> {
   const cfg = await getBotConfigLazy()
   if (!cfg.enabled) throw new Error('Telegram bot is disabled (bot_enabled=false)')
@@ -174,8 +165,8 @@ export async function getBot(): Promise<Bot<BotContext>> {
   }
 }
 
-/** settings 热刷新：构建新实例后原子替换（不先 null）。bot 禁用时不构建。
- *  旧实例保持存活直到新实例 ready，webhook 窗口期不会命中无 handler 的占位 Bot。 */
+/** 热刷新：构建新实例后原子替换（不先 null）；禁用时不构建。
+ *  旧实例存活到新实例 ready，webhook 窗口期不会命中无 handler 的占位 Bot。 */
 export async function rebuildBot() {
   const cfg = await getBotConfigLazy()
   if (!cfg.enabled) return  // 禁用态：webhook 对齐由 syncBotWebhook 处理
@@ -203,8 +194,7 @@ async function getSiteUrlLazy(): Promise<string> {
   return getSiteUrl()
 }
 
-// ── Bot 实例：Proxy 转发到当前实例，热刷新重建后 handler 由
-// registerHandlers 重新注册到新实例。外部（webhook/auth）仍按原 API 用 bot。
+// ── Bot 实例：Proxy 转发到当前实例；热刷新后 handler 重新注册，外部 API 不变 ──
 
 export async function ensureBotReady(): Promise<void> {
   const cfg = await getBotConfigLazy()
@@ -240,8 +230,7 @@ export const bot: Bot<BotContext> = new Proxy<Bot<BotContext>>(
   botHandlerProxy,
 )
 
-// ── i18n helpers (T-P3-4: centralized) — module-level: handlers inside
-// registerHandlers and pollAndNotify/showRatingMenu (module-level) both use t().
+// ── i18n helpers (T-P3-4): module-level so registerHandlers and pollAndNotify share t() ──
 const T = {
   zh: {
     welcome: '👋 你好！发送图片链接来保存到图库。\n\n命令：\n/search 标签名 — 搜索\n/random — 随机图片\n/stats — 统计\n/autopass — 自动标记为公开\n/lang — 切换语言',
@@ -318,8 +307,7 @@ function t(key: string, lang: string, ...args: any[]): string {
   return typeof val === 'function' ? val(...args) : (val || key)
 }
 
-// M15: /search 高频命令 per-chat 节流（1 条/3s）— 防误连发触发 N 次 PG 查询。
-// 内存 Map + LRU 上限，chat 维度（管理员单人使用足够）。
+// M15: /search per-chat 节流（1 条/3s）防连发打爆 PG；内存 Map + LRU 上限。
 const searchThrottle = new Map<string, number>()
 function isSearchThrottled(chatId: string): boolean {
   const now = Date.now()
@@ -370,9 +358,6 @@ b.use(async (ctx, next) => {
   }
   await next()
 })
-
-// ── i18n helpers: T/t 定义已移至模块级（registerHandlers 上方），
-// handler 与 pollAndNotify 共享同一份。
 
 // ── Commands ──
 
@@ -595,9 +580,8 @@ b.command('aitags', async (ctx) => {
       await ctx.reply(lang === 'zh' ? 'AI 处理未启用' : 'AI processing not enabled').catch(() => {})
       return
     }
-    // M14: 同步 reprocessTags 可达 5+ 分钟，期间同 chat 所有消息排队 —
-    // 改为立即回复「处理中」，后台执行完再编辑该消息。handler 返回后
-    // grammy 继续处理该 chat 的新消息。
+    // M14: reprocessTags 可达 5+ 分钟 — 立即回复「处理中」，后台完成后
+    // 编辑该消息，避免同 chat 消息长时间排队。
     const processingMsg = await ctx.reply('⏳ AI 标签处理中…').catch(() => {})
     const chatId = ctx.chat?.id
     const messageId = processingMsg?.message_id
@@ -631,19 +615,16 @@ b.on('message:text', async (ctx) => {
 
     const chatId = ctx.chat?.id?.toString() || 'unknown'
 
-    // Process each URL (cap at 10). Enqueue jobs in parallel (Redis LPUSH is
-    // atomic; semaphore still serializes per chatId), then send reply + start
-    // poll in sequence — Telegram's Bot API rate-limits bursts of ctx.reply.
-    // ponytail: ctx.reply kept serial — switching to Promise.all risks 429.
+    // Cap 10 URLs; enqueue in parallel (Redis LPUSH atomic, semaphore serializes
+    // per chatId), then reply + poll sequentially — Bot API rate-limits bursts.
     const toProcess = urls.slice(0, 10)
     const queued: { url: string; jobId: string; source: ReturnType<typeof identifySource> | ReturnType<typeof resolveSourceOrOther> }[] = []
     const rejected: string[] = []
 
     await Promise.all(toProcess.map(async (url) => {
       const source = identifySource(url) || resolveSourceOrOther(url)
-      // SSRF pre-check: refuse private/loopback addresses before they reach the
-      // job queue. Sidecar re-validates inside the worker, but this stops
-      // queue spam from probing the internal network.
+      // SSRF pre-check: block private/loopback before queueing; sidecar
+      // re-validates in the worker, this stops internal-network probing.
       if (await isPrivateHost(new URL(url).hostname)) {
         rejected.push(url)
         return

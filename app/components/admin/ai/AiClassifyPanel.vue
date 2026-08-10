@@ -55,8 +55,7 @@ async function applyClassification(s: TagClassificationSuggestion) {
       translation: s.translation || undefined,
     }, props.ssrCookie)
     classifyResults.value = classifyResults.value.filter(r => r.tag_name !== s.tag_name)
-    // Confidence-aware toast: low-confidence classifications get a heads-up
-    // so the admin knows to double-check the result before trusting it.
+    // Low-confidence results get a heads-up so the admin double-checks before trusting them.
     if (s.confidence < 0.5) {
       toast.info(`已应用（置信度低 ${Math.round(s.confidence * 100)}%，建议人工复核）: ${s.tag_name}`)
     } else {

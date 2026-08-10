@@ -9,10 +9,8 @@ export default definePublicHandler({
       throw new AppError('VALIDATION_FAILED', 400, 'username and password required')
     }
 
-    // S5: brute-force lockout. IP+user key hits >=5 failures in 5min → 60s lock.
-    // Key is independent of password so leaked DBs still can't bypass the gate.
-    // ponytail: lock is single-bucket per (ip,user) — fine for one admin site;
-    // multi-account attacks would need a wider IP-only bucket.
+    // S5: brute-force lockout. IP+user key: >=5 failures in 5min → 60s lock.
+    // Key independent of password — leaked DBs still can't bypass the gate.
     const ip = getClientIp(event)
     const failKey = `login:fail:${ip}:${body.username}`
     const lockKey = `login:lock:${ip}:${body.username}`
@@ -23,8 +21,8 @@ export default definePublicHandler({
         throw new AppError('RATE_LIMITED', 429, 'Too many attempts. Try again later.')
       }
     } catch (err) {
-      // Redis down → fail-open: allow login attempt to proceed.
-      // Without this, a Redis outage would permanently lock out the admin.
+      // Redis down → fail-open: allow login to proceed — otherwise an outage
+      // would permanently lock out the admin.
       if (!(err instanceof AppError)) {
         console.warn('[login] Redis unavailable, skipping rate-limit check')
       } else {

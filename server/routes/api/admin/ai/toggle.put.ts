@@ -3,10 +3,7 @@ import { AppError } from '../../../../platform/errors'
 import { updateSettings } from '../../../../utils/settings'
 import { refreshAiConfig, getAiStatus } from '../../../../lib/ai/config'
 
-/**
- * Global AI tag-processing switch (settings KV key `ai_tag_processing_enabled`).
- * Distinct from per-provider enabled flags: this gates every AI feature at once.
- */
+/** Global AI tag-processing switch (settings key ai_tag_processing_enabled) — gates every AI feature at once. */
 export default defineAdminHandler({
   doc: { method: 'put', path: '/api/admin/ai/toggle', summary: 'Toggle global AI tag processing' },
   handler: async ({ event }) => {

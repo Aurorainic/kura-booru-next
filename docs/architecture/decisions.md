@@ -101,9 +101,9 @@ Full ADRs in `docs/adr/`. Summary:
 - Backfill of existing posts ran as a one-off operation (dry-run first); the script was removed from the repo after use.
 - imgproxy technically validated (10/10 PASS) but not adopted (container count constraint).
 
-### ADR-0004: API contract — 53 endpoint freeze + handler wrappers
+### ADR-0004: API contract — endpoint freeze + handler wrappers
 
-- `server/platform/contract/endpoints.ts` is the static source of truth; `check.mjs` does bidirectional drift guard.
+- `server/platform/contract/endpoints.ts` is the static source of truth; `check.mjs` does bidirectional drift guard. Frozen at **61 route files / 62 endpoints** (v0.9.0: 53 — grew with new admin/settings endpoints).
 - 4 handler wrappers (`defineAdminHandler`/`defineApiKeyHandler`/`defineExtHandler`/`definePublicHandler`) eliminate ~40 × 3-line session boilerplate.
 - Errors unified to `AppError` → `{ code, message, details? }`.
 - zod enums (`zRating`/`zSourceSite`/`zTagCategory`) derived from PG enums (single source of truth).

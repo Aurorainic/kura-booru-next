@@ -21,8 +21,7 @@ export interface Post {
   is_blurred?: boolean
   lqip?: string | null
   tags?: Tag[]
-  // v0.7.8 PR-C: present only on multi-image posts. Mirrors the
-  // server-side series shape from server/utils/queries.ts → getPost().
+  // Present only on multi-image posts; mirrors the server-side series shape (server/utils/queries.ts → getPost()).
   series?: PostSeries
 }
 

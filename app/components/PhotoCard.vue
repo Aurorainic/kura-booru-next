@@ -30,8 +30,6 @@ function onCardClick(e: MouseEvent) {
     modalOpen.value = true
   }
 }
-// ponytail: lqip renders during SSR — base64 PNG in HTML. Trivial cost vs
-// the saved client-only flicker the previous showLqip gate added.
 </script>
 
 <template>
@@ -73,7 +71,6 @@ function onCardClick(e: MouseEvent) {
     </PostBlurOverlay>
 
     <div v-else class="img-container" :style="{ aspectRatio: `${post.width} / ${post.height}` }">
-      <!-- LQIP blur placeholder -->
       <img
         v-if="lqip"
         :src="lqip"
@@ -81,7 +78,6 @@ function onCardClick(e: MouseEvent) {
         aria-hidden="true"
         class="lqip-blur"
       />
-      <!-- Real image -->
       <img
         :src="previewUrl"
         :srcset="srcset || undefined"
@@ -95,10 +91,8 @@ function onCardClick(e: MouseEvent) {
         decoding="async"
         @load="imgLoaded = true"
       />
-      <!-- Skeleton fallback (no LQIP) -->
       <div v-if="!lqip && !imgLoaded" class="skeleton absolute inset-0" />
 
-      <!-- Rating badge (admin) -->
       <span
         v-if="isAdmin && post.rating !== 'safe'"
         class="absolute top-2 left-2 px-1.5 py-0.5 text-[0.625rem] font-bold rounded z-2"
@@ -108,7 +102,6 @@ function onCardClick(e: MouseEvent) {
         {{ post.rating === 'questionable' ? '敏' : '限' }}
       </span>
 
-      <!-- Tag overlay (desktop hover) -->
       <div class="tag-overlay absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex flex-col justify-end p-2.5 pointer-events-none">
         <div v-if="post.title" class="text-white text-[0.75rem] font-medium mb-1 truncate">{{ post.title }}</div>
         <div v-if="post.tags && post.tags.length > 0" class="flex flex-wrap gap-1">
@@ -124,7 +117,6 @@ function onCardClick(e: MouseEvent) {
         </div>
       </div>
 
-      <!-- Mobile bottom info bar -->
       <div class="md:hidden absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 pointer-events-none">
         <div class="flex items-center justify-between gap-2">
           <span class="text-white text-[0.6875rem] truncate flex-1">{{ post.title || post.source_site }}</span>
@@ -143,9 +135,7 @@ function onCardClick(e: MouseEvent) {
 </template>
 
 <style scoped>
-/* Only show the tag overlay on devices that support hover (desktop with mouse).
-   On touch devices, hovering is not meaningful and the overlay intercepts taps,
-   causing conflicts with the gallery zoom modal (M3 fix). */
+/* Tag overlay only on hover-capable devices — on touch it intercepts taps and conflicts with the zoom modal (M3 fix). */
 @media (hover: hover) {
   .masonry-item .tag-overlay {
     opacity: 0;

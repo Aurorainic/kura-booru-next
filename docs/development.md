@@ -87,7 +87,7 @@ PostgreSQL and Redis must be running and accessible via `DATABASE_URL` and `REDI
 
 ### Nitro Auto-Imports
 
-Everything under `server/utils/` is auto-imported by Nitro. Do NOT add explicit `import` statements for `db`, `redis`, `getIsAdmin`, `enqueueJob`, `serializePost`, etc. Schema tables are auto-imported via `server/utils/schema.ts` re-export.
+`server/utils/` 由 Nitro 自动导入（不写 import 也能用），但 **v0.9.0 起新代码一律显式 import**（含 utils：`import { db } from '../../utils/db'`，注意相对路径深度）。`server/lib/` 与 `server/platform/` 不自动导入——必须显式引入。旧代码中的自动导入调用无需改写。
 
 ### Route File Convention
 
@@ -115,7 +115,7 @@ Tailwind v4 is configured via `@tailwindcss/vite` in `nuxt.config.ts`. Design to
 2. **Web import**: Paste URLs → click import → real-time SSE progress → done summary
 3. **Delete flow**: Admin panel click delete → confirm → DB record gone + S3 files deleted + tag count decremented
 4. **Auto-rating**: Add rule "nsfw → explicit" → import image with that tag → auto-marked as explicit
-5. **AI tag processing**: Set `ENABLE_AI_TAG_PROCESSING=true` → import image → tags auto-classified + translated
+5. **AI tag processing**: 后台「AI 设置」开启 AI 开关（或首次部署用 env seed）→ import image → tags auto-classified + translated
 6. **Tag visibility**: Anonymous visitors see only tags with safe posts; admin sees all
 7. **Pagination**: Switching pages and per-page count works, URLs are shareable
 8. **Image loading**: Images load via `/i/{key}` proxy → S3_EXTERNAL_URL

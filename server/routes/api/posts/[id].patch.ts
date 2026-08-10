@@ -5,10 +5,8 @@ import { AppError } from '../../../platform/errors'
 import { zRating } from '../../../platform/schemas/enums'
 import { serializePost } from '../../../lib/posts/serialize'
 
-// SECURITY: API-key path is rate-limited to bound blast radius of a leaked key.
-// A leaked key can still flip ratings, but capped at 30/min/IP — and we audit
-// every call so misuse is detectable. Full split to /api/posts/:id/rate with a
-// user-bound token is tracked as a follow-up.
+// SECURITY: API-key path is rate-limited (30/min/IP) to bound blast radius of a
+// leaked key — can still flip ratings, but audited and capped; per-user token is follow-up.
 export default defineApiKeyHandler({
   auditAction: 'rating mutation',
   schemas: {

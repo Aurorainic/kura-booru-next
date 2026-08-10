@@ -21,11 +21,9 @@ const sourceSites: { value: SourceSite; label: string }[] = [
   { value: 'other', label: '其他' },
 ]
 
-// Pagination
 const page = computed(() => Number(route.query.p) || 1)
 const perPage = ref(40)
 
-// Data fetching
 const { data, refresh, pending } = await useAsyncData(
   () => `admin-posts-${page.value}-${perPage.value}-${ratingFilter.value}`,
   () => fetchAdminPosts({ page: page.value, per_page: perPage.value, rating: ratingFilter.value || undefined }, ssrCookie.value),
@@ -51,7 +49,6 @@ const pages = computed(() => {
   return result
 })
 
-// Rating update
 const saving = ref<Set<string>>(new Set())
 async function updateRating(post: Post, newRating: string) {
   if (newRating === post.rating) return
@@ -82,7 +79,6 @@ async function updateSource(post: Post, newSource: string) {
   }
 }
 
-// Delete
 const deleting = ref<Set<string>>(new Set())
 async function deletePostAction(post: Post) {
   if (!await confirm.ask({
@@ -121,7 +117,6 @@ function goPage(p: number) {
       </template>
     </PageHeader>
 
-    <!-- Rating filter chips — no hardcoded colors; uses .rating-* classes -->
     <div class="flex items-center gap-1.5 flex-wrap">
       <button
         v-for="r in ratings" :key="r.value"
@@ -139,7 +134,6 @@ function goPage(p: number) {
     <LoadingCard v-if="pending" message="加载图片…" />
 
     <template v-else>
-      <!-- Desktop table -->
       <div v-if="posts.length > 0" class="hidden md:block rounded-2xl border border-[var(--border-color)] overflow-hidden">
         <table class="w-full text-sm">
           <thead>
@@ -214,7 +208,6 @@ function goPage(p: number) {
         </table>
       </div>
 
-      <!-- Mobile card view -->
       <div v-if="posts.length > 0" class="md:hidden space-y-2">
         <div v-for="post in posts" :key="post.id" class="rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-3 flex gap-3 transition-all hover:border-[var(--accent-color)]/30">
           <NuxtLink :to="`/posts/${post.id}`" class="flex-shrink-0 w-16 h-16">
@@ -261,7 +254,6 @@ function goPage(p: number) {
         icon="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z"
       />
 
-      <!-- Pagination with ellipsis pattern -->
       <div v-if="totalPages > 1" class="flex items-center justify-center gap-1 pt-2">
         <template v-for="(p, i) in pages" :key="i">
           <span v-if="p === '...'" class="text-[var(--text-muted)] text-sm px-1 select-none">…</span>

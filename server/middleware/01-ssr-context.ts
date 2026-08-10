@@ -8,9 +8,8 @@ const SETTINGS_REVALIDATE_MS = 10_000
 export default defineEventHandler(async (event) => {
   const path = event.path || ''
 
-  // H14: 即使是 /api/ 路径也先计算 isAdmin 写入 context — 02-cache-control
-  // 中间件据此复用，避免每条 API 请求重复 getIsAdmin（30s adminCache 之外
-  // 仍是 1 次 Redis round-trip / 请求）。
+  // H14: 即使 /api/ 路径也先算 isAdmin 写入 context — 02-cache-control 据此复用，
+  // 避免每条 API 请求重复 getIsAdmin（30s adminCache 之外仍 1 次 Redis round-trip/请求）。
   const cookieHeader = getHeader(event, 'cookie') || ''
   let isAdmin = false
   try {

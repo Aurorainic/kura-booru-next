@@ -1,13 +1,8 @@
 #!/usr/bin/env node
 /**
- * 契约漂移守护（v0.9.0 规划 阶段 1：API 契约测试基线）。
- *
- * 双向比对 server/routes/ 路由文件与 platform/contract/endpoints.ts 冻结清单：
- *   A. 每个路由文件必须出现在契约清单中（新增端点 = 更新清单，强制显式决策）
- *   B. 清单中每条契约的文件必须存在（防清单腐化）
- *   C. 路由文件推导出的 (method, path) 必须与清单一致（防 method/路径改名漂移）
- *   D. 清单内 method+path 不允许重复
- *
+ * 契约漂移守护（v0.9.0 规划阶段 1）：双向比对 server/routes/ 与
+ * platform/contract/endpoints.ts 冻结清单 — 路由必须已登记（A）、契约文件必须存在（B）、
+ * 推导 (method, path) 必须一致（C）、清单内 method+path 不重复（D）。
  * 运行：node server/platform/contract/check.mjs（pnpm run test:contract）
  */
 import { readdirSync, statSync } from 'node:fs'

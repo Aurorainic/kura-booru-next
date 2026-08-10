@@ -56,11 +56,11 @@
 
 | 文档 | 说明 |
 |---|---|
-| [docs/architecture.md](docs/architecture.md) | 架构、技术栈、数据模型、API |
+| [docs/SUMMARY.md](docs/SUMMARY.md) | 文档索引（架构/ADR/运维） |
+| [docs/architecture/overview.md](docs/architecture/overview.md) | 架构、技术栈、数据模型、API |
 | [docs/deployment.md](docs/deployment.md) | 部署配置、环境变量 |
 | [docs/development.md](docs/development.md) | 本地开发指南 |
 | [docs/operations.md](docs/operations.md) | 运维：构建、迁移、备份 |
-| [docs/roadmap.md](docs/roadmap.md) | 路线图 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本历史 |
 
 ## 📜 License

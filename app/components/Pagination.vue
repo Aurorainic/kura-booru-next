@@ -46,8 +46,6 @@ function pageUrl(page: number): string {
     url.searchParams.set('per_page', String(props.perPage))
     return url.pathname + '?' + url.searchParams.toString()
   }
-  // ponytail: SSR — useRoute().path is deterministic unlike useRequestURL()
-  // which can have inconsistent pathname behavior in certain SSR edge cases.
   const params = new URLSearchParams()
   if (page > 1) params.set('page', String(page))
   params.set('per_page', String(props.perPage))
@@ -84,9 +82,7 @@ function goToJumpPage() {
 
 <template>
   <nav class="flex flex-wrap items-center justify-between gap-4 mt-8 pt-6 border-t border-[var(--border-color)]">
-    <!-- Page navigation -->
     <div v-if="totalPages > 1" class="flex items-center gap-1">
-      <!-- Previous -->
       <NuxtLink
         v-if="currentPage > 1"
         :to="pageUrl(currentPage - 1)"
@@ -100,7 +96,6 @@ function goToJumpPage() {
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
       </span>
 
-      <!-- Page numbers -->
       <template v-for="(p, i) in pages" :key="i">
         <span v-if="p === '...'" class="text-[var(--text-muted)] text-sm px-1 select-none">…</span>
         <NuxtLink
@@ -113,7 +108,6 @@ function goToJumpPage() {
         >{{ p }}</NuxtLink>
       </template>
 
-      <!-- Next -->
       <NuxtLink
         v-if="currentPage < totalPages"
         :to="pageUrl(currentPage + 1)"
@@ -128,7 +122,6 @@ function goToJumpPage() {
       </span>
     </div>
 
-    <!-- Jump to page -->
     <form
       v-if="totalPages > 1"
       class="flex items-center gap-1.5"
@@ -154,7 +147,6 @@ function goToJumpPage() {
       </button>
     </form>
 
-    <!-- Per-page selector -->
     <div class="flex items-center gap-2 flex-shrink-0">
       <svg class="w-4 h-4 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
       <select

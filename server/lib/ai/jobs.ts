@@ -4,8 +4,6 @@ import { redis } from '../../utils/redis'
 import type { AiJobStatus } from './types'
 
 // ── AI job progress (Redis-backed, short TTL) ──
-// ponytail: avoid new PG tables for transient progress state; Redis SETEX with
-// 1800s TTL auto-cleans. On completion, set status=done and shrink TTL to 60s.
 
 const AI_JOB_TTL_RUNNING = 1800  // 30 min while running
 const AI_JOB_TTL_DONE = 60       // 1 min after completion (lets polls settle)

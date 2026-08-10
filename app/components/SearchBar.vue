@@ -16,9 +16,6 @@ const selectedIndex = ref(-1)
 const loading = ref(false)
 const inputEl = ref<HTMLInputElement | null>(null)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
-// ponytail: one in-flight AbortController per input run. Replaced on every
-// keystroke so the previous request is cancelled — debounce alone can't
-// stop a slow A from resolving after a fast B and clobbering the UI.
 let inFlight: AbortController | null = null
 
 // `/` keycap hint shown when input is empty and idle.
@@ -26,8 +23,7 @@ const { isMac } = usePlatform()
 const modKey = computed(() => isMac.value ? '⌘' : 'Ctrl')
 const showKeycap = computed(() => !query.value && !loading.value)
 
-// Using v-model on the input, so autocomplete logic is driven by a watcher
-// on `query` instead of manually reading event.target.value.
+// v-model drives the input, so autocomplete runs off a watcher on `query` rather than reading event.target.value.
 watch(query, (value) => {
   if (debounceTimer) clearTimeout(debounceTimer)
   if (inFlight) { inFlight.abort(); inFlight = null }
@@ -64,9 +60,8 @@ watch(query, (value) => {
   }, 150)
 })
 
-// Kept for template binding but just triggers the existing watcher logic
+// Kept for template binding; v-model already updates query, the watcher handles debounced autocomplete.
 function onDebouncedAutocomplete() {
-  // v-model already updates query; the watcher handles debounced autocomplete
 }
 
 function onKeyDown(e: KeyboardEvent) {
@@ -156,7 +151,6 @@ onUnmounted(() => {
           showKeycap ? 'pr-16' : 'pr-8',
         ]"
       />
-      <!-- Keycap hint: / focuses search (only when idle) -->
       <button
         v-if="showKeycap"
         type="button"

@@ -4,7 +4,6 @@ export const tagKnowledge = pgTable('tag_knowledge', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull().unique(),
   danbooruName: text('danbooru_name'),
-  // ponytail: type/source are plain text, not PG enums — matches existing schema
   type: text('type').notNull(),
   translation: text('translation'),
   source: text('source').notNull().default('ai'),

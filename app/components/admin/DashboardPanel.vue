@@ -8,8 +8,7 @@ const { data: stats, pending, refresh } = await useAsyncData('dashboard', async 
   }
 })
 
-// Refresh dashboard data when the panel is reactivated (e.g. navigating back
-// from another admin tab), so the displayed stats are not stale.
+// Refresh on reactivation (e.g. back from another admin tab) so stats aren't stale.
 onActivated(() => {
   refresh()
 })
@@ -67,9 +66,6 @@ const ratingPie = computed(() => {
   })
 })
 
-// ponytail: rating colors now derived from the same .rating-* CSS classes —
-// we read the resolved CSS var so the segmented bar matches the badge palette
-// instead of a parallel hardcoded dictionary.
 const ratingBg = (rating: string) => {
   const map: Record<string, string> = {
     safe: 'var(--color-success)',
@@ -86,7 +82,6 @@ const ratingBg = (rating: string) => {
   </div>
 
   <div v-else-if="stats" class="space-y-5">
-    <!-- Overview cards -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
       <div
         v-for="card in overviewCards"
@@ -105,9 +100,7 @@ const ratingBg = (rating: string) => {
       </div>
     </div>
 
-    <!-- Source + Rating row — Pie + Segmented Bar -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
-      <!-- Source breakdown — Donut chart -->
       <div class="dash-card !p-5">
         <h3 class="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest mb-4">来源分布</h3>
         <div class="flex items-center gap-6">
@@ -138,7 +131,6 @@ const ratingBg = (rating: string) => {
         </div>
       </div>
 
-      <!-- Rating breakdown — Segmented bar -->
       <div class="dash-card !p-5">
         <h3 class="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest mb-4">评级分布</h3>
         <div class="space-y-3">
@@ -162,7 +154,6 @@ const ratingBg = (rating: string) => {
       </div>
     </div>
 
-    <!-- Top tags -->
     <div class="dash-card !p-5">
       <h3 class="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest mb-4">热门标签</h3>
       <div class="flex flex-wrap gap-1.5">
@@ -182,8 +173,7 @@ const ratingBg = (rating: string) => {
       </div>
     </div>
 
-    <!-- Recent uploads — queue depth now lives in AdminStatusBar (top of page),
-         so this card shows the latest posts instead of repeating overview stats. -->
+    <!-- Recent uploads — queue depth now lives in AdminStatusBar, so this card shows latest posts instead -->
     <div class="dash-card !p-5">
       <h3 class="text-[0.6875rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest mb-4">最近收录</h3>
       <div v-if="stats.recent_posts.length" class="grid grid-cols-2 sm:grid-cols-4 gap-3">

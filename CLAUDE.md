@@ -7,11 +7,11 @@
 Current version: v0.10.0 (released 2026-08-08).
 
 **Authoritative docs** (for depth; this file is the map):
-- `docs/architecture.md` + `docs/architecture/{overview,data-model,extension,decisions}.md` — architecture, data model, extension, ADRs
+- `docs/architecture/{overview,data-model,extension,decisions}.md` — architecture, data model, extension, ADRs
 - `docs/deployment.md` — deployment and environment variables
 - `docs/development.md` — local dev guide and manual verification checklist
 - `docs/operations.md` — build, migration, backup procedures
-- `docs/versioning.md` / `docs/rollback.md` — release and rollback flows
+- `docs/versioning.md` — release versioning and rollback flows
 
 ---
 

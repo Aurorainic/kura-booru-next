@@ -1,6 +1,4 @@
-// ARCHIVED (v0.10.0): AI 对话模块（admin assistant chat）已归档，不再参与构建。
-// 原位置: server/lib/ai/assistant.ts。如需恢复，git 历史可查。
-// v0.9.0 R2.5: split from server/utils/ai.ts. Admin assistant chat (capability ④ + ⑧).
+// ARCHIVED (v0.10.0): AI 对话模块已归档，不再参与构建。原位置 server/lib/ai/assistant.ts（git 历史可恢复）。
 
 import { eq, sql, isNull } from 'drizzle-orm'
 import { db } from '../../utils/db'
@@ -8,7 +6,7 @@ import { posts, tags } from '../../schema'
 import { callAi } from './client'
 import type { AiMessage, AssistantReply } from './types'
 
-// ── Admin assistant chat (capability ④ + ⑧) ──
+// ── Admin assistant chat ──
 
 const ASSISTANT_SYSTEM_PROMPT = `You are an AI assistant for a booru-style anime image gallery management system (Kura Booru). You help the admin manage tags, posts, and ratings.
 
@@ -38,7 +36,6 @@ export async function adminAssistantChat(
   query: string,
   context: { source: 'web' | 'bot'; lang?: string; history?: AiMessage[] },
 ): Promise<AssistantReply> {
-  // Gather DB context for the query
   const dbContext = await gatherAssistantContext(query)
 
   const messages: AiMessage[] = [
@@ -63,7 +60,6 @@ export async function adminAssistantChat(
       suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 8) : undefined,
     }
   } catch {
-    // Fallback: treat raw as plain text
     return { text: raw.slice(0, 2000) }
   }
 }
@@ -90,11 +86,6 @@ async function gatherAssistantContext(query: string): Promise<string> {
     const safeNum = Number(safeCount[0]?.count || 0)
     const safePct = totalPosts ? Math.round((safeNum / totalPosts) * 100) : 0
 
-    // ponytail: query-aware context. The previous version always returned the
-    // same 6 counts regardless of what the admin asked - if they asked "how
-    // many explicit posts?", the context didn't include that number, so the
-    // AI had to guess or deflect. Now we always provide the full breakdown so
-    // the AI can answer any stats question from context.
     parts.push(`Database statistics:`)
     parts.push(`- Total posts: ${totalPosts} (safe: ${safeNum} (${safePct}%), questionable: ${Number(qCount[0]?.count || 0)}, explicit: ${Number(eCount[0]?.count || 0)})`)
     parts.push(`- Total tags: ${Number(tagCount[0]?.count || 0)} (artist: ${Number(artistCount[0]?.count || 0)}, character: ${Number(charCount[0]?.count || 0)}, copyright: ${Number(copyrightCount[0]?.count || 0)})`)

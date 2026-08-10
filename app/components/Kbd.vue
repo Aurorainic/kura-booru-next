@@ -4,7 +4,7 @@ const { isMac } = usePlatform()
 
 const tokens = computed(() => {
   const raw = Array.isArray(props.keys) ? props.keys : [props.keys]
-  // Each entry is itself a + -joined combo (e.g. "G+T"). Flatten into groups.
+  // Each entry is a "+"-joined combo (e.g. "G+T") — flatten into groups.
   return raw.map(k => k.split('+').map(s => s.trim()))
 })
 

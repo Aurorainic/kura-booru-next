@@ -15,8 +15,6 @@ export default defineAdminHandler({
       throw new AppError('FEATURE_DISABLED', 409, 'AI 功能未启用')
     }
 
-    // ponytail: specific mode is short (≤ tag_ids.length) — keep synchronous,
-    // return suggestions directly. unprocessed/all can hit 100 tags → run async.
     if (mode === 'specific' && body?.tag_ids?.length) {
       const tagRows = await db.select().from(tags)
         .where(and(inArray(tags.id, body.tag_ids!), sql`${tags.category} != 'artist'`))
@@ -43,8 +41,7 @@ export default defineAdminHandler({
     if (!tagRows.length) return { suggestions: [], job_id: null }
 
     const jobId = await createAiJob('classify', tagRows.length)
-    // pg-boss handles job execution (ADR-0001). Progress is written to Redis
-    // job status by the worker; jobs/[id].get reads from Redis (unchanged).
+    // pg-boss executes the job (ADR-0001); progress written to Redis by the worker, jobs/[id].get reads it.
     const boss = await getBoss()
     await boss.send('ai-classify', { jobId, tagNames: tagRows.map(t => t.name) })
 

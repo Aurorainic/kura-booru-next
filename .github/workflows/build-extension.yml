@@ -10,9 +10,7 @@ on:
         description: "Branch/tag/SHA to build from (defaults to the workflow's ref)"
         required: false
 
-# One build per ref at a time — a fresh push should replace a stale queued run,
-# not pile up. workflow_dispatch builds are excluded from cancellation so a
-# manual rebuild can't be killed by a stray push.
+# 每 ref 同时只构建一次；workflow_dispatch 手动构建不被并发取消误杀。
 concurrency:
   group: build-extension-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'push' }}
@@ -23,9 +21,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        # `ref` is an attacker-controllable input (workflow_dispatch trigger).
-        # Validate it looks like a git ref before handing it to checkout to
-        # prevent ref-injection (e.g. refs that escape the repo history).
+        # `ref` 是 workflow_dispatch 的可控输入——校验后交给 checkout，防 ref 注入。
         with:
           ref: ${{ github.event.inputs.ref && github.event.inputs.ref || github.ref }}
 
@@ -33,8 +29,7 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref != '' }}
         run: |
           REF='${{ github.event.inputs.ref }}'
-          # Reject path traversal / refspec shenanigans — a real branch, tag, or
-          # full SHA never contains .. or : and is not empty.
+          # 拒绝路径遍历/refspec 花招：真实分支、tag、SHA 不含 .. 或 : 且非空。
           if [[ ! "$REF" =~ ^[A-Za-z0-9._/-]+$ ]] || [[ "$REF" == *..* ]]; then
             echo "::error::Invalid ref '$REF': must match ^[A-Za-z0-9._/-]+$ and contain no '..'"
             exit 1

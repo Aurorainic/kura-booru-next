@@ -1,6 +1,5 @@
 /**
- * Bot rating flow: countdown timers, manual override, auto-confirm.
- * T-P0-3: Full rating flow with inline keyboard + 10s countdown.
+ * Bot rating flow: countdown timers, manual override, auto-confirm (T-P0-3: inline keyboard + 10s countdown).
  */
 
 export const ratingCountdowns = new Map<string, NodeJS.Timeout>()
@@ -50,9 +49,8 @@ export function startCountdown(
       const label = autoRating ? `（${lb('autoRule', lang)}）` : `（${lb('default', lang)}）`
       await confirmRating(api, chatId, messageId, postId, rating, lang, label)
     } else if (remaining <= 5 && remaining % 2 === 1) {
-      // H4: 只在 remaining 5/3/1 三次编辑 — 每秒 edit 撞 Telegram 30/sec
-      // 全局限流（3 个并发评级 = 9-30 次/秒），429 被静默吞掉后倒计时
-      // 形同虚设。降频后最多 3 次编辑/倒计时。
+      // H4: 只在 5/3/1 秒编辑三次 — 每秒 edit 撞 Telegram 30/sec 全局限流
+      // （429 被静默吞掉后倒计时形同虚设）。
       try {
         await api.editMessageText(
           chatId, messageId,
@@ -83,15 +81,9 @@ export async function confirmRating(
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (apiKey) headers['x-api-key'] = apiKey
 
-  // Write rating to DB first. On failure, surface a ⚠️ message — do NOT fall
-  // through to the ✅ success text (would give a false confirmation). The old
-  // code had a bare `redis.set` after this that threw TypeError (redis never
-  // imported — Nitro auto-import rewrites other files' redis to `redis$1`, but
-  // this module had no import so it stayed bare `undefined`), which aborted
-  // confirmRating before the editMessageText that removes the inline keyboard.
-  // INTERNAL_API_URL already includes /api (default http://127.0.0.1:3000/api,
-  // see nuxt.config.ts runtimeConfig + logout.post.ts same convention).
-  // Do NOT add another /api here — that produces /api/api/posts/:id → 404.
+  // Write rating to DB first; on failure surface ⚠️ and return — never fall through
+  // to the ✅ text (old code's bare redis.set threw TypeError, aborting the keyboard
+  // removal). INTERNAL_API_URL already includes /api — do NOT append another /api.
   try {
     const resp = await fetch(`${baseUrl}/posts/${postId}`, {
       method: 'PATCH',

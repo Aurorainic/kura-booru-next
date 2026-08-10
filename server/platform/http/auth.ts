@@ -1,13 +1,7 @@
 /**
- * 四种 auth 包装（ADR-0004 §3）。
- *
- * - defineAdminHandler：cookie session（消灭 §7.3 的三行样板 ×40）
- * - defineApiKeyHandler：session 或 BACKEND_API_KEY 二选一；api-key 路径统一
- *   30/min/IP 限流 + 审计日志（消灭 posts/[id].patch.ts:32-41 与
- *   dashboard/index.get.ts:16-25 的逐字重复块）
- * - defineExtHandler：session 或 kb_ext_ 扩展 key 联合判别 + per-key 60/min
- *   （web-import 模式的一般化）
- * - definePublicHandler：无鉴权，仅校验 + 错误兜底
+ * 四种 auth 包装（ADR-0004 §3）：defineAdminHandler（cookie session）、
+ * defineApiKeyHandler（session 或 BACKEND_API_KEY，api-key 路径统一 30/min/IP 限流 + 审计）、
+ * defineExtHandler（session 或 kb_ext_ 扩展 key，per-key 60/min）、definePublicHandler（无鉴权，仅校验）。
  */
 import { getHeader, getRequestIP } from 'h3'
 import type { H3Event } from 'h3'
@@ -51,8 +45,7 @@ async function requireAdmin(event: H3Event): Promise<AdminAuth> {
 }
 
 /**
- * M5: 限流取客户端 IP — 只信任反向代理设置的 X-Real-IP，忽略
- * X-Forwarded-For（攻击者可伪造 XFF 轮换绕过登录锁定/API 限流）。
+ * M5: 限流取客户端 IP — 只信任反代设置的 X-Real-IP，忽略可伪造的 X-Forwarded-For；
  * 无代理时取直连 socket 地址。
  */
 export function getClientIp(event: H3Event): string {
@@ -137,10 +130,8 @@ export interface TelegramAuth {
 }
 
 /**
- * Telegram bot webhook handler wrapper.
- *
- * 验证 x-telegram-bot-api-secret-token，bot.token 已配置，确保 webhook
- * 请求来源可信。所有错误通过 AppError 抛出，统一走 { code, message } 契约。
+ * Telegram bot webhook handler wrapper: 验证 x-telegram-bot-api-secret-token 且
+ * bot 已配置；错误统一走 { code, message } 契约。
  */
 export function defineTelegramHandler<S extends HandlerSchemas | undefined = undefined>(
   opts: CommonOptions<S> & { handler: (ctx: Ctx<TelegramAuth, S>) => unknown | Promise<unknown> },
@@ -162,7 +153,6 @@ export function defineTelegramHandler<S extends HandlerSchemas | undefined = und
         throw new AppError('SERVICE_UNAVAILABLE', 503, 'Bot not configured')
       }
 
-      // Verify webhook secret token
       const secret = getHeader(event, 'x-telegram-bot-api-secret-token')
       const expectedSecret = botCfg.webhookSecret
 
@@ -170,7 +160,6 @@ export function defineTelegramHandler<S extends HandlerSchemas | undefined = und
         throw new AppError('INTERNAL', 500, 'Webhook secret not configured')
       }
       if (expectedSecret) {
-        // ponytail: constant-time comparison — same pattern as checkApiKey.
         const crypto = await import('crypto')
         const a = Buffer.from(secret || '')
         const b = Buffer.from(expectedSecret)

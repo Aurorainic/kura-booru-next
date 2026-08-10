@@ -76,7 +76,6 @@ onUnmounted(() => {
   <div class="space-y-5">
     <PageHeader title="自动评级规则" subtitle="当导入的图片包含指定标签时，自动设置评级（仅升级不降级）。" />
 
-    <!-- Add rule -->
     <div class="dash-card !p-4 flex items-center gap-3 flex-wrap">
       <div class="relative flex-1 min-w-[180px]">
         <input
@@ -108,7 +107,6 @@ onUnmounted(() => {
       <button @click="addRule" class="btn-primary !text-sm !px-4 !py-2">添加</button>
     </div>
 
-    <!-- Rules list -->
     <div v-if="rules && rules.length > 0" class="rounded-2xl border border-[var(--border-color)] overflow-hidden">
       <table class="w-full">
         <thead>

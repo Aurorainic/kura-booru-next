@@ -89,7 +89,6 @@ const showModal = ref(false)
 
 function openModal() { showModal.value = true }
 
-// Delete post
 const deleting = ref(false)
 
 async function deletePostAction() {
@@ -121,8 +120,7 @@ function goBack() {
   }
 }
 
-// In-page J/K pagination between posts. We only know the IDs if the gallery
-// passed them; otherwise J/K is a no-op. (Cheap, opt-in via query param.)
+// In-page J/K pagination — only works when the gallery passed ?list= with the post IDs (opt-in, cheap).
 const navList = computed(() => {
   const raw = route.query.list as string | undefined
   if (!raw) return null
@@ -139,8 +137,6 @@ function nextPost() {
   const i = navList.value.indexOf(id)
   if (i >= 0 && i < navList.value.length - 1) navigateTo(`/posts/${navList.value[i + 1]}`)
 }
-// ponytail: detail page only wires J/K to prev/next post. The layout-level
-// useKeyboardShortcuts already handles /, G+T, and ? — don't duplicate listeners.
 useKeyboardShortcuts({ onPrevPost: prevPost, onNextPost: nextPost })
 const previewLoaded = ref(false)
 function onPreviewLoad() { previewLoaded.value = true }
@@ -158,7 +154,6 @@ useHead({
 
 <template>
   <div v-if="post" class="max-w-[var(--content-max)] mx-auto px-4 lg:px-8 py-4">
-    <!-- Top bar: back -->
     <div class="mb-4">
       <NuxtLink to="/" class="nav-btn" @click.prevent="goBack">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
@@ -166,10 +161,9 @@ useHead({
       </NuxtLink>
     </div>
 
-    <!-- Three-column layout: left (tags), center (image), right (info) -->
+    <!-- Left sidebar: tags by category (desktop, sticky) -->
     <div class="flex flex-col lg:flex-row gap-6">
 
-      <!-- Left sidebar: Tags by category (desktop, sticky) -->
       <aside class="hidden lg:block lg:w-64 flex-shrink-0">
         <div class="sticky top-4 space-y-5">
           <div class="dash-card !p-4">
@@ -191,13 +185,11 @@ useHead({
                     </span>
                     <span v-if="tag.post_count > 0" class="text-[0.6875rem] text-[var(--text-muted)] font-mono tabular-nums flex-shrink-0">{{ tag.post_count }}</span>
                   </NuxtLink>
-                  <!-- Admin remove button -->
                   <button v-if="isAdmin" class="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover/tag:opacity-100 text-[var(--color-danger)] text-xs px-1" @click.stop="removeTag(tag.id)">✕</button>
                 </li>
               </ul>
             </div>
 
-            <!-- Admin: add tag -->
             <div v-if="isAdmin" class="mt-3 pt-3 border-t border-[var(--border-color)]">
               <form class="flex gap-1" @submit.prevent="addTag">
                 <input v-model="newTagName" type="text" placeholder="添加标签…" class="flex-1 text-xs px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]" />
@@ -208,7 +200,6 @@ useHead({
         </div>
       </aside>
 
-      <!-- Center: Image -->
       <main class="flex-1 min-w-0">
         <div style="animation: imageReveal var(--duration-slow) var(--ease-out);">
           <div class="relative rounded-[var(--radius-lg)] overflow-hidden cursor-zoom-in" @click="openModal">
@@ -222,7 +213,7 @@ useHead({
                 :class="{ 'loaded': previewLoaded }"
                 aria-hidden="true"
               />
-              <!-- Fallback: 300px thumbnail blur (when no LQIP data, e.g. old posts) -->
+              <!-- Fallback: 300px thumbnail blur (old posts without LQIP) -->
               <img
                 v-else
                 :src="thumbUrl"
@@ -250,7 +241,7 @@ useHead({
           </div>
         </div>
 
-        <!-- v0.7.8 PR-C: series nav (only rendered when this post is part of a multi-image series) -->
+        <!-- Series nav (only when this post is part of a multi-image series) -->
         <PostSeriesNav
           v-if="post.series"
           :series="post.series"
@@ -258,7 +249,6 @@ useHead({
           :is-admin="isAdmin"
         />
 
-        <!-- Mobile: tags as pills (below image) -->
         <div class="lg:hidden mt-4 flex flex-wrap gap-2">
           <template v-for="tag in post.tags" :key="tag.id">
             <NuxtLink
@@ -271,7 +261,6 @@ useHead({
             </NuxtLink>
           </template>
 
-          <!-- Mobile admin: add tag -->
           <div v-if="isAdmin" class="w-full mt-2">
             <form class="flex gap-1" @submit.prevent="addTag">
               <input v-model="newTagName" type="text" placeholder="添加标签…" class="flex-1 text-xs px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]" />
@@ -280,7 +269,6 @@ useHead({
           </div>
         </div>
 
-        <!-- Mobile: info details (below image and tags) -->
         <div class="lg:hidden mt-4">
           <PostInfoPanel
             :post="post"
@@ -297,7 +285,6 @@ useHead({
         </div>
       </main>
 
-      <!-- Right sidebar: Info (desktop, sticky) -->
       <aside class="hidden lg:block lg:w-80 flex-shrink-0">
         <div class="sticky top-4">
           <PostInfoPanel
@@ -316,7 +303,6 @@ useHead({
       </aside>
     </div>
 
-    <!-- Image Modal (delegates pan/zoom/pinch to <ImageModal>) -->
     <ImageModal v-model="showModal" :src="originalUrl" :alt="post.title || '原图'" />
   </div>
 </template>

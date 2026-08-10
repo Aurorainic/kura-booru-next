@@ -1,16 +1,8 @@
 /**
- * Telegram Bot 代理/中转连接构建（v0.10.0）。
- *
- * 三种境内访问方式（settings 的 bot_proxy_type）：
- *   - http    → undici ProxyAgent（dispatcher）
- *   - socks   → socks-proxy-agent + undici Agent connect 包装
- *               （Node fetch 只认 dispatcher 不认 agent；secureEndpoint:true
- *                 让 socks 层完成 TLS，undici 只复用 socket）
- *   - mtproto → apiRoot（Telegram API 反代根地址）
- *   - ''      → 直连 api.telegram.org
- *
- * 注：undici 必须用 7.x（8.x 与 Node 24 内置 undici 不兼容：
- *     "invalid onRequestStart method"）。
+ * Telegram Bot 代理/中转连接构建（v0.10.0）。三种境内访问方式（settings bot_proxy_type）：
+ * http → undici ProxyAgent；socks → socks-proxy-agent + undici Agent connect 包装
+ * （Node fetch 只认 dispatcher；secureEndpoint:true 让 socks 层完成 TLS）；mtproto → apiRoot。
+ * 注：undici 必须用 7.x（8.x 与 Node 24 内置 undici 不兼容："invalid onRequestStart method"）。
  */
 import { ProxyAgent, Agent } from 'undici'
 import { SocksProxyAgent } from 'socks-proxy-agent'

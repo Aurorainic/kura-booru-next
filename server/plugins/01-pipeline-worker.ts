@@ -1,21 +1,12 @@
 /**
- * Pipeline worker: background consumer that processes sidecar results.
- *
- * Listens on kura:pending_results queue (fed by sidecar), processes each result
- * through the pipeline (dedup → thumbnails → S3 → DB), and updates Redis with
- * the final status for bot polling.
- *
- * v0.9.0 R2.4: retry + DLQ (ADR-0001). Pipeline failures retry up to
- * MAX_RETRIES=3 with exponential backoff; exhausted retries push to kura:dlq.
+ * Pipeline worker: background consumer for sidecar results (dedup → thumbnails → S3 → DB),
+ * updates Redis status for bot polling. v0.9.0 R2.4 (ADR-0001): retries up to MAX_RETRIES=3
+ * with exponential backoff; exhausted retries push to kura:dlq.
  */
 
 import { MAX_RETRIES, DLQ_KEY } from '../platform/queue'
 import sharp from 'sharp'
 
-// ponytail: 单人 = 一次导入一张图（多图 series 内部按页串行）。
-// concurrency=1 时单图峰值 ~150-300MB（libvips 临时 buffer），
-// 默认 N_cores（本机 8 worker × 300MB = 2.4GB 突发）纯浪费。
-// sharp.cache(false)：pipeline 流水线每张图一次性，50MB LRU 命中率为 0。
 const SHARP_CONCURRENCY = Number(process.env.SHARP_CONCURRENCY || 1)
 sharp.concurrency(SHARP_CONCURRENCY)
 sharp.cache(false)
@@ -29,9 +20,8 @@ export default defineNitroPlugin(() => {
 async function startPipelineWorker() {
   console.log('[pipeline-worker] started')
 
-  // Graceful shutdown via AbortController. On SIGTERM/SIGINT, the worker
-  // completes the current iteration and exits cleanly. BRPOP has a 5s timeout
-  // so the abort signal is checked at most 5s after it fires.
+  // Graceful shutdown via AbortController: completes the current iteration on
+  // SIGTERM/SIGINT; BRPOP's timeout bounds how late the abort is noticed.
   const ac = new AbortController()
   const onSignal = () => {
     console.log('[pipeline-worker] shutdown signal received, draining...')
@@ -45,9 +35,6 @@ async function startPipelineWorker() {
 
   while (!ac.signal.aborted) {
     try {
-      // Block until a job ID arrives (with 30s timeout so we can check abort
-      // signal). ponytail: 单人 5min 才几条任务 — 5s timeout = 12 次/min 空转
-      // wakeup；30s = 2 次/min，省电且无感知延迟。
       const result = await (blockRedis as any).BRPOP('kura:pending_results', 30)
       if (!result) continue
 
@@ -60,7 +47,6 @@ async function startPipelineWorker() {
         continue
       }
 
-      // Read the sidecar result
       const raw = await redis.get(`kura:results:${jobId}`)
       if (!raw) {
         console.warn(`[pipeline-worker] no result for job ${jobId}`)
@@ -107,10 +93,7 @@ async function startPipelineWorker() {
   console.log('[pipeline-worker] stopped')
 }
 
-/**
- * Wrap processResult with MAX_RETRIES exponential backoff + DLQ.
- * On exhaustion, returns a failed result (so job_status=done + caller unblocks).
- */
+/** Wrap processResult with MAX_RETRIES exponential backoff + DLQ; exhaustion returns failed so the caller unblocks. */
 async function processResultWithRetry(
   jobId: string,
   sidecarResult: any,

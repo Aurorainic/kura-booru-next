@@ -9,8 +9,7 @@ export default defineAdminHandler({
 
     const status = await getAiJobStatus(id)
     if (!status) {
-      // Expired or never existed — return a terminal "not found" rather than 404
-      // so the client can treat it as completed-vanished and stop polling.
+      // Expired or never existed — return terminal "gone" so the client stops polling.
       return { id, status: 'gone' as const, total: 0, done: 0, errors: [], started_at: 0 }
     }
     return status

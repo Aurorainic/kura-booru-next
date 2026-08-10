@@ -1,9 +1,7 @@
 /**
- * OpenAPI 路由注册表（ADR-0004 §4）。
- *
- * 每个 define*Handler 包装在路由模块求值时把 path/method/auth/schemas 登记到这里，
- * 作为 OpenAPI 文档的唯一数据源。契约冻结的全量 53 端点清单见
- * platform/contract/endpoints.ts（静态、含不可变标注）；本注册表只覆盖已迁移端点。
+ * OpenAPI 路由注册表（ADR-0004 §4）：define*Handler 在路由模块求值时把
+ * path/method/auth/schemas 登记到这里，作为 OpenAPI 文档唯一数据源。
+ * 静态 53 端点冻结清单见 contract/endpoints.ts；本表只覆盖已迁移端点。
  */
 import { OpenAPIRegistry, OpenApiGeneratorV31 } from '@asteasolutions/zod-to-openapi'
 import type { HandlerSchemas } from '../http/handler'
@@ -44,9 +42,8 @@ export function buildOpenApiDocument() {
       summary: route.summary,
       ...(route.frozen ? { 'x-contract': 'frozen' } : {}),
       request: {
-        // zod-to-openapi 要求 params/query 为 ZodObject（其 RouteParameter 类型
-        // 未从包入口导出）；契约侧 HandlerSchemas 是宽松 ZodType，传 ZodObject
-        // 是调用方责任，这里只做登记层收窄
+        // zod-to-openapi 要求 params/query 为 ZodObject（RouteParameter 未从包入口导出）；
+        // 契约侧是宽松 ZodType，传 ZodObject 是调用方责任，这里只做登记层收窄
         ...(route.schemas?.params ? { params: route.schemas.params as any } : {}),
         ...(route.schemas?.query ? { query: route.schemas.query as any } : {}),
         ...(route.schemas?.body

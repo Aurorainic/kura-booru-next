@@ -59,7 +59,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
           <span class="px-2 py-0.5 text-xs font-bold rounded" :class="getRatingColorClass(currentPost.rating)">{{ getRatingLabel(currentPost.rating) }}</span>
         </div>
         <div class="text-xs text-[var(--text-muted)]">{{ getSourceSiteLabel(currentPost.source_site) }} · {{ currentPost.width }}×{{ currentPost.height }}</div>
-        <!-- F-P1-4: Tag badges -->
+        <!-- Tag badges -->
         <div v-if="currentPost.tags?.length" class="flex flex-wrap justify-center gap-1.5 mt-1">
           <TagBadge v-for="tag in currentPost.tags.slice(0, 8)" :key="tag.id" :tag="tag" :show-translation="true" :link="true" />
           <span v-if="currentPost.tags.length > 8" class="text-xs text-[var(--text-muted)]">+{{ currentPost.tags.length - 8 }}</span>

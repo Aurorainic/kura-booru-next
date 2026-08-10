@@ -16,8 +16,8 @@ export default defineAdminHandler({
     let model = String(body?.model || '').trim()
     let apiKey = String(body?.apiKey || '').trim()
 
-    // Saved provider: fill any missing fields from the stored row (the stored
-    // plaintext key never leaves the server — the test call is server-side).
+    // Saved provider: fill missing fields from the stored row — the stored
+    // plaintext key never leaves the server (test call is server-side).
     if (body?.id) {
       const [row] = await db.select().from(aiProviders).where(eq(aiProviders.id, body.id)).limit(1)
       if (!row) throw new AppError('NOT_FOUND', 404, 'Provider not found')

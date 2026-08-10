@@ -17,8 +17,8 @@ export default defineAdminHandler({
       ? { category: scope.category as any }
       : 'all' as const
 
-    // Merge scanning involves fetching up to 200 tags + one AI call. It's not
-    // deterministic in duration, so we run it as a pg-boss background job.
+    // Merge scanning fetches up to 200 tags + one AI call — not deterministic
+    // in duration, so run as a pg-boss background job.
     const jobId = await createAiJob('merges', 1)
     const boss = await getBoss()
     await boss.send('ai-merges', { jobId, scope: normalizedScope })

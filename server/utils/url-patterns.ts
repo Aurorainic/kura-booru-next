@@ -1,6 +1,6 @@
 /**
  * URL pattern matching for source site identification — TS port of Python _patterns.py.
- * When adding a new site, add patterns here and update the SourceSite enum.
+ * Add new sites here + update the SourceSite enum.
  */
 
 const PIXIV_PATTERNS = [

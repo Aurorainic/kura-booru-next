@@ -20,7 +20,6 @@ export async function fetchApi<T>(
   params?: Record<string, string | number | undefined>,
   options?: RequestInit & { ssrCookie?: string },
 ): Promise<T> {
-  // ponytail: string concat + URLSearchParams — new URL() throws on relative paths in browser
   let url = `${getBaseUrl()}${endpoint}`
   if (params) {
     const sp = new URLSearchParams()
@@ -38,10 +37,7 @@ export async function fetchApi<T>(
     ...((options?.headers as Record<string, string>) || {}),
   }
 
-  // SSR-side fetches need the browser cookie forwarded manually — node fetch
-  // doesn't send credentials and the internal API call would otherwise look
-  // anonymous, breaking admin endpoints (dashboard returns 401 → "无法加载
-  // 仪表盘" after a full reload).
+  // SSR: forward the browser cookie manually — node fetch sends no credentials, breaking admin endpoints on full reload.
   const ssrCookie = options?.ssrCookie
   if (ssrCookie) {
     headers['Cookie'] = ssrCookie
@@ -49,9 +45,7 @@ export async function fetchApi<T>(
 
   const isBrowser = typeof window !== 'undefined'
 
-  // Strip ssrCookie before spreading options into fetch — it's not a real
-  // RequestInit field and would be silently ignored, but keeping it out is
-  // cleaner. signal is forwarded explicitly below.
+  // Strip ssrCookie — not a real RequestInit field; signal is forwarded explicitly.
   const { ssrCookie: _sc, ...fetchOptions } = options || {}
 
   const response = await fetch(url, {
@@ -65,7 +59,6 @@ export async function fetchApi<T>(
     throw new ApiError(response.status, `API error: ${response.status} ${response.statusText}`)
   }
 
-  // ponytail: 204 No Content has no body — .json() would throw SyntaxError
   if (response.status === 204) return undefined as T
 
   return response.json() as Promise<T>
@@ -119,7 +112,7 @@ export async function fetchAutocomplete(prefix: string, signal?: AbortSignal): P
   return fetchApi<Tag[]>('/tags/autocomplete', { q: prefix, per_page: 10 }, { signal })
 }
 
-// 4.5 Popular tags (Top 10 by post_count) for the search exploration surface.
+// Popular tags (Top 10 by post_count) for the search exploration surface.
 export async function fetchPopularTags(ssrCookie?: string, perPage = 10): Promise<Tag[]> {
   const res = await fetchApi<PaginatedResponse<Tag>>('/tags/', { sort: 'count', page: 1, per_page: perPage }, { ssrCookie })
   return res.items
@@ -161,8 +154,7 @@ export async function changePassword(currentPassword: string, newPassword: strin
 
 export async function fetchPublicSettings(ssrCookie?: string): Promise<SiteSettings> {
   const data = await fetchApi<Record<string, string>>('/settings/public', undefined, { ssrCookie })
-  // intranet_mode 由服务端 run_mode 设置推导（DB 设置，非 env）；SSR 已注入，
-  // 客户端兜底为 false。
+  // intranet_mode derives from server run_mode (DB setting, not env); SSR injects it, client falls back to false.
   if (data.intranet_mode === undefined) {
     data.intranet_mode = 'false'
   }

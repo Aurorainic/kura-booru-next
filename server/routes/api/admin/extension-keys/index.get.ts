@@ -5,8 +5,6 @@ import { defineAdminHandler } from '../../../../platform/http/auth'
 export default defineAdminHandler({
   doc: { method: 'get', path: '/api/admin/extension-keys', summary: 'List extension keys' },
   handler: async () => {
-    // ponytail: don't return hashes — they're the auth credential. UI only
-    // needs id, name, prefix (for visual ID), created_by, last_used_at, revoked_at.
     const rows = await db.select({
       id: extensionKeys.id,
       name: extensionKeys.name,

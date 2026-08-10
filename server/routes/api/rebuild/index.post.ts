@@ -8,14 +8,12 @@ export default defineApiKeyHandler({
     const body = await readBody<{ paths: string[] }>(event)
     if (!body?.paths?.length) throw new AppError('VALIDATION_FAILED', 400, 'paths required')
 
-    // Cap fanout: 50 paths max per request. Purges are local — anything beyond
-    // 50 in one batch is operator error or a probe.
+    // Cap fanout: 50 paths max per request — beyond that is operator error or a probe.
     const paths = body.paths.slice(0, 50)
 
-    // SSRF guard: each path must resolve to the same origin as SITE_URL.
-    // Without this, a caller can pass `//evil.com/foo` or absolute URLs and make
-    // us PURGE attacker-controlled hosts. Sidecar's isPrivateHost covers the
-    // image pipeline, but rebuild is a different surface.
+    // SSRF guard: each path must resolve to SITE_URL's origin — otherwise a caller
+    // could pass `//evil.com/foo` or absolute URLs and PURGE attacker-controlled
+    // hosts (sidecar's isPrivateHost covers the image pipeline, not this surface).
     let siteOrigin: string
     try {
       const { getSiteUrl } = await import('../../../utils/settings')

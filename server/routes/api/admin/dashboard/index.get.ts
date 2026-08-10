@@ -8,13 +8,6 @@ export default defineApiKeyHandler({
   auditAction: 'dashboard read',
   doc: { method: 'get', path: '/api/admin/dashboard', summary: 'Dashboard overview (MV + live breakdowns)' },
   handler: async () => {
-    // ponytail: M16 — 全部读数来自 mv_dashboard_stats（5 min 刷新），
-    // 包括 source/rating breakdown（jsonb 列）。不再每次请求全表 GROUP BY。
-    //
-    // db.select().from(sql`mv_dashboard_stats`) returned rows but Drizzle
-    // couldn't map column names from a raw SQL table fragment — every column
-    // access came back undefined, so the dashboard showed all zeros. Use
-    // db.execute() which returns rows as plain key→value objects.
     const [mvResult, topTags, recentPosts] = await Promise.all([
       db.execute(sql`SELECT * FROM mv_dashboard_stats LIMIT 1`),
       db.select({ id: tags.id, name: tags.name, category: tags.category, postCount: tags.postCount }).from(tags).orderBy(sql`post_count desc`).limit(10),

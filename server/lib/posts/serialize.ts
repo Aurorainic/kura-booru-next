@@ -1,7 +1,6 @@
 import { sanitizeDescriptionHtml } from '../../utils/sanitize'
 
-// ── Serialization (camelCase Drizzle rows → snake_case API response) ──
-// Also strips phash from post objects (security: never expose phash)
+// ── Serialization (camelCase rows → snake_case API); strips phash (security: never expose) ──
 
 export function serializePost(p: any): any {
   if (!p) return null
@@ -23,9 +22,7 @@ export function serializePost(p: any): any {
     created_at: p.createdAt,
     lqip: p.lqip ?? null,
     tags: p.tags?.map((t: any) => serializeTag(t)),
-    // v0.7.8 PR-C: present only when post is part of a multi-image series.
-    // Single-image posts (series_id IS NULL) omit this key entirely so old
-    // clients don't have to special-case it.
+    // Only present for multi-image series; single-image posts omit the key entirely.
     ...(p.series ? { series: p.series } : {}),
   }
 }

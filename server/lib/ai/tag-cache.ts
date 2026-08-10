@@ -1,5 +1,4 @@
-// v0.10.0: tag_knowledge 缓存读写封装（classify 结果缓存，供 pipeline 与批量重处理共用）。
-// 避免 pipeline 的 aiProcessTagsForPost 与后台 reprocessTags 各自实现一套重复逻辑。
+// v0.10.0: tag_knowledge 缓存读写封装（classify 结果缓存），pipeline 与批量重处理共用。
 
 import { eq, and, inArray, sql, desc } from 'drizzle-orm'
 import { db } from '../../utils/db'
@@ -47,13 +46,8 @@ export async function getTagKnowledge(names: string[]): Promise<Map<string, TagC
 }
 
 /**
- * 从经验库采样 few-shot 样本，作为 AI 分类的「记忆锚点」。
- *
- * agent 化核心：AI 不是每次从零开始判断，而是参考这个图库历史上已经
- * 确认过的真实分类（尤其人工纠偏过的 manual 条目）。采样策略：
- *   - 优先 manual（人工确认，最可靠），其次 ai（高置信度）
- *   - 覆盖多个分类（每类若干条），保证 few-shot 分布均衡
- *   - 限制总量，避免 prompt 过长
+ * 从经验库采样 few-shot 样本作为 AI 分类「记忆锚点」：参考历史确认过的分类
+ * （优先 manual 人工纠偏），覆盖多个分类且限制总量，避免 prompt 过长。
  */
 export async function sampleKnowledgeExamples(perCategory = 3, maxTotal = 15): Promise<TagClassification[]> {
   try {
@@ -96,8 +90,6 @@ export async function sampleKnowledgeExamples(perCategory = 3, maxTotal = 15): P
 
 /**
  * 批量 upsert 缓存（单条 INSERT ... ON CONFLICT，覆盖既有行）。
- * ponytail: 置信度 < 0.6 的条目不写入经验库——低质量分类会污染 AI 的
- * "记忆"，导致后续同类标签跟着错。manual（人工）来源不受此限制（人为确认）。
  */
 export async function upsertTagKnowledge(classifications: TagClassification[]): Promise<void> {
   const good = classifications.filter(c => c._source === 'manual' || c.confidence >= 0.6)

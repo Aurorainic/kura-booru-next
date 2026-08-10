@@ -1,18 +1,10 @@
 <script setup lang="ts">
-// v0.10.0: 批量导入面板 — admin 管理后台 tab，不依赖 Telegram Bot。
-// SSE 流式进度：每 URL 完成/失败/重复/过大均实时推送。
-// 下载代理：后台「集成 → 下载代理」设置即可，无需 Bot。
-
+// 批量导入面板:SSE 流式进度(每 URL 完成/失败/重复/过大实时推送),下载走「集成 → 下载代理」,无需 Telegram Bot。
 defineOptions({ name: 'ImportPanel' })
 
 const IMPORT_ICON = 'M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5'
 const MAX_BATCH = 50
 
-// ponytail: server/extension surface raw English error strings (unsupported
-// protocol, Forbidden URL scheme: ftp, DNS resolution failed...) — translate
-// the known ones into friendly zh-CN copy so the panel row tells the user what
-// actually went wrong. Unknown short strings pass through; empties and noise
-// fall back to a generic message.
 function describeImportError(raw?: string): string {
   const e = (raw || '').trim()
   if (!e) return '下载失败'
@@ -27,8 +19,7 @@ function describeImportError(raw?: string): string {
   return e
 }
 
-// Client-side pre-check so malformed / non-http(s) URLs are rejected instantly
-// instead of round-tripping to the server only to be refused.
+// Client-side pre-check: reject malformed / non-http(s) URLs instantly instead of round-tripping to the server.
 function validateUrl(url: string): string | null {
   let parsed: URL
   try { parsed = new URL(url) } catch { return '链接格式无效' }
@@ -64,8 +55,7 @@ async function startImport() {
 
   importing.value = true
   summary.value = null
-  // progress[0..validUrls.length) index-aligns with validUrls, so the server
-  // response (in validUrls order) can update rows by index below.
+  // progress 与 validUrls 按索引对齐,服务端响应(validUrls 顺序)可按索引更新行。
   progress.value = [
     ...validUrls.map(url => ({ task_id: '', url, status: 'queued', detail: '排队中…' })),
     ...rejected.map(({ url, reason }) => ({ task_id: '', url, status: 'error', detail: reason })),
@@ -193,7 +183,6 @@ const statusIcon: Record<string, string> = {
         </button>
       </div>
 
-      <!-- Real-time progress list -->
       <div v-if="progress.length > 0" class="space-y-1.5">
         <div v-for="(item, i) in progress" :key="i"
           class="flex items-center gap-2.5 text-sm rounded-lg px-3 py-2"
@@ -204,13 +193,11 @@ const statusIcon: Record<string, string> = {
         </div>
       </div>
 
-      <!-- Empty state before first import -->
       <div v-else-if="!summary" class="flex items-center justify-center text-xs text-[var(--text-muted)] rounded-lg px-4 py-6 border border-dashed"
         :style="{ borderColor: 'var(--border-color)', background: 'var(--bg-alt)' }">
         导入记录将显示在这里
       </div>
 
-      <!-- Summary -->
       <div v-if="summary" class="flex flex-wrap items-center gap-4 text-sm rounded-lg px-4 py-3"
         :style="{ background: 'var(--bg-alt)', border: '1px solid var(--border-color)' }">
         <span class="font-semibold">导入完成</span>

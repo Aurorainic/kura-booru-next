@@ -1,21 +1,10 @@
 /**
- * Thumbnail generation step — sharp-based, shared by single-image and multi-image paths.
- *
- * ADR-0003: extended from 3-piece (thumb/preview/LQIP) to 4-width srcset
- * (300w/640w/1280w/2000w) + LQIP 20². All webp, stored as independent S3 keys
- * with a shared base UUID + width suffix convention:
- *   <base>-300w.webp, <base>-640w.webp, <base>-1280w.webp, <base>-2000w.webp
- *
- * Frontend derives mid/large keys from thumb/preview by suffix replacement;
- * existing posts (pre-v0.9.0, old key format) fall back to single-image until
- * a one-off backfill updates them (already executed; the script was removed
- * from the repo after use).
- *
- * Sidecar keeps gallery-dl download + phash + raw dims/mime: phash needs
- * imagehash's exact DCT, and migrating it to sharp breaks cross-era dedup
- * (different Lanczos impls → ~6–14 bit Hamming drift on the same image,
- * at/above the dedup threshold of 8). Sharp re-derives dims/mime from the
- * uploaded bytes so they always match what we actually store.
+ * Thumbnail generation step — sharp-based, shared by single and multi-image paths.
+ * ADR-0003: 4-width srcset (300w/640w/1280w/2000w) + LQIP 20², webp keys
+ * <base>-<width>w.webp; frontend derives mid/large keys by suffix replacement.
+ * Sidecar keeps gallery-dl download + phash: phash needs imagehash's exact DCT
+ * (sharp's Lanczos drifts 6–14 bits, at/above the dedup threshold of 8). Sharp
+ * re-derives dims/mime from the uploaded bytes so they always match what we store.
  */
 
 let _sharp: any = null
@@ -45,7 +34,7 @@ export async function generateThumbnails(
   fallbackMime?: string,
 ): Promise<ThumbnailResult> {
   const sharpMod = await getSharp()
-  // v0.10.0: 尺寸从 DB settings 读取（thumb_size / preview_size），热刷新。
+  // Sizes from DB settings (thumb_size / preview_size), hot-reload.
   const { getImageSizes } = await import('../../../utils/settings')
   const sizes = await getImageSizes()
   const thumbSize = sizes.thumbSize
@@ -75,11 +64,9 @@ export async function generateThumbnails(
       .toBuffer()
     lqipDataUri = `data:image/webp;base64,${lqipBuf.toString('base64')}`
 
-    // sharp 不可用时（未安装或加载失败），降级使用 sidecar 传来的 fallback 值。
-  // 此时无水印/缩略图/LQIP 生成，仅保留原始尺寸和 MIME 信息。
-  // Re-derive dims/mime from the actual image bytes — sidecar's values
-    // come from Pillow on the downloaded file, sharp sees the same bytes so
-    // they agree; sharp wins on conflict (it's the bytes we upload).
+    // sharp 不可用（未安装/加载失败）时用 sidecar fallback 尺寸/MIME。
+    // Re-derive dims/mime from actual bytes: sidecar's Pillow values agree with
+    // sharp on the same bytes; sharp wins on conflict (it's the bytes we upload).
     const probed = await img.metadata()
     if (probed.width && probed.height) { width = probed.width; height = probed.height }
     if (probed.format) mimeType = `image/${probed.format === 'jpeg' ? 'jpeg' : probed.format}`

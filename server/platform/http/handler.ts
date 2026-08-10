@@ -1,11 +1,7 @@
 /**
- * handler 包装核心（ADR-0004 §3）。
- *
- * 所有 define*Handler 共用的骨架：auth → zod 校验 → 业务 handler → 统一错误兜底。
- * 包装层消灭审计 §7.3 确认的样板（session 三行 ×40、apikey 限流块 ×2），
- * 错误统一为 { code, message, details? }（platform/errors.ts）。
- *
- * 注意：query 的值都是字符串，schema 需要 z.coerce / 自行 transform。
+ * handler 包装核心（ADR-0004 §3）：所有 define*Handler 共用骨架
+ * auth → zod 校验 → 业务 handler → 统一错误兜底（{ code, message, details? }），
+ * 消灭审计 §7.3 确认的样板。注意：query 值均为字符串，schema 需 z.coerce。
  */
 import { defineEventHandler, getQuery, getRouterParams, readBody, setResponseStatus } from 'h3'
 import type { H3Event } from 'h3'

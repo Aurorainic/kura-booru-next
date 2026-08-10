@@ -2,7 +2,7 @@
 
 Kura Booru Next is a personal anime illustration collection and showcase platform. Core workflow: send a link via Telegram Bot → auto-download original image → store in S3 → browse on web. Inspired by safebooru (tag system, pagination, fast loading) but with modern UI (Pixiv/Pinterest-like masonry, dark/light/auto theme, cyan gradient accent).
 
-**v0.9.0** (current): Full TypeScript stack — Nuxt 4 + Nitro for SSR, REST API, and Bot webhook in a single Node process. Python sidecar handles gallery-dl downloads and phash computation via a Redis queue. v0.9.0 refactored the server into `lib/` (domain logic) + `platform/` (cross-cutting: handler wrappers, zod schemas, JobQueue, pg-boss) — see `docs/architecture/decisions.md` for the refactor decisions.
+**v0.10.0** (current): Full TypeScript stack — Nuxt 4 + Nitro for SSR, REST API, and Bot webhook in a single Node process. Python sidecar handles gallery-dl downloads and phash computation via a Redis queue. v0.9.0 refactored the server into `lib/` (domain logic) + `platform/` (cross-cutting: handler wrappers, zod schemas, JobQueue, pg-boss); v0.10.0 moved site configuration into the DB `settings` table (7 admin panel categories, ≤10s hot reload), made AI tagging a memory-driven agent (tag_knowledge 缓存 + dynamic few-shot), and added run_mode (public/intranet) / safe mode switches — see `docs/architecture/decisions.md` and `CHANGELOG.md`.
 
 ---
 
@@ -68,7 +68,7 @@ Internet
 | **Proxy** | Any reverse proxy | — | Host machine, HTTPS + reverse proxy (optional since v0.7.0; Caddy/nginx/Traefik all work) |
 | **Deploy** | Docker Compose | | 4 containers: nuxt, sidecar, postgres, redis |
 
-> Docker Compose (the CLI tool). The application version is v0.9.0.
+> Docker Compose (the CLI tool). The application version is v0.10.0.
 
 ---
 
@@ -92,7 +92,7 @@ Internet
 │   ├── platform/              # Cross-cutting (v0.9.0 refactor)
 │   │   ├── http/              # define*Handler wrappers (auth.ts, handler.ts)
 │   │   ├── schemas/           # zod enums (zRating/zSourceSite/zTagCategory)
-│   │   ├── contract/          # 53 endpoint contract freeze (check.mjs, endpoints.ts)
+│   │   ├── contract/          # 61 路由 / 62 端点契约冻结 (check.mjs, endpoints.ts)
 │   │   ├── openapi/           # OpenAPI registry
 │   │   ├── queue.ts           # JobQueue interface + Redis impl
 │   │   ├── jobs.ts            # pg-boss single-point job registration
@@ -111,9 +111,7 @@ Internet
 
 ---
 
-## Core Flow: Send Link → Stored
-
-```
+## Core Flow: Send Link → Stored```
 [Telegram user sends link]
       │
       ▼
@@ -134,16 +132,24 @@ Internet
       │ sharp/S3: generate thumb + preview → upload to S3
       │ Drizzle: insert Post + ensure Tags + PostTag
       │ Auto-rating rules check
-      │ AI tag classification (if ENABLE_AI_TAG_PROCESSING)
+      │ AI tag classification (if ai_tag_processing_enabled DB 开关开启)
       ▼
 [Bot displays rating menu → user confirms → rating applied]
 ```
+
+### Auth
+
+| Mechanism | Usage |
+|---|---|
+| Signed cookie (`kura_admin_session`) | Admin web UI（bcrypt + HMAC-SHA256，`password_epoch` 失效） |
+| X-Api-Key（kb_ext_，per-admin） | Browser extension（`04-extension-auth` 中间件） |
+| X-Api-Key（BACKEND_API_KEY，service-level） | Telegram webhook + 平台合约调用 |
 
 ---
 
 ## v0.8.x → v0.9.0 Refactor Summary
 
-| Dimension | v0.8.1 (prior) | v0.9.0 (current) |
+| Dimension | v0.8.1 (prior) | v0.9.0 |
 |---|---|---|
 | Server structure | flat `server/utils/` (queries.ts 525行, ai.ts 735行, bot.ts 677行, pipeline.ts 609行) | `lib/` (domain) + `platform/` (cross-cutting) + re-export shims |
 | Route handlers | `defineEventHandler` + 3-line session boilerplate ×40 | `defineAdminHandler` / `defineApiKeyHandler` / `defineExtHandler` / `definePublicHandler` wrappers |
@@ -155,6 +161,6 @@ Internet
 | Pipeline | 609行 monolith, 5 duplicated step blocks | lib/import/pipeline.ts + steps/{dedup,thumbnails,upload,rating,tags}.ts |
 | Thumbnails | 3-piece (thumb/preview/LQIP) | 4-width srcset (300w/640w/1280w/2000w) + LQIP (ADR-0003) |
 | Queue reliability | handleJobWithRetry dead code (0 callers) | JobQueue interface + MAX_RETRIES=3 + kura:dlq (ADR-0001) |
-| Contract | none | 53 endpoint freeze (platform/contract/check.mjs, CI gate) |
+| Contract | none | 53 endpoint freeze (platform/contract/check.mjs, CI gate; 后增至 61 路由 / 62 端点) |
 | Drizzle operators | auto-import via queries.ts re-export | explicit `import { eq, sql, ... } from 'drizzle-orm'` per file |
 | phash lookup | seq-scan `left(phash,4)` (no index) | `ix_posts_phash_prefix` expression index (R2.1, Bitmap Scan) |

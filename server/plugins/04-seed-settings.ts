@@ -1,6 +1,5 @@
-// Seed DB settings from env-provided values (or defaults) on first boot.
-// v0.10.0: all business config migrated to the DB `settings` table; env vars
-// remain as the *bootstrap source* — seed once, then the admin panel owns them.
+// Seed DB settings from env (or defaults) on first boot. v0.10.0: env vars are
+// only the bootstrap source — seed once, then the admin panel owns them.
 
 export default defineNitroPlugin(async () => {
   try {

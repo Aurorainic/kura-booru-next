@@ -2,13 +2,12 @@ import crypto from 'crypto'
 import bcryptjs from 'bcryptjs'
 import { eq } from 'drizzle-orm'
 
-// Seed default admin on startup if none exists.
-// B-P3-12: Generate random password if ADMIN_PASSWORD not set, print to logs.
+// Seed default admin on startup if none exists. B-P3-12: random password
+// generated when ADMIN_PASSWORD unset, printed to logs.
 export default defineNitroPlugin(async () => {
   const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin'
   let ADMIN_PASSWORD = process.env.ADMIN_PASSWORD
 
-  // Generate random password if not set
   if (!ADMIN_PASSWORD) {
     ADMIN_PASSWORD = crypto.randomBytes(16).toString('hex')
     console.warn('[seed-admin] ============================================')

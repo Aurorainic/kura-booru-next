@@ -17,7 +17,7 @@ export default defineAdminHandler({
     const token = cookies['kura_admin_session']
     if (!token) throw new AppError('UNAUTHORIZED', 401, 'No session')
 
-    // Use the shared session parser — includes MAX_AGE check that the previous
+    // Use the shared session parser — includes the MAX_AGE check the previous
     // inline crypto duplicated and silently dropped.
     const parsed = parseSession(token)
     if (!parsed) throw new AppError('SESSION_EXPIRED', 401, 'Invalid or expired session')

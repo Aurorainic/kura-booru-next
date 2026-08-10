@@ -1,8 +1,6 @@
 /**
- * Sliding-window rate limiter backed by Redis.
- *
- * Used for per-key API throttling. Fail-open on Redis errors (UX over strict
- * enforcement — these aren't security-critical paths, just abuse mitigation).
+ * Sliding-window rate limiter backed by Redis. Fail-open on Redis errors (abuse
+ * mitigation, not security-critical enforcement).
  */
 import { redis } from './redis'
 
@@ -26,8 +24,6 @@ export async function rateLimit(bucket: string, limit: number, windowSec: number
       resetSec: ttl > 0 ? ttl : windowSec,
     }
   } catch (e) {
-    // ponytail: fail-open. Redis hiccup shouldn't block legit extension users.
-    // Warn so the bypass is observable when it happens (security review MED).
     console.warn(`[rate-limit] Redis fail-open for bucket=${bucket}:`, (e as Error).message)
     return { ok: true, remaining: limit, resetSec: windowSec }
   }

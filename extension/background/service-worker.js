@@ -1,5 +1,4 @@
-// Kura Booru 导入助手 — background service worker
-// 处理与 Kura 后端的 API 通信 (v0.7.8: /api/tasks/web-import + kb_ext_ prefix)
+// Kura Booru 导入助手 — background service worker（/api/tasks/web-import + kb_ext_ key）
 
 chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
   if (message.type === "IMPORT_URL") {
@@ -19,8 +18,6 @@ async function handleImport(url) {
   }
 
   var body = { urls: [url] };
-  // ponytail: contentType === 'auto' means let the server decide (skip the
-  // force_rating field entirely so the admin/auto-rating path runs as before).
   if (config.contentType && config.contentType !== "auto") {
     body.force_rating = config.contentType;
   }
@@ -41,13 +38,11 @@ async function handleImport(url) {
 
     if (resp.ok) {
       var data = await resp.json();
-      // v0.7.8: response shape is { results: [{ task_id, status, url }, ...] }
+      // response shape: { results: [{ task_id, status, url }, ...] }
       var first = data.results && data.results[0];
       if (!first) {
         return { success: false, error: "返回格式异常" };
       }
-      // ponytail: error result has no task_id — surface its message first so
-      // admin/extension users see "private/reserved host" instead of "格式异常".
       if (first.status === "error") {
         return { success: false, error: first.error || "服务端拒绝" };
       }

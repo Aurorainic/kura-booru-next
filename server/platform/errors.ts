@@ -1,10 +1,7 @@
 /**
- * 统一错误形状（ADR-0004）：{ code, message, details? }
- *
- * - `code` 是唯一契约面：前端/扩展/bot 只匹配 code，不匹配 message。
- * - 扩展依赖的字面错误码（如 key_not_authorized_for_force_rating）原样作为 code 值保留。
- * - utils 层的两种历史方言（Object.assign(new Error, {statusCode}) 与裸 Error + 自制 code）
- *   由 toErrorResponse 兜底转换，迁移期内旧 throw 点也能得到统一形状。
+ * 统一错误形状（ADR-0004）：{ code, message, details? }。code 是唯一契约面（前端/扩展/bot
+ * 只匹配 code 不匹配 message）；扩展依赖的字面错误码原样保留。utils 层历史方言
+ * （Object.assign Error / 裸 Error + code）由 toErrorResponse 兜底转换。
  */
 import { ZodError } from 'zod'
 

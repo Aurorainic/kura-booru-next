@@ -14,15 +14,14 @@ export const posts = pgTable('posts', {
   height: integer('height').notNull(),
   fileSize: integer('file_size').notNull(),
   mimeType: text('mime_type').notNull(),
-  phash: text('phash').notNull(),      // ponytail: not exposed in API responses
+  phash: text('phash').notNull(),
   lqip: text('lqip'),                 // 20×20 base64 webp blur placeholder, embedded in API response
   title: text('title'),
   description: text('description'),
   rating: ratingEnum('rating').notNull().default('safe'),
-  // v0.7.8 PR-C: Pixiv multi-image series. Nullable so existing 604 posts (and
-  // any imported pre-merge) read as "single image" — no backfill per user
-  // decision (2026-07-14). page_count is redundant with COUNT but cheap to
-  // store; lets /api/posts/[id] skip a join just to read the total.
+  // v0.7.8 PR-C: Pixiv multi-image series. Nullable so pre-existing posts read
+  // as "single image" (no backfill, 2026-07-14). page_count denormalized so
+  // /api/posts/[id] skips a COUNT join for the total.
   seriesId: uuid('series_id'),
   pageIndex: integer('page_index'),
   pageCount: integer('page_count'),
@@ -30,16 +29,10 @@ export const posts = pgTable('posts', {
   aiTagProcessedAt: timestamp('ai_tag_processed_at', { withTimezone: true }),
   aiTagStatus: text('ai_tag_status').notNull().default('pending'),
 }, (t) => ({
-  // ponytail: (site, id, page_index) is the new dedup key — covers both
-  // single-image rows (page_index IS NULL — NULLs don't collide in PG
-  // unique indexes) and series rows. NULLs are distinct from each other
-  // by spec, so legacy single-image imports don't conflict with PR-C
-  // multi-image imports of the same (site, source_id).
   seriesSourceIdx: uniqueIndex('ix_posts_source_site_id_page')
     .on(t.sourceSite, t.sourceId, t.pageIndex),
   seriesIdIdx: index('ix_posts_series_id').on(t.seriesId),
-  // H17: 列表/搜索翻页的排序是 (created_at DESC, id DESC) — 复合索引匹配
-  // 该排序，同秒级 createdAt 不再导致 OFFSET/LIMIT 重复或遗漏
+  // H17: 复合索引匹配 (created_at DESC, id DESC) 翻页排序，避免同秒 OFFSET/LIMIT 重复
   createdAtIdx: index('ix_posts_created_at_id').on(sql`${t.createdAt} DESC, ${t.id} DESC`),
   ratingIdx: index('ix_posts_rating').on(t.rating),
   phashIdx: index('ix_posts_phash').on(t.phash),

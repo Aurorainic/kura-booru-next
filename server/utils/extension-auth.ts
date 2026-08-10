@@ -1,13 +1,7 @@
 /**
- * Extension API key auth — v0.7.8.
- *
- * Per-admin API keys for the browser extension, distinct from BACKEND_API_KEY
- * (which is service-level and shared with the Telegram bot). Each key is
- * `kb_ext_` + 32 base62 chars; only sha256 hash is persisted.
- *
- * - `generateExtensionKey()`: returns raw value (shown to admin ONCE).
- * - `verifyExtensionKey(raw)`: constant-time lookup, returns key row or null.
- * - `EXT_KEY_PREFIX` for middleware discrimination against BACKEND_API_KEY.
+ * Extension API key auth — v0.7.8. Per-admin keys for the browser extension, distinct
+ * from service-level BACKEND_API_KEY. Key = `kb_ext_` + 32 base62 chars; only the
+ * sha256 hash is persisted; verification is constant-time.
  */
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { and, eq, isNull } from 'drizzle-orm'
@@ -21,8 +15,6 @@ export interface ExtensionKeyContext {
   id: string
   name: string
   createdBy: string
-  // ponytail: gate for force_rating — admin opts in at key creation so a
-  // default low-trust key can't bypass auto-rating (security review fix).
   canForceRating: boolean
 }
 
@@ -31,8 +23,7 @@ function hashKey(raw: string): string {
 }
 
 function base62(bytes: number): string {
-  // ponytail: 32 chars x base62 via rejection sampling. Avoids BigInt
-  // literals, which esbuild flags as unsupported for Nitro's es2019 target.
+  // Rejection sampling (b < 248) avoids modulo bias without BigInt — bundler compat.
   const alpha = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
   const out: string[] = []
   while (out.length < bytes) {
@@ -42,24 +33,15 @@ function base62(bytes: number): string {
   return out.join('')
 }
 
-/**
- * Generate a new extension API key. Returns the raw value (show to admin once)
- * and the persisted metadata. The DB row stores only the hash + a short
- * visible prefix for UI identification.
- */
+/** Generate a new key: returns raw (shown to admin once), visible prefix, and persisted sha256 hash. */
 export function generateExtensionKey(): { raw: string; prefix: string; hash: string } {
   const raw = `${EXT_KEY_PREFIX}${base62(32)}`
   return { raw, prefix: raw.slice(0, 12), hash: hashKey(raw) }
 }
 
 /**
- * Verify a raw key string. Returns the active key context, or null if
- * - malformed (no prefix)
- * - not found in DB
- * - revoked (revoked_at set)
- * - hash mismatch (timing-safe compare)
- *
- * Side effect: updates `last_used_at` on success (best-effort, fire-and-forget).
+ * Verify a raw key (timing-safe). Returns null if malformed, unknown, revoked,
+ * or hash mismatch. Side effect: best-effort last_used_at update.
  */
 export async function verifyExtensionKey(raw: string | undefined | null): Promise<ExtensionKeyContext | null> {
   if (!raw || !raw.startsWith(EXT_KEY_PREFIX)) return null
@@ -80,10 +62,6 @@ export async function verifyExtensionKey(raw: string | undefined | null): Promis
   const row = rows[0]
   if (!row) return null
 
-  // ponytail: belt-and-suspenders re-hash + timing-safe compare. SHA256 is
-  // deterministic so the strings will match if the row exists, but the
-  // compare still runs to keep the access pattern uniform regardless of row
-  // shape. Cheap; rejects malformed DB rows too.
   const a = Buffer.from(row.keyHash)
   const b = Buffer.from(hash)
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null
@@ -102,10 +80,6 @@ export async function verifyExtensionKey(raw: string | undefined | null): Promis
   }
 }
 
-// ponytail: invariant self-check. Runs once at module load — catches the
-// trivial breakages (prefix drift, hash mismatch, generator regression)
-// without spinning up a DB. Run with `pnpm exec tsx server/utils/extension-auth.ts`
-// or via `nuxt typecheck`. No-op in production.
 if (process.env.NODE_ENV !== 'production') {
   ;(async () => {
     const a = generateExtensionKey()

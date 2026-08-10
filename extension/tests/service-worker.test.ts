@@ -1,9 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { makeChrome, installChrome, dispatchMessage, loadScript, type ChromeStub } from "./_chrome-stub";
 
-// Service worker has no exports — it registers a chrome.runtime.onMessage
-// listener at load. We re-import it fresh after installing the chrome stub so
-// that listener registers against our stub.
+// SW has no exports — re-import after installChrome so its onMessage listener registers against our stub
 
 const SCRIPT = "../background/service-worker.js";
 

@@ -73,7 +73,7 @@ function onWheel(e: WheelEvent) {
   scale.value = newScale
 }
 
-// ── Pinch zoom (touch) ──
+// Pinch zoom (touch)
 function onTouchStart(e: TouchEvent) {
   if (e.touches.length === 2) {
     e.preventDefault()

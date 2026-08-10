@@ -1,15 +1,11 @@
 /**
- * Auto-rating step — shared by single-image and multi-image paths.
- *
- * ponytail: force_rating (from extension key path) bypasses the rule scan
- * entirely — user-specified rating wins, no auto_rating return value.
+ * Auto-rating step — shared by single and multi-image paths.
  */
 import { inArray } from 'drizzle-orm'
 import { db } from '../../../utils/db'
 import { autoRatingRules } from '../../../schema/auto_rating_rules'
 
-// RATING_RANK 与 server/schema/enums.ts 的 ratingEnum 枚举值绑定。
-// 枚举顺序：safe < questionable < explicit。若将来枚举增删值，此处需同步更新。
+// RATING_RANK 绑定 ratingEnum 顺序 safe < questionable < explicit；枚举变更时需同步。
 const RATING_RANK: Record<string, number> = { safe: 0, questionable: 1, explicit: 2 }
 
 export async function computeRating(

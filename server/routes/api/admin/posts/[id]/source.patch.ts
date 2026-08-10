@@ -30,8 +30,8 @@ export default defineAdminHandler({
       body.source_site !== 'other' && detected.site === body.source_site ? detected.id : existing[0].sourceId
     )
 
-    // Multi-image series share one source classification; keep all pages in
-    // sync so dashboard/source filters do not disagree after one correction.
+    // Multi-image series share one source classification — keep all pages in sync
+    // so dashboard/source filters don't disagree after one correction.
     const targetIds = existing[0].seriesId
       ? (await db.select({ id: posts.id }).from(posts).where(eq(posts.seriesId, existing[0].seriesId))).map(r => r.id)
       : [id]

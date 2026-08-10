@@ -1,19 +1,7 @@
 <script setup lang="ts">
 /**
- * Series navigation for multi-image posts (v0.7.8 PR-C).
- *
- * Renders the horizontal thumbnail strip below the main image:
- *   - "1 / 5" counter on the left.
- *   - Thumbnails ordered by page_index 1..N.
- *   - Current page highlighted.
- *   - Click a thumb to navigate to that post's detail page.
- *   - Admin only: × button per thumb to delete that post from the series
- *     (calls /api/admin/posts/[id] DELETE; the row is hard-deleted and
- *     remaining rows renumber contiguously).
- *
- * Number keys 1..9 jump to that page when the focus isn't on a form
- * field (no global keyboard handler needed — we listen here so detail
- * pages without series get nothing).
+ * Series nav for multi-image posts: thumb strip + "1/5" counter; click navigates to the
+ * page's detail route. Admin × hard-deletes the page (remaining rows renumber); keys 1..9 jump pages.
  */
 import type { Post } from '~/types'
 
@@ -33,9 +21,6 @@ const currentPageIndex = computed(() => {
 
 function goto(pageId: string) {
   if (pageId === props.currentPostId) return
-  // ponytail: preserve from + page query params so back-navigation lands
-  // the user on their original gallery location (existing detail-page
-  // behavior). Without this, hitting a sibling thumb would lose context.
   router.push({ path: `/posts/${pageId}`, query: route.query })
 }
 
@@ -52,12 +37,7 @@ async function deletePage(pageId: string, pageIndex: number) {
   deleting.value = { ...deleting.value, [pageIndex]: true }
   try {
     await deletePost(pageId)
-    // After delete the server renumbered page_index for the remaining
-    // survivors. Reload the detail page so both the counter and the
-    // thumbs strip reflect reality.
-    // ponytail: hard reload avoids stale state — the series.pages we
-    // have here is wrong (missing the just-deleted row) and updating it
-    // client-side would re-implement the server's reorder logic.
+    // Server renumbered remaining pages — reload so counter/thumbs reflect reality.
     window.location.reload()
   } catch (e) {
     console.error('series delete failed:', e)

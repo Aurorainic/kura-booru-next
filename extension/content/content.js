@@ -1,11 +1,9 @@
-// Kura Booru 导入助手 — Pixiv content script
-// 在 Pixiv 作品页注入浮动导入按钮
+// Kura Booru 导入助手 — Pixiv content script：在作品页注入浮动导入按钮
 
 (function () {
   // Don't inject twice
   if (document.getElementById("kura-import-btn")) return;
 
-  // Extract artwork ID from URL
   var match = window.location.pathname.match(/\/artworks\/(\d+)/);
   if (!match) return;
 
@@ -38,7 +36,6 @@
           return;
         }
 
-        // Poll for result
         var taskId = response.taskId;
         btn.textContent = "排队中...";
         pollStatus(taskId);

@@ -1,11 +1,7 @@
 import { defineAdminHandler } from '../../../../platform/http/auth'
 import { AppError } from '../../../../platform/errors'
 
-/**
- * 测试 Telegram Bot 连通性：用当前配置（含代理类型/地址）调用 getMe。
- * 请求体可传 { token?, proxyType?, proxyUrl? } 以测试未保存的候选值；
- * 不传则用已保存配置。按代理类型走对应连接方式（http/socks/mtproto）。
- */
+/** 测试 Telegram Bot 连通性：用当前配置（含代理）调用 getMe；请求体可传未保存的候选值，缺省用已保存配置。 */
 export default defineAdminHandler({
   doc: { method: 'post', path: '/api/admin/settings/test-bot', summary: 'Test Telegram bot connection (getMe)' },
   handler: async ({ event }) => {
@@ -22,8 +18,8 @@ export default defineAdminHandler({
       throw new AppError('VALIDATION_FAILED', 400, 'bot_token not configured')
     }
 
-    // SSRF 防护：mtproto 的 proxyUrl 作为 apiRoot 被 getMe 直接请求，
-    // 必须校验不指向内网/私网地址。http/socks 代理同理。
+    // SSRF 防护：mtproto 的 proxyUrl 作为 apiRoot 被 getMe 直接请求 — 必须
+    // 校验不指向内网/私网地址（http/socks 代理同理）。
     if (proxyUrl) {
       const { isPrivateHost } = await import('../../../../utils/settings')
       let host = ''

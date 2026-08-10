@@ -55,16 +55,10 @@ export async function getPost(id: string, isAdmin: boolean) {
 
   const post = serializePost({ ...result[0], tags: postTagRows.map(r => r.tag) })
 
-  // v0.7.8 PR-C: if this post belongs to a series, fetch the sibling pages
-  // for the series nav. Single-image posts return unchanged.
-  //
-  // SECURITY: anonymous viewers must only see `safe` siblings — non-safe
-  // existence is hidden (the project's content-rating contract: non-safe
-  // returns 404, never 403). So the sibling fetch is gated to safe rows
-  // for anon, mirroring the post's own access level. page_count is the
-  // VISIBLE count (pages.length), never the stored hint — otherwise anon
-  // could infer "this series has 5 pages but I only see 2" → metadata leak
-  // about hidden non-safe pages.
+  // v0.7.8 PR-C: fetch sibling pages for the series nav (single-image posts unchanged).
+  // SECURITY: anon only sees `safe` siblings (non-safe existence is hidden — 404, never 403);
+  // page_count must be the VISIBLE count (pages.length), never the stored hint,
+  // else anon could infer hidden non-safe pages exist.
   if (post && result[0].seriesId) {
     const siblingConds = [eq(posts.seriesId, result[0].seriesId)]
     if (!isAdmin) siblingConds.push(eq(posts.rating, 'safe'))
@@ -79,10 +73,8 @@ export async function getPost(id: string, isAdmin: boolean) {
       .from(posts)
       .where(and(...siblingConds))
       .orderBy(asc(posts.pageIndex))
-    // Only attach the series nav if there's >1 visible page. A series with
-    // 1 visible page (anon viewing the lone safe page of a non-safe series)
-    // would render an empty "1 / 1" strip with nothing to navigate to —
-    // hide it instead so the existence of hidden siblings isn't telegraphed.
+    // Attach nav only when >1 visible page: an empty "1 / 1" strip would
+    // telegraph hidden non-safe siblings to anon viewers.
     if (pages.length > 1) {
       post.series = {
         id: result[0].seriesId,
@@ -101,12 +93,6 @@ export async function getPost(id: string, isAdmin: boolean) {
   return post
 }
 
-// ponytail: count cache removed — ORDER BY random() doesn't need a count
-// first, and the previous OFFSET-by-cache combination was deterministic per
-// post within the TTL (offset → time-sorted row).
-// ponytail: ORDER BY random() is O(N) seq-scan + sort; fine to ~100k posts.
-// At 1M+ rows, switch to `WHERE id = (SELECT id FROM posts TABLESAMPLE
-// SYSTEM(0.1) LIMIT 1)` — approximate but O(sampled) and indexable.
 export async function getRandomPost(isAdmin: boolean) {
   const where = !isAdmin ? eq(posts.rating, 'safe') : undefined
 
@@ -125,22 +111,16 @@ export async function getPostBySource(sourceSite: string, sourceId: string, isAd
   const conditions = [eq(posts.sourceSite, sourceSite as any), eq(posts.sourceId, sourceId)]
   if (!isAdmin) conditions.push(eq(posts.rating, 'safe'))
 
-  // v0.7.8 PR-C: after multi-image series, a (source_site, source_id) tuple
-  // can match multiple rows — a legacy single-image row (page_index IS NULL)
-  // and up to 5 series pages. Without an ORDER BY the planner picks any row;
-  // with NULLs-last default ordering the legacy row would win over the
-  // series anchor, returning a stale post for a re-imported illust.
-  // Anchor (page_index=1) first, then NULL (legacy single-image), then the
-  // rest. CreatedAt breaks ties deterministically.
+  // v0.7.8 PR-C: (source_site, source_id) can match a legacy single-image row
+  // (page_index IS NULL) plus series pages — order anchor (1) first, then NULL,
+  // then rest, else the stale legacy row wins; createdAt breaks ties.
   const result = await db.select().from(posts)
     .where(and(...conditions))
     .orderBy(sql`CASE WHEN ${posts.pageIndex} = 1 THEN 0 WHEN ${posts.pageIndex} IS NULL THEN 1 ELSE 2 END, ${posts.createdAt} ASC`)
     .limit(1)
   if (!result[0]) return serializePost(null)
 
-  // Mirror getPost: if the matched row is part of a series, attach the
-  // sibling-pages `series` field so bot/by-source clients see the same
-  // surface as the detail-page API.
+  // Mirror getPost: attach `series` siblings so by-source clients match the detail API.
   return getPost(result[0].id, isAdmin)
 }
 
@@ -248,8 +228,6 @@ export async function searchPosts(q: string, opts: {
 }
 
 // ── Tag resolution (exact → alias → fuzzy) ──
-// ponytail: no external callers found at migration time; kept for potential
-// future use (search tag-resolution path). If still dead at R3.3, delete.
 
 export async function resolveTag(name: string) {
   // 1. Exact match

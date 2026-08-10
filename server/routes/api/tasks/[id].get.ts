@@ -19,12 +19,6 @@ export default defineApiKeyHandler({
   handler: async ({ event }) => {
     const id = event.context.params?.id
 
-    // Check job status
-    // ponytail: sidecar sets kura:job_status='processing' while downloading.
-    // Extension content.js polls for 'in_progress' — return that string so the
-    // polling loop keeps showing "处理中..." instead of falling through to
-    // "任务丢失". Without this normalization the status mismatch causes the
-    // extension to give up mid-download even though the job is still running.
     const jobStatus = await redis.get(`kura:job_status:${id}`)
     if (!jobStatus) return { task_id: id, status: 'queued' }
     if (jobStatus === 'processing') return { task_id: id, status: 'in_progress' }
@@ -35,9 +29,8 @@ export default defineApiKeyHandler({
 
     const parsed = JSON.parse(raw)
 
-    // Security: strip image_bytes_b64 and phash recursively. Multi-image
-    // results carry both fields inside metadata.pages, so a top-level
-    // destructure alone would still leak the raw artwork and perceptual hash.
+    // Security: strip image_bytes_b64 and phash recursively — multi-image results
+    // carry both inside metadata.pages, so a top-level destructure would still leak.
     const safeResult = stripTaskSecrets(parsed)
 
     const statusMap: Record<string, string> = {

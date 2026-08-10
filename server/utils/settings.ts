@@ -30,9 +30,7 @@ export async function getSetting(key: string, fallback = ''): Promise<string> {
 }
 
 export async function getPublicSettings() {
-  // Contract whitelist: public clients never see run mode, AI flags, or
-  // safe-mode configuration. SSR middleware enriches its in-process copy
-  // with the UI-only flags instead.
+  // Contract whitelist: public clients never see run mode, AI flags, or safe-mode config.
   const all = await getSettings()
   return {
     site_title: all.site_title || SETTING_DEF_MAP.site_title?.default || 'Kura Booru',
@@ -65,10 +63,8 @@ export async function isSafeModeActive(event: H3Event): Promise<boolean> {
 }
 
 /**
- * 管理员视角设置（后台 7 类卡片）。
- * 返回 { key, value, category, type, label, description, public, secret, masked }：
- *   - secret 项 value 恒为空串，另行返回 masked 掩码串（不回显明文）
- *   - readonly 项（infra/admin）value 为当前 env 值（仅展示）
+ * 管理员视角设置（后台 7 类卡片）：secret 项 value 恒为空串、另返回 masked 掩码；
+ * readonly 项 value 为当前 env 值（仅展示）。
  */
 export async function getAdminSettings() {
   const all = await getSettings()
@@ -124,11 +120,7 @@ export async function getAdminSettings() {
   return items
 }
 
-/**
- * 批量更新设置。只接受注册表内的键；secret 项若传入空串则视为「保持原值」。
- * secret 项传入 '__CLEAR__' 则清空该密钥（用于吊销泄露的凭据）。
- * 写入后立即失效缓存（热刷新）。
- */
+/** 批量更新设置：只接受注册表内的键；secret 空串=保持原值，'__CLEAR__'=清空密钥（吊销泄露凭据）。 */
 export async function updateSettings(updates: Record<string, string>) {
   const allowed = new Set(SETTING_DEFS.map(d => d.key))
   for (const [key, value] of Object.entries(updates)) {
@@ -171,8 +163,7 @@ export function onSettingsChanged(hook: RefreshHook) {
 }
 
 export async function refreshSettings() {
-  // H8: 每个 hook 独立 try/catch + 并行执行 — 一个失败（如 rebuildBot 抛错）
-  // 不再中断 S3/Pixiv/AI 等其他钩子。
+  // H8: 各 hook 独立 try/catch + 并行执行 — 单个失败不中断其它钩子。
   await Promise.allSettled(refreshHooks.map(async (hook) => {
     try { await hook() }
     catch (err) { console.error('[settings] refresh hook failed:', err) }

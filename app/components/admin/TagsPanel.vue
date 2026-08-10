@@ -40,6 +40,26 @@ const { data, refresh } = await useAsyncData(
 
 const tags = computed(() => data.value?.items || [])
 
+// 分页：1531 个标签远超 50/页，没有分页控件时列表永远只显示前 50 个。
+const totalPages = computed(() => data.value?.total_pages || 1)
+const pages = computed(() => {
+  const total = totalPages.value
+  const current = page.value
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const result: (number | '...')[] = [1]
+  if (current > 3) result.push('...')
+  for (let p = Math.max(2, current - 1); p <= Math.min(total - 1, current + 1); p++) result.push(p)
+  if (current < total - 2) result.push('...')
+  result.push(total)
+  return result
+})
+function goPage(p: number) {
+  const q: Record<string, string> = { ...(route.query as any) }
+  if (p > 1) q.page = String(p)
+  else delete q.page
+  navigateTo({ path: route.path, query: q }, { replace: true })
+}
+
 // H13: 路由参数（分页/搜索/筛选）变化时刷新数据
 watch([() => route.query.page, () => route.query.q, () => route.query.category, () => route.query.ai_status, () => route.query.sort], () => {
   searchQuery.value = (route.query.q as string) || ''
@@ -49,7 +69,7 @@ watch([() => route.query.page, () => route.query.q, () => route.query.category, 
   refresh()
 })
 
-// 本地筛选状态 → URL（replace 不污染历史记录）；URL 变化由上方 watch 回灌
+// 本地筛选状态 → URL（replace 不污染历史）；BUG 修复：必须合并现有 query，否则 ?tab=tags 丢失导致 currentTab 回落 dashboard。
 watch([searchQuery, categoryFilter, aiStatusFilter, sortKey], () => {
   const next: Record<string, string> = {}
   if (searchQuery.value) next.q = searchQuery.value
@@ -57,7 +77,7 @@ watch([searchQuery, categoryFilter, aiStatusFilter, sortKey], () => {
   if (aiStatusFilter.value !== 'all') next.ai_status = aiStatusFilter.value
   if (sortKey.value !== 'post_count') next.sort = sortKey.value
   if (page.value > 1) next.page = String(page.value)
-  navigateTo({ path: route.path, query: next }, { replace: true })
+  navigateTo({ path: route.path, query: { ...(route.query as any), ...next } }, { replace: true })
 })
 
 const editingTag = ref<string | null>(null)
@@ -180,7 +200,6 @@ const categoryOptions = [
       </template>
     </PageHeader>
 
-    <!-- Filters bar -->
     <div class="flex flex-wrap items-center gap-2">
       <div class="relative flex-1 min-w-[160px] max-w-xs">
         <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)] pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
@@ -201,7 +220,6 @@ const categoryOptions = [
       </select>
     </div>
 
-    <!-- Table -->
     <div v-if="tags.length > 0" class="rounded-2xl border border-[var(--border-color)] overflow-hidden">
       <table class="w-full">
         <thead>
@@ -265,13 +283,28 @@ const categoryOptions = [
       </table>
     </div>
 
+    <div v-if="totalPages > 1" class="flex items-center justify-center gap-1 pt-2">
+      <template v-for="(p, i) in pages" :key="i">
+        <span v-if="p === '...'" class="text-[var(--text-muted)] text-sm px-1 select-none">…</span>
+        <button
+          v-else
+          type="button"
+          @click="goPage(p as number)"
+          class="w-8 h-8 text-xs rounded-lg transition-all font-medium"
+          :class="p === page ? 'text-white' : 'text-[var(--text-muted)] hover:bg-[var(--accent-subtle)]'"
+          :style="p === page ? { background: 'var(--accent-color)' } : {}"
+          :aria-current="p === page ? 'page' : undefined"
+          :aria-label="`第 ${p} 页`"
+        >{{ p }}</button>
+      </template>
+    </div>
+
     <EmptyState
       v-else
       title="暂无标签"
       description="调整搜索或筛选条件"
     />
 
-    <!-- Merge dialog -->
     <Teleport to="body">
       <Transition name="modal">
         <div v-if="showMergeDialog" class="fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,0.4); backdrop-filter: blur(2px);" @click.self="showMergeDialog = false">

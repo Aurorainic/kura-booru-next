@@ -1,15 +1,7 @@
-"""Sidecar: BRPOP loop + gallery-dl download + imagehash phash.
+"""Sidecar: BRPOP kura:jobs → gallery-dl download + imagehash phash → kura:results:{job_id}.
 
-Polls Redis list kura:jobs for download tasks, downloads the image with
-gallery-dl, computes a perceptual hash with imagehash, extracts gallery-dl's
-metadata, then pushes the result to kura:results:{job_id}.
-
-Image processing is split: this sidecar owns download + phash + dims/mime
-(phash needs imagehash's exact DCT, which sharp can't reproduce bit-for-bit).
-Thumbnail/preview/LQIP generation lives in the Node pipeline (server/utils/
-pipeline.ts, sharp) — the sidecar no longer does any raster resizing.
-
-~80 lines of core logic.
+Owns download + phash + dims/mime (phash needs imagehash's exact DCT, which
+sharp can't reproduce); thumbnail/preview/LQIP stay in the Node pipeline.
 """
 
 import asyncio
@@ -89,19 +81,15 @@ def validate_url(url: str) -> str:
     return url
 
 
-# ── SSRF TOCTOU fix: Override HTTPAdapter.send (not Session.send) to close
-# the DNS-rebind window — IP validation happens at connection time inside the
-# adapter, right before requests opens the socket.  This is stricter than
-# validate_url() called by the caller, because no code between resolution and
-# connect can rebind the hostname.
+# SSRF TOCTOU fix: validate inside HTTPAdapter.send (not Session.send) so the IP
+# check runs right before the socket opens — closes the DNS-rebind window.
 _original_adapter_send = HTTPAdapter.send
 
 
 def _patched_adapter_send(self, request, **kwargs):
-    # Validate the request URL's IP at connection time — closes DNS rebind
+    # Validate at connection time — closes DNS rebind
     validate_url(request.url)
 
-    # Call original adapter send to perform the actual HTTP request
     response = _original_adapter_send(self, request, **kwargs)
 
     # Re-validate every redirect hop
@@ -117,21 +105,13 @@ HTTPAdapter.send = _patched_adapter_send  # type: ignore[method-assign]
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [sidecar] %(message)s")
 log = logging.getLogger(__name__)
 
-# gallery-dl config: set at startup from env vars
 GALLERY_DL_CONFIG = {}
 
-# ponytail: 单人 = 一次导入一张图（多图 series 内部已按页处理），
-# max_workers=1 完全够；默认 ThreadPoolExecutor 会开 min(32, cpu+4) 线程浪费内存。
 _EXECUTOR = ThreadPoolExecutor(max_workers=int(os.environ.get("SIDECAR_WORKERS", "1")))
 
 
 async def load_pixiv_credentials(r) -> tuple[str, str]:
-    """Load Pixiv credentials: Redis (server-synced, hot-reload) → env fallback.
-
-    Server writes kura:pixiv:refresh_token / kura:pixiv:phpsessid on settings
-    change (see server/plugins/07-settings-hot-reload.ts). Redis values of ""
-    mean explicitly unset — fall back to env only when key is missing.
-    """
+    """Pixiv creds: Redis (server-synced, hot-reload) → env fallback; "" means explicitly unset."""
     try:
         refresh = await r.get("kura:pixiv:refresh_token")
         phpsessid = await r.get("kura:pixiv:phpsessid")
@@ -163,12 +143,7 @@ def apply_pixiv_config(refresh: str, phpsessid: str):
 
 
 async def load_dl_proxy(r) -> str:
-    """Load download proxy from Redis (server-synced, hot-reload) → env fallback.
-
-    Server writes kura:dl_proxy_type / kura:dl_proxy_url on settings change.
-    gallery-dl accepts proxy URLs via config.set(("extractor",), "proxy", url).
-    http:// and socks5:// schemes are supported by requests/urllib3.
-    """
+    """Download proxy: Redis (server-synced, hot-reload) → env fallback; socks type auto-prefixed socks5://."""
     try:
         proxy_type = await r.get("kura:dl_proxy_type") or ""
         proxy_url = await r.get("kura:dl_proxy_url") or ""
@@ -199,43 +174,30 @@ def setup_gallery_dl():
 
     # Rate limiting to avoid bans
     config.set(("extractor",), "sleep-request", [0.5, 1.5])
-    # v0.7.8 PR-C: cap Pixiv multi-image fetches at 5 pages per illust.
-    # Per-page complexity + storage cost: we don't want a 30-page manga to
-    # silently balloon a single import. Ugoira detection in process_job
-    # narrows this to 1 for animated posts (zip → first frame).
+    # v0.7.8 PR-C: cap Pixiv multi-image at 5 pages (per-page storage cost);
+    # process_job narrows ugoira to 1 (zip → first frame).
     config.set(("extractor",), "image-range", "1-5")
     config.set(("extractor",), "parallel", 1)
-    # SSRF: limit redirect hops (gallery-dl uses requests; no per-hop IP filter available).
-    # ponytail: max-redirects=1 — chained redirects are the standard DNS-rebind
-    # vector. Legitimate single-hop 301/302 still works; chained hops are blocked.
+    # SSRF: limit redirect hops (no per-hop IP filter available in gallery-dl).
     config.set((), "max-redirects", 1)
 
-    # Startup: env-only (Redis may not be reachable yet); per-job override in
-    # process_job via load_pixiv_credentials + apply_pixiv_config.
+    # Startup seed: env-only (Redis may be unreachable yet); per-job override later.
     pixiv_refresh = os.environ.get("PIXIV_REFRESH_TOKEN", "")
     pixiv_phpsessid = os.environ.get("PIXIV_PHPSESSID", "")
     apply_pixiv_config(pixiv_refresh, pixiv_phpsessid)
 
 
 def download_with_gallery_dl(url: str, pixiv: tuple[str, str] | None = None, proxy: str = "") -> tuple[list[tuple[bytes, dict]], str | None]:
-    """Download images using gallery-dl as a library.
+    """Download via gallery-dl as a library.
 
-    Returns (pages, illust_type):
-      - pages: list of (image_bytes, shared_metadata) — one per image page,
-        up to 5 by the image-range cap. Metadata is shallow-copied per page
-        so callers can decorate without mutating the shared dict.
-      - illust_type: gallery-dl's kwdict["type"] if set, else None.
-        "ugoira" identifies animated Pixiv posts so callers can collapse to
-        one frame; everything else (None / "illust") is treated as static.
-
-    Ugoira handling lives at the process_job layer, not here — the actual
-    image-range narrowing happens once we know it's ugoira.
+    Returns (pages, illust_type): pages = [(bytes, shared_metadata)] up to the
+    5-page cap; illust_type == "ugoira" marks animated posts for process_job
+    to collapse to one frame.
     """
     validate_url(url)
     from gallery_dl import config
 
-    # Re-apply Pixiv auth (gallery-dl sessions may reset config).
-    # Per-job creds come from Redis (server-synced); fall back to env.
+    # Re-apply Pixiv auth — gallery-dl sessions may reset config
     if pixiv:
         apply_pixiv_config(*pixiv)
     else:
@@ -244,12 +206,11 @@ def download_with_gallery_dl(url: str, pixiv: tuple[str, str] | None = None, pro
             os.environ.get("PIXIV_PHPSESSID", ""),
         )
 
-    # Apply download proxy (gallery-dl uses requests internally).
     apply_dl_proxy(proxy)
 
     import tempfile
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Set base-directory via config (not job.path — that doesn't work)
+        # base-directory via config, not job.path (that doesn't work)
         config.set((), "base-directory", tmpdir)
         config.set(("output",), "progress", False)
 
@@ -265,11 +226,10 @@ def download_with_gallery_dl(url: str, pixiv: tuple[str, str] | None = None, pro
         if not files:
             raise RuntimeError("gallery-dl downloaded no files")
 
-        # Build shared metadata once per job.
         shared_metadata: dict = {}
         illust_type: str | None = None
         try:
-            # gallery-dl 1.32: metadata is in pathfmt.kwdict, not job.kwdict
+            # gallery-dl 1.32: metadata lives in pathfmt.kwdict, not job.kwdict
             data = getattr(getattr(job, 'pathfmt', None), 'kwdict', None) or {}
             if not data:
                 data = getattr(job, 'kwdict', None) or {}
@@ -283,10 +243,9 @@ def download_with_gallery_dl(url: str, pixiv: tuple[str, str] | None = None, pro
                 else:
                     tag_names = []
 
-                # Artist info: gallery-dl stores screen_name in 'name', display name in 'nick'
+                # Artist: 'nick' = display name, 'name' = handle
                 user = data.get("user", {})
                 if isinstance(user, dict):
-                    # 'nick' is the display name (崎白bubai), 'name' is the handle (@226083260Bubai)
                     artist_name = user.get("nick") or user.get("name", "")
                 else:
                     artist_name = ""
@@ -297,19 +256,15 @@ def download_with_gallery_dl(url: str, pixiv: tuple[str, str] | None = None, pro
                     "description": data.get("caption") or data.get("description", ""),
                     "source_url": url,
                     "tag_names": tag_names,
-                    # ponytail: artist as separate field, not "artist:xxx" string in tag_names
-                    # — keeps category source-of-truth in pipeline, AI never has to infer it.
                     "artist_name": artist_name or None,
                 }
-                # Use numeric ID from extractor or kwdict
                 sid = data.get("id") or ""
                 if sid:
                     shared_metadata["source_id"] = str(sid)
         except Exception:
             pass
 
-        # Build a (bytes, metadata) per file. metadata is shallow-copied so
-        # downstream callers can decorate per-page without mutating the shared dict.
+        # One (bytes, metadata) per file; metadata shallow-copied so callers can decorate per page
         results = []
         for path in files:
             with open(path, "rb") as f:
@@ -319,47 +274,29 @@ def download_with_gallery_dl(url: str, pixiv: tuple[str, str] | None = None, pro
 
 
 def compute_phash(image_bytes: bytes) -> str:
-    """Compute perceptual hash for dedup (kept here, not in Node sharp).
-
-    imagehash.phash uses scipy's DCT over Pillow-resized pixels; sharp's
-    Lanczos resize differs from Pillow's at sub-pixel precision, so a sharp
-    reimplementation drifts 6-14 Hamming bits from imagehash on the same image
-    — at or above the dedup threshold of 8. Keeping phash in imagehash preserves
-    cross-era dedup (old posts hashed with imagehash still match new ones).
-    """
+    """Perceptual hash for dedup — kept in imagehash, not sharp: a sharp
+    reimplementation drifts 6-14 Hamming bits (dedup threshold is 8)."""
     img = Image.open(BytesIO(image_bytes))
     return str(imagehash.phash(img))
 
 
 async def process_job(r: aioredis.Redis, job: dict):
-    """Process a single download job — one job can yield 1..N images (multi-image Pixiv).
-
-    v0.7.8 PR-C: a Pixiv illust with up to 5 pages produces a single sidecar
-    result containing all N images. The pipeline (pipeline.ts) splits the
-    array and inserts each as a separate row sharing series_id. Ugoira is
-    detected after download and collapsed back to a single-image result.
-    """
+    """Process one job — may yield 1..N images (multi-image Pixiv); pipeline.ts
+    splits them into rows sharing series_id. Ugoira collapses to one frame."""
     job_id = job["id"]
     url = job["url"]
     log.info(f"Processing job {job_id}: {url}")
 
-    # Mark as processing
     await r.set(f"kura:job_status:{job_id}", "processing", ex=7200)
 
-    # Pre-initialize referenced variables so the except/log line below
-    # never hits a NameError if download_with_gallery_dl raises.
+    # Pre-init so the except/log line below never NameErrors if download raises
     downloaded: list = []
     illust_type: str | None = None
 
     try:
-        # Download in thread pool (gallery-dl is sync).
-        # v0.7.8 PR-C: returns (pages, illust_type). Ugoira is detected inside
-        # the download path, so we collapse to first-frame here before
-        # building the result.
+        # Download in thread pool (gallery-dl is sync); ugoira collapses to first frame
         loop = asyncio.get_event_loop()
-        # Load Pixiv creds from Redis (server-synced; hot-reload friendly).
         pixiv = await load_pixiv_credentials(r)
-        # Load download proxy from Redis (server-synced; hot-reload friendly).
         dl_proxy = await load_dl_proxy(r)
         downloaded, illust_type = await loop.run_in_executor(
             _EXECUTOR, download_with_gallery_dl, url, pixiv, dl_proxy
@@ -370,8 +307,7 @@ async def process_job(r: aioredis.Redis, job: dict):
             log.info(f"Job {job_id} detected as Ugoira — collapsing to first frame")
             downloaded = downloaded[:1]
 
-        # MAX_IMAGE_SIZE: Redis (server-synced) → env fallback. Server syncs
-        # kura:max_image_size on settings change (07-settings-hot-reload.ts).
+        # MAX_IMAGE_SIZE: Redis (server-synced) → env fallback
         try:
             _redis_max = await r.get("kura:max_image_size")
             max_size = int(_redis_max) if _redis_max is not None else int(os.environ.get("MAX_IMAGE_SIZE", "0"))
@@ -381,20 +317,14 @@ async def process_job(r: aioredis.Redis, job: dict):
         pages: list[dict] = []
 
         def _process_page(img: Image.Image, image_bytes: bytes, gdl_metadata: dict, page_index: int) -> dict | None:
-            """Compute phash + dims for one page. Returns None for over-size.
-
-            Accepts already-opened PIL.Image to avoid redundant Image.open() on
-            every page — both compute_phash and this function need it.
-            """
+            """phash + dims for one page; None when over max_size. Takes an opened Image to avoid re-Image.open()."""
             phash = str(imagehash.phash(img))
             width, height = img.size
             mime_type = Image.MIME.get(img.format, "image/png")
             file_size = len(image_bytes)
 
             if max_size > 0 and file_size > max_size:
-                # Surface per-page too_large via page_count alone — the
-                # pipeline can fall back to skipping the row. For now we
-                # drop the page so it doesn't get uploaded.
+                # Drop over-size page so it's not uploaded (page_count still counts it)
                 log.warning(f"Job {job_id} page {page_index}: {file_size} > {max_size}, skipping")
                 return None
 
@@ -409,28 +339,19 @@ async def process_job(r: aioredis.Redis, job: dict):
             }
 
         for i, (image_bytes, gdl_metadata) in enumerate(downloaded, start=1):
-            # Open Image once, share between _process_page and any consumer
             img = Image.open(BytesIO(image_bytes))
             page = await loop.run_in_executor(_EXECUTOR, _process_page, img, image_bytes, gdl_metadata, i)
             if page is None:
-                # Over-size: skip the page but keep counting toward page_count
-                # so page_index stays consistent with what gallery-dl emitted.
-                # (Dropping the row means the count above is the cap, not the
-                # real page_count — but a too-large row that never uploads
-                # isn't a real page.)
+                # Over-size: skip row but keep page_count/page_index consistent with gallery-dl output
                 continue
-            # Per-page metadata: extend shared gdl_metadata with pipeline-needed
-            # top-level fields. The pipeline reads page["width"/...] as the
-            # dims, so we don't need to repeat source_site/source_id from
-            # gdl_metadata here — they're hoisted below.
+            # Pipeline reads page["width"/"height"/...] as dims; source_site/id hoisted below
             pages.append(page)
 
         if not pages:
-            # No pages survived the size filter — short-circuit to a single
-            # too_large result (parallel to the single-image too_large path).
+            # All pages over-size — short-circuit to a single too_large result
             result = {"status": "too_large", "max_size": max_size}
         elif len(pages) == 1:
-            # Single-image path — same shape as v0.7.7, no PR-C coupling.
+            # Single-image path — v0.7.7 shape
             only = pages[0]
             shared = downloaded[0][1]
             result = {
@@ -452,7 +373,7 @@ async def process_job(r: aioredis.Redis, job: dict):
                 },
             }
         else:
-            # Multi-image path — PR-C pipeline path.
+            # Multi-image path (v0.7.8 PR-C)
             shared = downloaded[0][1]
             common_meta = {
                 "title": shared.get("title", ""),
@@ -477,22 +398,11 @@ async def process_job(r: aioredis.Redis, job: dict):
         log.error(f"Job {job_id} failed: {e}")
         result = {"status": "error", "error": str(e)}
 
-    # Set result with 1h TTL (prevent Redis leak)
-    # ── WARNING: base64 / Redis memory ──
-    # Multi-page Pixiv illusts embed full base64-encoded images directly in
-    # this Redis value.  A 5-page manga can push 10-20 MB into a single key.
-    # This is acceptable for the current single-sidecar architecture where
-    # the Nitro pipeline consumes results within seconds, but if throughput
-    # increases or consumers lag, Redis memory will balloon.
-    #
-    # Long-term fix: sidecar writes images to temp files or /tmp S3, and
-    # Redis carries only metadata + a file reference.  The 3600s TTL provides
-    # a safety net: orphaned results auto-expire within an hour.
+    # 1h TTL prevents Redis leak. WARNING: multi-page results embed full base64
+    # images (10-20 MB/key); fine while the Nitro pipeline consumes fast.
     await r.set(f"kura:results:{job_id}", json.dumps(result), ex=3600)
-    # Do NOT set job_status to "done" here — let the Nitro pipeline worker
-    # set it after processing (prevents pollJobResult from reading raw sidecar
-    # result with image_bytes_b64/phash before pipeline strips them)
-    # Notify Nitro pipeline consumer
+    # Do NOT set job_status "done" here — the Nitro pipeline does, after it
+    # strips image_bytes_b64/phash (else pollJobResult reads raw sidecar result)
     await r.lpush("kura:pending_results", job_id)
     log.info(f"Job {job_id} sidecar done: status={result.get('status')} pages={len(downloaded)}")
 

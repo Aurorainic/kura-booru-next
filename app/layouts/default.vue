@@ -23,12 +23,10 @@ const announcement = computed(() => settings.value?.announcement || '')
 const headInject = computed(() => settings.value?.head_inject || '')
 
 // Global keyboard shortcuts (? toggles the cheatsheet modal below).
-// ponytail: / focuses the first visible search input on the page via querySelector,
-// avoiding the need to thread a ref from SearchBar (mounted in-page, not in layout) up to layout.
 function goTags() { navigateTo('/tags') }
 const { cheatsheetOpen } = useKeyboardShortcuts({ onGoTags: goTags })
 
-// 4.3 Nav shrink on scroll (>100px → 56px→44px) + overflow menu state.
+// Nav shrinks on scroll (>100px → 56px→44px); overflow menu state.
 const navShrunk = ref(false)
 const navMenuOpen = ref(false)
 const route = useRoute()
@@ -56,16 +54,12 @@ onUnmounted(() => {
 const { public: publicConfig } = useRuntimeConfig()
 const gitTag = publicConfig.gitTag
 const repoUrl = publicConfig.repoUrl || 'https://gitea.lainns.xyz/lainsaka/kura-booru-next'
-// v0.9.0: AI toggle lives in the DB now — runtimeConfig.public.enableAiTagProcessing
-// is a build-time snapshot that can't see admin changes. Read the flag from the
-// public settings payload (SSR context) instead.
+// AI toggle lives in the DB — runtimeConfig is a build-time snapshot; read it from the public settings payload instead.
 const enableAi = computed(() => settings.value?.ai_enabled === 'true')
 // Site-wide import entry: public mode → logged-in admins only; intranet mode → everyone.
 const showImport = computed(() => isAdmin.value || intranetMode.value)
 
-// The requested nav behavior is keyed to desktop-class user agents, not just
-// viewport width: mobile UAs keep the current icon-only controls without the
-// hover-expanded labels.
+// Nav behavior keys on desktop-class UAs, not viewport width: mobile keeps icon-only controls without hover labels.
 const MOBILE_UA_RE = /(?:Mobi|iPhone|iPod|iPad|Windows Phone|BlackBerry|Opera Mini|IEMobile|Android(?=.*Mobile))/i
 const isNonMobileUA = ref(true)
 if (import.meta.server) {
@@ -90,9 +84,6 @@ const mutedPart = computed(() => titleParts.value.slice(1).join(' '))
 
 useHead({
   htmlAttrs: {
-    // ponytail: theme class is set by the anti-flash inline script before paint;
-    // setting it here would conflict with client-side theme detection and cause
-    // a dark→light flash for light-theme users.
     style: `--accent-hue: ${accentHue}; --accent-hue-end: ${accentHueEnd};`,
   },
   title: siteTitle,
@@ -109,23 +100,15 @@ useHead({
 })
 
 // Inject head_inject — parse the HTML string into proper useHead entries.
-// ponytail: innerHTML wraps content in a script tag, but head_inject is already
-// a complete script element. Using innerHTML produces nested script tags
-// which browsers can't parse. Instead, extract attrs from the HTML and pass them
-// as proper script props so unhead renders the tag correctly.
 const SCRIPT_OPEN_RE = /<scr\u0069pt\b([^>]*)>/gi
 const ATTR_RE = /(\w[\w-]*)=(?:"([^"]*)"|'([^']*)'|(\S+))/g
 const SCRIPT_CLOSE = '<' + '/script>'
 
 const headInjectEntries = computed<import('@unhead/vue').ReactiveHead>(() => {
-  // S7: head_inject is admin-trusted but still scope it to admin viewers —
-  // anonymous visitors don't need analytics/tracking scripts.
+  // S7: head_inject is admin-trusted but still scoped to admin viewers — anon visitors don't need tracking scripts.
   if (!isAdmin.value) return {}
   const html = headInject.value
   if (!html) return {}
-  // ponytail: ResolvableScript is a distributed union — plain object literals
-  // don't structurally match it. Cast via any; shape is validated by unhead at
-  // render time anyway.
   const scripts: any[] = []
   let m
   while ((m = SCRIPT_OPEN_RE.exec(html)) !== null) {
@@ -151,8 +134,7 @@ useHead(headInjectEntries)
 
 <template>
   <div class="min-h-screen flex flex-col">
-    <!-- Navigation (4.3 minimal: logo + large search + theme/accent on desktop;
-         secondary entries collapse into a "..." overflow menu) -->
+    <!-- Nav (4.3 minimal): logo + large search + theme/accent on desktop; secondary entries in "..." menu -->
     <nav
       class="nav-glass sticky top-0 z-40 border-b border-[var(--border-color)] transition-[height,padding] duration-[var(--duration-fast)]"
       :class="navShrunk ? 'h-11' : 'h-14'"
@@ -160,19 +142,16 @@ useHead(headInjectEntries)
     >
       <div class="max-w-[var(--content-max)] mx-auto px-4 lg:px-8 h-full">
         <div class="flex items-center justify-between h-full gap-4">
-          <!-- Logo -->
           <NuxtLink to="/" class="flex items-center gap-2 group flex-shrink-0">
             <img src="/logo.svg" :alt="siteTitle" class="w-8 h-8 transition-all" :class="navShrunk ? 'h-7 w-7' : 'h-8 w-8'" />
             <span class="gradient-text font-bold hidden sm:inline transition-all" :class="navShrunk ? 'text-base' : 'text-xl'" style="letter-spacing: -0.02em; font-family: var(--font-display);">{{ gradientPart }}</span>
             <span v-if="mutedPart" class="text-[var(--text-muted)] font-light hidden sm:inline transition-all" :class="navShrunk ? 'text-base' : 'text-xl'" style="letter-spacing: -0.02em;">{{ mutedPart }}</span>
           </NuxtLink>
 
-          <!-- Large search box (desktop, search-as-navigation) -->
           <div class="hidden md:block flex-1 max-w-xl mx-4">
             <SearchBar :initial-query="searchRouteQuery" placeholder="搜索标签..." />
           </div>
 
-          <!-- Theme controls -->
           <div class="flex items-center gap-1 flex-shrink-0">
             <template v-if="isNonMobileUA">
               <div class="relative nav-expand-action" data-accent-picker>
@@ -183,7 +162,7 @@ useHead(headInjectEntries)
                 <ThemeToggle :compact="true" />
                 <span class="nav-expand-label">明暗</span>
               </div>
-              <!-- Import (site-wide entry; public: logged-in admins only, intranet: everyone) -->
+              <!-- Import entry: admins only in public mode, everyone in intranet mode -->
               <div v-if="showImport" class="relative nav-expand-action">
                 <NuxtLink
                   to="/admin?tab=import"
@@ -208,7 +187,7 @@ useHead(headInjectEntries)
                 <span>导入</span>
               </NuxtLink>
             </template>
-            <!-- Overflow menu ("..."): secondary nav entries -->
+            <!-- Overflow menu ("...") for secondary nav entries -->
             <div class="relative" data-nav-menu>
               <button
                 type="button"
@@ -246,15 +225,12 @@ useHead(headInjectEntries)
       </div>
     </nav>
 
-    <!-- Announcement banner -->
     <AnnouncementBanner v-if="announcement" :content="announcement" />
 
-    <!-- Main content -->
     <main class="flex-1 relative z-2">
       <slot />
     </main>
 
-    <!-- Footer -->
     <footer class="border-t border-[var(--border-color)] py-6 mt-12 relative z-2">
       <div class="max-w-[var(--content-max)] mx-auto px-4 lg:px-8">
         <div class="flex flex-wrap items-center justify-between gap-y-2 text-sm text-[var(--text-muted)]">
@@ -268,13 +244,12 @@ useHead(headInjectEntries)
       </div>
     </footer>
 
-    <!-- Mobile bottom tab bar -->
     <BottomTabBar :is-admin="isAdmin" :intranet-mode="intranetMode" />
 
-    <!-- Keyboard shortcuts cheatsheet (? to toggle) -->
+    <!-- Keyboard shortcuts cheatsheet (? toggles) -->
     <KbdCheatSheet v-model="cheatsheetOpen" />
 
-    <!-- Global toast + confirm dialog (admin + user-facing) -->
+    <!-- Global toast + confirm dialog -->
     <ToastContainer />
     <ConfirmDialog />
   </div>

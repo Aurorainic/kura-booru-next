@@ -1,11 +1,7 @@
 /**
- * Tag autocomplete — PG trgm/ILIKE (ADR-0002).
- *
- * RediSearch implementation removed in v0.9.0: MEILI_ENABLED was a triple
- * misnomer (not Meilisearch, only served autocomplete, index freshness
- * half-broken and unnoticed). PG trgm GIN indexes on tags.name/translation/
- * danbooru_name already exist; this SQL path was the RediSearch fallback and
- * is now the primary — post_count is read live from PG, no drift.
+ * Tag autocomplete — PG trgm/ILIKE (ADR-0002). RediSearch impl removed in
+ * v0.9.0 (misnamed, half-broken freshness); PG trgm GIN indexes already exist,
+ * post_count read live from PG, no drift.
  */
 import { eq, and, sql, desc, exists } from 'drizzle-orm'
 import { db } from '../../utils/db'
@@ -16,8 +12,7 @@ import { serializeTag } from '../posts/serialize'
 import { clampPerPage } from '../pagination'
 
 /**
- * Returns up to `perPage` tag suggestions for `prefix`.
- * `isAdmin=false` filters out tags that have only non-safe posts.
+ * Tag suggestions for `prefix`; non-admin sees only tags with safe posts.
  * Prefix match first (B-P3-6), then post_count desc.
  */
 export async function suggestTags(prefix: string, isAdmin: boolean, perPage = 10) {

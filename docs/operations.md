@@ -5,7 +5,7 @@
 ### Tag Strategy
 
 Custom images are published to GHCR with **two tags**: the release tag
-(`:v0.7.2`) and `:latest`. Production deploys **pin a release tag** via
+(`:v0.10.0`) and `:latest`. Production deploys **pin a release tag** via
 `KURA_IMAGE_TAG` in `.env`; development/rolling deploys track `:latest`.
 
 Version history also lives in git tags + `KURA_VERSION` (footer label) in `.env`.
@@ -17,7 +17,7 @@ CI (`docker-publish.yml`) builds and pushes on every `v*` tag. Deployers pull a
 pinned tag — no local build needed.
 
 ```bash
-# .env (project root): KURA_IMAGE_TAG=v0.7.2
+# .env (project root): KURA_IMAGE_TAG=v0.10.0
 # Run from infra/ — --env-file is REQUIRED for ${KURA_IMAGE_TAG} to resolve
 docker compose --env-file ../.env -f docker-compose.yml pull
 docker compose --env-file ../.env -f docker-compose.yml up -d
@@ -36,7 +36,7 @@ cd sidecar && docker build -t ghcr.io/aurorainic/kura-booru-worker:latest .
 ### Production Deployment
 
 ```bash
-# Pin a tag in .env (KURA_IMAGE_TAG=v0.7.2), then (run from infra/):
+# Pin a tag in .env (KURA_IMAGE_TAG=v0.10.0), then (run from infra/):
 docker compose --env-file ../.env -f docker-compose.yml pull
 docker compose --env-file ../.env -f docker-compose.yml up -d
 ```
@@ -49,10 +49,10 @@ the pinned tag + `pull` make the image change explicit. **Always pass
 
 ### Rollback
 
-Rollback is a tag change — no rebuild. The prior release tag is still in GHCR.
+Rollback is a tag change — no rebuild. See [versioning.md](versioning.md) § Rollback for the full runbook.
 
 ```bash
-# .env: KURA_IMAGE_TAG=v0.6.2
+# .env: KURA_IMAGE_TAG=v0.9.0
 docker compose --env-file ../.env -f docker-compose.yml pull
 docker compose --env-file ../.env -f docker-compose.yml up -d
 ```
@@ -103,17 +103,6 @@ registry pruning is needed for normal releases.
 
 ---
 
-## Container Overview
-
-| Container | Image | Purpose |
-|---|---|---|
-| `kura-web` | `ghcr.io/aurorainic/kura-booru-web:${KURA_IMAGE_TAG:-latest}` | SSR + REST API + Bot webhook (single Node process) |
-| `kura-worker` | `ghcr.io/aurorainic/kura-booru-worker:${KURA_IMAGE_TAG:-latest}` | Python gallery-dl + imagehash phash worker |
-| `kura-postgres` | `postgres:18-alpine` | Primary database |
-| `kura-redis` | `redis:8-alpine` | Job queue + cache |
-
----
-
 ## Scripts
 
 ### validate-env.sh
@@ -156,12 +145,12 @@ The `seed-admin.ts` plugin will NOT overwrite an existing admin — it only crea
 ### Before Release
 - [ ] Code merged to main branch
 - [ ] CHANGELOG.md updated
-- [ ] `KURA_VERSION` in `.env` updated (e.g. `v0.7.2`)
+- [ ] `KURA_VERSION` in `.env` updated (e.g. `v0.10.0`)
 - [ ] `.env` has all required production variables
 
 ### Build & Deploy (CI pushes images on tag)
-- [ ] Git tag created and pushed (e.g. `git tag v0.7.2 && git push origin v0.7.2`) — triggers `docker-publish.yml` to push `:v0.7.2` + `:latest` to GHCR
-- [ ] Set `KURA_IMAGE_TAG=v0.7.2` in `.env` (project root; matches the git tag)
+- [ ] Git tag created and pushed (e.g. `git tag v0.10.0 && git push origin v0.10.0`) — triggers `docker-publish.yml` to push `:v0.10.0` + `:latest` to GHCR
+- [ ] Set `KURA_IMAGE_TAG=v0.10.0` in `.env` (project root; matches the git tag)
 - [ ] Validate: `./scripts/validate-env.sh prod` (rejects empty `KURA_IMAGE_TAG`)
 - [ ] Pull pinned images: `docker compose --env-file ../.env -f docker-compose.yml pull`
 - [ ] Deploy: `docker compose --env-file ../.env -f docker-compose.yml up -d`
@@ -171,66 +160,6 @@ The `seed-admin.ts` plugin will NOT overwrite an existing admin — it only crea
 ### After Release
 - [ ] Verify deploy in production
 - [ ] Clean up old local images: `docker image prune -f` (GHCR untagged cleanup runs in CI)
-
----
-
-## Docker Compose Notes
-
-- Port bindings use `127.0.0.1:PORT:PORT` — the reverse proxy runs on the **host**, not in Docker, so containers expose ports to localhost only
-- Redis `--requirepass` with empty password breaks docker-compose parsing. Remove the line entirely when password is empty
-- PG 18+ volume mount: use `/var/lib/postgresql` (not `/var/lib/postgresql/data`) — PG 18 changed its data directory layout
-
----
-
-## Reverse Proxy Configuration
-
-The reverse proxy runs on the **host machine**, not in Docker Compose. It proxies all traffic to the Nuxt container at `127.0.0.1:3000`.
-
-### Caddy
-
-```
-your-domain.example.com {
-    reverse_proxy 127.0.0.1:3000
-}
-```
-
-### nginx
-
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name your-domain.example.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_buffering off;   # Required for SSE
-        proxy_cache off;
-        client_max_body_size 50m;
-    }
-}
-```
-
-### Traefik
-
-Add a router/service in your dynamic config pointing to `http://127.0.0.1:3000`. SSE works out of the box.
-
-### SSE Note
-
-The web import page uses SSE (`GET /api/tasks/web-import/stream`). Your reverse proxy must not buffer SSE responses:
-
-| Proxy | Configuration |
-|---|---|
-| **Caddy** | `flush_interval -1` in the `reverse_proxy` block |
-| **nginx** | `proxy_buffering off; proxy_cache off;` in the `location /` block |
-| **Traefik** | Works out of the box (no buffering by default) |
-
-### `/i/*` Image Proxy
-
-The Nuxt server handles `/i/*` internally (proxying to `S3_EXTERNAL_URL`). The reverse proxy does not need a separate `/i/*` block — all traffic goes to the Nuxt container.
 
 ---
 

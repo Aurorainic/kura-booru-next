@@ -1,18 +1,6 @@
 /**
- * Global keyboard shortcuts composable.
- *
- * Bindings:
- *   /         focus the main search input
- *   ?         open the keyboard cheatsheet modal
- *   G then T  jump to tags (the first tag on the current page)
- *   J / K     next / previous post in the gallery list (when on detail page
- *             and the post-id list was passed in via ?list=...)
- *   ← / →     prev / next page on list views (gallery, tags, search)
- *
- * All bindings are suppressed when the active element is a form field
- * (input / textarea / select / [contenteditable]), so users can type those
- * characters normally. Modal open / cheatsheet state is exposed so callers
- * can wire up their own modal component.
+ * Global keyboard shortcuts: / focus search, ? cheatsheet, G+T tags, J/K prev/next
+ * post (?list=...), ←/→ prev/next page. Suppressed while typing in form fields.
  */
 
 export function useKeyboardShortcuts(opts: {
@@ -36,9 +24,7 @@ export function useKeyboardShortcuts(opts: {
   }
 
   function onKeydown(e: KeyboardEvent) {
-    // Cheatsheet toggle works even when typing? No — keep it bound to body only
-    // so users can type "?" inside text fields normally. Open via the keycap
-    // chip button instead.
+    // "?" must stay typeable in text fields — cheatsheet opens via the keycap chip instead.
     if (isTyping()) return
 
     // Two-key sequence: G then T → tags
@@ -60,7 +46,6 @@ export function useKeyboardShortcuts(opts: {
     switch (e.key) {
       case '/':
         e.preventDefault()
-        // Focus the first visible search input on the page.
         document.querySelector<HTMLInputElement>('input[type="search"]')?.focus()
         break
       case '?':

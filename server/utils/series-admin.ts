@@ -1,14 +1,7 @@
 /**
- * Pure renumber math, extracted so it's testable without a DB.
- *
- * Given the survivors (id + current page_index) of a series and the id of
- * the page being deleted (at deletedPageIndex), returns a map of
- * survivorId → new page_index. Survivors after the deleted slot shift down
- * by 1; survivors before keep their index. Caller also needs new page_count
- * = survivors.length (i.e. the input list already excludes the deleted row).
- *
- * `null` page_index on a survivor is treated as "before everything" (legacy
- * row that lost its index) — it's left untouched.
+ * Pure renumber math (testable without a DB): survivors after the deleted slot
+ * shift down by 1, before keep their index. null page_index = "before everything",
+ * left untouched. Caller needs new page_count = survivors.length.
  */
 export function renumberSeriesPageIndex(
   survivors: Array<{ id: string; pageIndex: number | null }>,
@@ -27,8 +20,6 @@ export function renumberSeriesPageIndex(
   return out
 }
 
-// ponytail: one runnable self-check — fails if the renumber math drifts.
-// Run with: pnpm exec tsx server/utils/series-admin.ts
 async function _selfCheck() {
   // delete page 2 from a 1,2,3 series → 1 stays, 3→2
   const m1 = renumberSeriesPageIndex(
@@ -70,13 +61,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 
 /**
- * v0.7.8 PR-C: shared admin post-delete logic with series renumber.
- *
- * Called from server/routes/api/posts/[id].delete.ts. Series path: delete
- * the row + UPDATE every survivor with page_index > deleted's page_index to
- * page_index - 1, and stamp page_count = new survivor count. Transactional
- * so a reader can't see a gap. Pure renumber math lives in
- * renumberSeriesPageIndex() above; this function applies it row by row.
+ * v0.7.8 PR-C: shared admin post-delete + series renumber (posts/[id].delete.ts).
+ * Deletes the row, renumbers survivors, stamps page_count — transactional so a
+ * reader can't see a gap. Pure math in renumberSeriesPageIndex(); applied row by row.
  */
 import { eq, asc, sql } from 'drizzle-orm'
 import { posts, postTags, tags } from '../schema'
@@ -93,22 +80,17 @@ export async function deletePostAndRenumberSeries(id: string) {
     await tx.delete(postTags).where(eq(postTags.postId, id))
 
     if (t.seriesId && t.pageIndex !== null) {
-      // Set-based renumber in ONE statement: every survivor after the
-      // deleted page_index shifts down by 1; page_count is recomputed to
-      // the new survivor count. Replaces the old per-row UPDATE loop (N
-      // round-trips). The same statement re-anchors if the deleted row was
-      // the anchor (page_index=1): the new lowest survivor's id becomes the
-      // series_id for every row — without this, getPost's sibling SELECT
-      // would return zero rows and the nav would silently vanish.
+      // One UPDATE renumbers every survivor + recomputes page_count (replaces the
+      // old per-row loop, N round-trips). Re-anchors if the deleted row was the
+      // anchor: otherwise getPost's sibling SELECT returns zero rows and nav vanishes.
       const newCount = await tx
         .select({ count: sql<number>`count(*)` })
         .from(posts)
         .where(sql`${posts.seriesId} = ${t.seriesId} AND ${posts.id} <> ${id}`)
       const survivorCount = Number(newCount[0]?.count || 0)
 
-      // Re-anchor target: the lowest page_index survivor (after the deleted
-      // row is gone). If the deleted row wasn't the anchor, series_id is
-      // unchanged; we just need the renumber + page_count rewrite.
+      // New anchor = lowest page_index survivor; only used when the deleted
+      // row was the anchor (page_index=1), otherwise series_id unchanged.
       const lowestSurvivor = survivorCount > 0
         ? await tx.select({ id: posts.id })
             .from(posts)
